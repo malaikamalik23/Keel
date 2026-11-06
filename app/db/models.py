@@ -197,3 +197,113 @@ class AuditLog(Base):
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     conversation_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     pending_action_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class TaskEvent(Base):
+    """Append-only history of what happened to a task. `Task.postponement_count` is just a cache of this.
+
+    The event log is what lets the accountability layer say *when* and *why* something slipped. It survives
+    deletion of the task (task_id becomes NULL, `task_title` keeps it readable).
+    """
+
+    __tablename__ = "task_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[int | None] = mapped_column(ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True)
+    task_title: Mapped[str] = mapped_column(String(200))
+    type: Mapped[str] = mapped_column(String(16), index=True)  # created|postponed|completed|reopened|cancelled|skipped
+    old_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    new_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
+class Plan(Base):
+    """The plan for one calendar day (in the user's timezone)."""
+
+    __tablename__ = "plans"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plan_date: Mapped[date] = mapped_column(Date, unique=True, index=True)
+    capacity_minutes: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+    items: Mapped[list[PlanItem]] = relationship(
+        back_populates="plan", cascade="all, delete-orphan", order_by="PlanItem.position"
+    )
+
+
+class PlanItem(Base):
+    __tablename__ = "plan_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("plans.id", ondelete="CASCADE"), index=True)
+    task_id: Mapped[int | None] = mapped_column(ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(200))  # snapshot, so the plan stays readable if the task is deleted
+    planned_minutes: Mapped[int] = mapped_column(Integer)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    is_major: Mapped[bool] = mapped_column(default=False)
+    status: Mapped[str] = mapped_column(String(12), default="planned")  # planned|done|skipped
+
+    plan: Mapped[Plan] = relationship(back_populates="items")
+
+
+class WorkSession(Base):
+    """Time actually spent working. This is the ground truth the accountability layer compares plans against."""
+
+    __tablename__ = "work_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[int | None] = mapped_column(ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True)
+    project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    started_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    minutes: Mapped[int] = mapped_column(Integer)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class Reminder(Base):
+    """A one-off reminder the user asked for. `fire_at` is naive UTC."""
+
+    __tablename__ = "reminders"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    text: Mapped[str] = mapped_column(String(300))
+    fire_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    status: Mapped[str] = mapped_column(String(12), default="pending", index=True)  # pending|sent|cancelled|failed
+    linked_type: Mapped[str | None] = mapped_column(String(16), nullable=True)  # task|commitment|project|goal
+    linked_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class Checkin(Base):
+    """A morning/evening/weekly check-in the agent initiated. One per (kind, day)."""
+
+    __tablename__ = "checkins"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(10))  # morning|evening|weekly
+    checkin_date: Mapped[date] = mapped_column(Date, index=True)
+    summary: Mapped[str] = mapped_column(Text)  # the message that was sent
+    user_response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class Notification(Base):
+    """Every outbound message attempt. This table *is* the notification budget: counts and dedupe read from it."""
+
+    __tablename__ = "notifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16), index=True)  # reminder|morning|evening|weekly|nudge
+    priority: Mapped[str] = mapped_column(String(8))  # low|normal|high
+    channel: Mapped[str] = mapped_column(String(16))
+    text: Mapped[str] = mapped_column(Text)
+    dedupe_key: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(8), default="sent")  # sent|failed
+    sent_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)

@@ -49,7 +49,10 @@ class ToolExecutor:
         except ValidationError as exc:
             return self._error(ctx, name, tool.permission.value, raw_input, _format_validation_error(exc))
 
-        if self.policy.decide(tool, tainted=ctx.tainted) is Decision.REQUIRE_CONFIRMATION:
+        decision = self.policy.decide(tool, tainted=ctx.tainted)
+        if decision is Decision.ALLOW and ctx.tainted and tool.taint_gate is not None and not tool.taint_gate(ctx, params):
+            decision = Decision.REQUIRE_CONFIRMATION
+        if decision is Decision.REQUIRE_CONFIRMATION:
             return self._queue(ctx, tool, params)
         return self._execute(ctx, tool, params, actor="agent")
 
@@ -74,6 +77,18 @@ class ToolExecutor:
             pa.status, pa.resolved_at = "failed", utcnow()
             ctx.db.commit()
         return outcome
+
+    def run_as_user(self, ctx: ToolContext, name: str, raw_input: dict | None) -> ToolOutcome:
+        """Run a tool because the *user* asked (REST edit/delete). Same validation and audit trail, but the
+        confirmation gate is skipped: the human is the one acting. Never reachable from the model."""
+        tool = self.registry.get(name)
+        if tool is None:
+            return self._error(ctx, name, "unknown", raw_input, f"Unknown tool '{name}'.")
+        try:
+            params = tool.input_model.model_validate(raw_input or {})
+        except ValidationError as exc:
+            return self._error(ctx, name, tool.permission.value, raw_input, _format_validation_error(exc))
+        return self._execute(ctx, tool, params, actor="user")
 
     def reject(self, ctx: ToolContext, pending_id: int) -> PendingAction:
         pa = self._get_pending(ctx, pending_id)
@@ -171,7 +186,7 @@ class ToolExecutor:
             result = tool.handler(ctx, params)
             if tool.returns_untrusted:
                 ctx.tainted = True
-                result = {"untrusted_data": wrap_untrusted(json.dumps(result, default=str), tool.name)}
+                result = {"untrusted_data": wrap_untrusted(json.dumps(result, default=str, ensure_ascii=False), tool.name)}
             record_audit(ctx.db, status="ok", **audit)
             ctx.db.commit()  # effect + audit row commit together
             return ToolOutcome("ok", result, tool.permission.value)

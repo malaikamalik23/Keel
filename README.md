@@ -3,8 +3,8 @@
 Assistant + accountability partner + productivity coach + memory system.
 Design and roadmap: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-**Status: Phase 2** — goals (with milestone decomposition), projects, commitments (detected from
-chat and confirmed), memory (view/edit/delete), plus everything from Phase 1: chat, tool-using
+**Status: Phase 2 complete** — goals (with milestone decomposition), projects, commitments (detected from
+chat and confirmed), memory (view/edit/delete, via chat or REST), a per-turn context pack, plus everything from Phase 1: chat, tool-using
 agent loop, tasks, permission tiers, audit log. Schema changes now go through Alembic migrations.
 Daily planning and the accountability engine (Phase 3) are next.
 
@@ -15,7 +15,7 @@ python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\
 pip install -r requirements-dev.txt
 cp .env.example .env                                    # then set an API key (see below) and AGENT_TIMEZONE
 
-pytest                                                  # 55 tests, no API key or network needed
+pytest                                                  # 83 tests, no API key or network needed
 
 python -m app.cli                                       # terminal chat
 uvicorn app.api.main:create_app --factory --reload      # API at http://127.0.0.1:8000/docs
@@ -92,14 +92,24 @@ you> /audit
 | `GET /api/projects?status=active` | Projects |
 | `GET /api/commitments?status=open` | Commitments (`open`, `proposed`, `done`, `dropped`) |
 | `GET /api/memories?kind=all` | Stored memories (`preference`, `context`, `fact`) |
+| `PATCH /api/memories/{id}` `{content?, kind?, importance?}` · `DELETE /api/memories/{id}` | Edit / delete a memory (audited as `user`) |
+| `PATCH /api/commitments/{id}` `{text?, deadline?, importance?, status?}` | Edit a commitment; `status` may be `open`, `dropped`, `done`. Pushing a deadline later counts as a postponement |
 | `GET /api/pending-actions` | Actions awaiting approval |
 | `POST /api/pending-actions/{id}/confirm` · `/reject` | Approve / reject |
 | `GET /api/audit-log` | Everything the agent did |
 | `GET /api/conversations/{id}/messages` | Conversation history |
 
-Editing/deleting a specific memory or commitment by ID isn't exposed as a REST endpoint yet — do it
-through chat (`update_memory`/`delete_memory`/`update_commitment` tools) until the dashboard (Phase
-3 UI work) lands with direct CRUD.
+Edits and deletes made through these REST endpoints are performed by *you*, so they skip the approval
+queue (the queue exists to stop the *model* acting unilaterally) but still go through the same validation
+and are written to the audit log with `actor="user"`. Via chat, deleting a memory still needs `/confirm`.
+
+### Context pack
+
+Before every LLM call, `app/agent/context.py` assembles a compact snapshot straight from the database
+(no LLM involved) and appends it to the system prompt: open tasks (soonest first), commitments overdue or
+due within 2 days, items postponed 2+ times, proposed commitments awaiting confirmation, your stored
+preferences, and any other memories whose keywords overlap the current message. It is capped at 3000
+characters and omitted when there is nothing to show.
 
 ### Security notes
 

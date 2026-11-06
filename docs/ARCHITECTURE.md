@@ -145,7 +145,7 @@ Four layers, each with the right storage:
 | **Semantic** | Preferences and personal context ("I focus best in the morning", "FYP supervisor is …") | `memories` table | SQLite FTS5 first; embeddings only if FTS proves insufficient |
 | **Behavioural** | Postponement patterns, completion rate, neglected goals | *Computed* from `task_events`, `work_sessions`, `plan_items` | SQL aggregates — never LLM-written |
 
-**Context pack (Phase 2):** before each LLM call, code assembles a compact block — today's plan, top open tasks, overdue/at-risk commitments, most-postponed items, preferences, and the top-k memories relevant to the message. The model gets the essentials without having to remember to look them up, and can still call tools for depth.
+**Context pack (Phase 2 ✔ — `app/agent/context.py`; memory relevance is keyword overlap for now, FTS5 is a later upgrade):** before each LLM call, code assembles a compact block — today's plan, top open tasks, overdue/at-risk commitments, most-postponed items, preferences, and the top-k memories relevant to the message. The model gets the essentials without having to remember to look them up, and can still call tools for depth.
 
 **Write policy**
 - *Commitments:* the model flags candidates ("I'll finish this by Friday"); if deadline or scope is ambiguous it asks once, then stores with `confirmed=true`.
@@ -243,10 +243,10 @@ Phase 6 adds a red-team suite (poisoned pages, PDFs, GitHub READMEs, emails) tha
 
 ## 11. Known limitations of Phase 1 (honest list)
 
-- No memory beyond the conversation window yet (Phase 2).
+- ~~No memory beyond the conversation window yet.~~ Fixed in Phase 2: `memories` table, memory tools, and the per-turn context pack (`app/agent/context.py`).
 - The Anthropic client is not covered by automated tests (it is a thin adapter; agent logic is tested with a scripted LLM). Run one real chat to verify your key/model.
 - ~~No authentication: bind to localhost only until Phase 6.~~ Fixed: optional `X-API-Key` auth via `API_KEY` (see README § Security notes). Still no per-user auth or rate limiting — fine for a single-user local/self-hosted deployment, not for multi-tenant use.
 - ~~Pending actions never expire.~~ Fixed: `PENDING_ACTION_TTL_HOURS` (default 24) auto-expires unanswered high-impact actions.
 - ~~Long chats just truncate at `history_message_limit` instead of degrading gracefully.~~ Fixed: messages that age out of the window are folded into `conversations.summary` (`SUMMARIZE_DROPPED_HISTORY`).
 - The tainted-session rule is coarse (any untrusted content in the history window). Correct but sometimes over-cautious.
-- `Base.metadata.create_all` is used for schema creation; Alembic arrives with the first schema change.
+- ~~`Base.metadata.create_all` is used for schema creation.~~ Fixed in Phase 2: schema is managed by Alembic migrations.

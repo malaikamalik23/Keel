@@ -6,7 +6,8 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.db.models import Task, utcnow
+from app.db.models import PlanItem, Task, utcnow
+from app.services.task_events import record_task_event
 from app.tools.base import Permission, Tool, ToolContext, ToolError, ToolRegistry
 
 OPEN_STATUSES = ("todo", "in_progress")
@@ -56,6 +57,7 @@ def create_task(ctx: ToolContext, p: CreateTaskInput) -> dict:
     )
     ctx.db.add(task)
     ctx.db.flush()
+    record_task_event(ctx.db, task, "created")
     out = {"task": _task_dict(task, ctx.today())}
     if p.due_date and p.due_date < ctx.today():
         out["warning"] = "The due date is in the past."
@@ -97,17 +99,27 @@ class UpdateTaskInput(BaseModel):
     priority: Literal["low", "medium", "high"] | None = None
     due_date: date | None = Field(None, description="New deadline (YYYY-MM-DD). null clears it.")
     estimated_minutes: int | None = Field(None, ge=1, le=1440)
+    reason: str | None = Field(
+        None,
+        max_length=500,
+        description=(
+            "Why this change is happening, in the user's words (e.g. when pushing a deadline later: 'too big', "
+            "'sick', 'other priority'). Always pass it when postponing -- it powers the accountability analysis."
+        ),
+    )
 
 
 def update_task(ctx: ToolContext, p: UpdateTaskInput) -> dict:
     task = _get_task(ctx, p.task_id)
     changes = p.model_dump(exclude_unset=True, exclude={"task_id"})
+    reason = changes.pop("reason", None)
     if not changes:
         raise ToolError("No fields to update were provided.")
     for required in ("title", "status", "priority"):
         if required in changes and changes[required] is None:
             raise ToolError(f"'{required}' cannot be null.")
 
+    old_status = task.status
     postponed = False
     if "due_date" in changes:
         new_due = changes.pop("due_date")
@@ -115,11 +127,19 @@ def update_task(ctx: ToolContext, p: UpdateTaskInput) -> dict:
         if new_due and task.due_date and new_due > task.due_date:
             task.postponement_count += 1
             postponed = True
+            record_task_event(
+                ctx.db, task, "postponed", old=task.due_date.isoformat(), new=new_due.isoformat(), reason=reason
+            )
         task.due_date = new_due
     for field, value in changes.items():
         setattr(task, field, value)
     if task.status in OPEN_STATUSES:
         task.completed_at = None
+    if task.status != old_status:
+        if task.status == "cancelled":
+            record_task_event(ctx.db, task, "cancelled", old=old_status, new="cancelled", reason=reason)
+        elif old_status in ("done", "cancelled") and task.status in OPEN_STATUSES:
+            record_task_event(ctx.db, task, "reopened", old=old_status, new=task.status, reason=reason)
 
     ctx.db.flush()
     out = {"task": _task_dict(task, ctx.today())}
@@ -138,8 +158,13 @@ def complete_task(ctx: ToolContext, p: CompleteTaskInput) -> dict:
     if task.status == "done":
         return {"task": _task_dict(task), "note": "Task was already done."}
     was_overdue = bool(task.due_date and task.due_date < ctx.today())
+    old_status = task.status
     task.status = "done"
     task.completed_at = utcnow()
+    record_task_event(ctx.db, task, "completed", old=old_status, new="done")
+    # Keep today's plan honest: finishing a task checks it off wherever it was planned.
+    for item in ctx.db.scalars(select(PlanItem).where(PlanItem.task_id == task.id, PlanItem.status == "planned")):
+        item.status = "done"
     ctx.db.flush()
     return {"task": _task_dict(task), "was_overdue": was_overdue}
 

@@ -9,9 +9,11 @@ from app.container import build_container
 from app.db.models import AuditLog, Conversation, PendingAction, Task
 from app.errors import AppError
 from app.tools.base import ToolContext
+from app.tools.planning import get_plan, plan_dict
 
 HELP = """Commands:
   /tasks            list open tasks
+  /plan             show today's plan
   /pending          list actions waiting for your approval
   /confirm <id>     approve a pending action
   /reject <id>      reject a pending action
@@ -48,6 +50,14 @@ def main() -> int:
                 elif line == "/tasks":
                     for t in db.scalars(select(Task).where(Task.status.in_(("todo", "in_progress"))).order_by(Task.id)):
                         print(f"  #{t.id} [{t.priority}] {t.title}  due={t.due_date or '-'}  postponed={t.postponement_count}")
+                elif line == "/plan":
+                    out = plan_dict(get_plan(db, ctx.today()), ctx.today())
+                    if not out["exists"]:
+                        print("  (no plan for today -- ask the agent to plan your day)")
+                    else:
+                        print(f"  {out['planned_minutes']} of {out['usable_minutes']} usable minutes planned")
+                        for i in out["items"]:
+                            print(f"  [{i['status']:7}] #{i['item_id']} {i['title']} ({i['minutes']} min{', major' if i['major'] else ''})")
                 elif line == "/pending":
                     rows = db.scalars(select(PendingAction).where(PendingAction.status == "pending")).all()
                     print("\n".join(f"  #{p.id} {p.summary}" for p in rows) or "  (nothing pending)")

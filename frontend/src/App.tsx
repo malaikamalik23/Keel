@@ -1,0 +1,65 @@
+import { useCallback, useEffect, useState } from "react";
+import { ApiError, api, getApiKey, setApiKey } from "./api";
+import Activity from "./views/Activity";
+import Approvals from "./views/Approvals";
+import Chat from "./views/Chat";
+import Commitments from "./views/Commitments";
+import Goals from "./views/Goals";
+import MemoryView from "./views/MemoryView";
+import Projects from "./views/Projects";
+import Today from "./views/Today";
+import type { PendingAction } from "./types";
+
+const TABS = ["Today", "Goals", "Projects", "Commitments", "Memory", "Chat", "Activity", "Approvals"] as const;
+type Tab = (typeof TABS)[number];
+
+export default function App() {
+  const [tab, setTab] = useState<Tab>("Today");
+  const [pending, setPending] = useState(0);
+  const [needsKey, setNeedsKey] = useState(false);
+  const [keyInput, setKeyInput] = useState(getApiKey());
+  const [version, setVersion] = useState(0); // bump to remount views after the agent changes data
+
+  const refreshPending = useCallback(async () => {
+    try { setPending((await api.get<PendingAction[]>("/api/pending-actions")).length); setNeedsKey(false); }
+    catch (e) { if (e instanceof ApiError && e.status === 401) setNeedsKey(true); }
+  }, []);
+  useEffect(() => { void refreshPending(); }, [refreshPending]);
+  const changed = useCallback(() => { setVersion((v) => v + 1); void refreshPending(); }, [refreshPending]);
+
+  if (needsKey) {
+    return (
+      <main className="gate">
+        <h1>API key required</h1>
+        <p className="muted">This server has API_KEY set. Enter it to continue (kept for this browser tab only).</p>
+        <form onSubmit={(e) => { e.preventDefault(); setApiKey(keyInput); setNeedsKey(false); void refreshPending(); }}>
+          <input type="password" value={keyInput} onChange={(e) => setKeyInput(e.target.value)} aria-label="API key" />
+          <button type="submit">Continue</button>
+        </form>
+      </main>
+    );
+  }
+
+  return (
+    <div className="app">
+      <nav>
+        <strong>Personal Agent</strong>
+        {TABS.map((t) => (
+          <button key={t} className={t === tab ? "active" : ""} onClick={() => setTab(t)}>
+            {t}{t === "Approvals" && pending > 0 && <span className="pill">{pending}</span>}
+          </button>
+        ))}
+      </nav>
+      <main key={`${tab}-${version}`}>
+        {tab === "Today" && <Today />}
+        {tab === "Goals" && <Goals />}
+        {tab === "Projects" && <Projects />}
+        {tab === "Commitments" && <Commitments />}
+        {tab === "Memory" && <MemoryView />}
+        {tab === "Chat" && <Chat onChange={changed} />}
+        {tab === "Activity" && <Activity />}
+        {tab === "Approvals" && <Approvals onChange={changed} />}
+      </main>
+    </div>
+  );
+}

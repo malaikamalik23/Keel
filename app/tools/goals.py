@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.db.models import Goal, Milestone, Task
+from app.services.task_events import record_task_event
 from app.tools.base import Permission, Tool, ToolContext, ToolError, ToolRegistry
 
 OPEN_TASK_STATUSES = ("todo", "in_progress")
@@ -149,6 +150,8 @@ def milestone_to_tasks(ctx: ToolContext, p: MilestoneToTasksInput) -> dict:
     if not created:
         raise ToolError("No non-empty task titles were provided.")
     ctx.db.flush()
+    for t in created:
+        record_task_event(ctx.db, t, "created")
     return {
         "milestone_id": milestone.id,
         "created_tasks": [{"id": t.id, "title": t.title, "due_date": t.due_date.isoformat() if t.due_date else None} for t in created],

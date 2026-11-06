@@ -79,3 +79,62 @@ def test_goal_project_commitment_memory_endpoints_reflect_agent_actions():
     assert [p["name"] for p in client.get("/api/projects").json()] == ["FYP"]
     assert [c["text"] for c in client.get("/api/commitments").json()] == ["Study tonight"]
     assert [m["content"] for m in client.get("/api/memories").json()] == ["Prefers evening study sessions."]
+
+
+def test_memory_edit_and_delete_over_http_are_audited_as_user():
+    client = client_with([
+        tool_call("save_memory", {"content": "Prefers evenings.", "kind": "preference"}), text("Saved."),
+    ])
+    client.post("/api/chat", json={"message": "I prefer evenings"})
+
+    r = client.patch("/api/memories/1", json={"content": "Prefers late evenings.", "importance": "high"})
+    assert r.status_code == 200 and r.json()["content"] == "Prefers late evenings." and r.json()["importance"] == "high"
+    assert client.patch("/api/memories/1", json={}).status_code == 422
+    assert client.patch("/api/memories/1", json={"kind": "bogus"}).status_code == 422
+    assert client.patch("/api/memories/99", json={"content": "x"}).status_code == 404
+
+    assert client.delete("/api/memories/1").status_code == 204
+    assert client.get("/api/memories").json() == []
+    assert client.delete("/api/memories/1").status_code == 404
+    audit = client.get("/api/audit-log").json()
+    assert {(a["tool_name"], a["actor"]) for a in audit} >= {("update_memory", "user"), ("delete_memory", "user")}
+
+
+def test_commitment_edit_over_http_tracks_postponement_and_completion():
+    client = client_with([
+        tool_call("propose_commitment", {"text": "Finish GRE set", "deadline": "2026-11-10", "confirmed": True}),
+        text("Noted."),
+    ])
+    client.post("/api/chat", json={"message": "I'll finish GRE by Tuesday"})
+
+    r = client.patch("/api/commitments/1", json={"deadline": "2026-11-14"})
+    assert r.status_code == 200 and r.json()["deadline"] == "2026-11-14" and r.json()["postponement_count"] == 1
+
+    r = client.patch("/api/commitments/1", json={"status": "done"})
+    assert r.json()["status"] == "done" and r.json()["completed_at"] is not None
+    assert client.patch("/api/commitments/1", json={}).status_code == 422
+    assert client.patch("/api/commitments/42", json={"status": "dropped"}).status_code == 404
+
+
+def test_new_rest_routes_require_api_key_when_configured():
+    from app.api.main import create_app
+    client = TestClient(create_app(make_settings(api_key="secret"), ScriptedLLM([])))
+    assert client.patch("/api/memories/1", json={"content": "x"}).status_code == 401
+    assert client.delete("/api/memories/1").status_code == 401
+    assert client.patch("/api/commitments/1", json={"status": "dropped"}).status_code == 401
+
+
+def test_built_dashboard_is_served_without_shadowing_the_api(tmp_path):
+    (tmp_path / "index.html").write_text("<html>dashboard</html>")
+    from app.api.main import create_app
+    client = TestClient(create_app(make_settings(frontend_dist=str(tmp_path)), ScriptedLLM([])))
+    assert "dashboard" in client.get("/").text
+    assert client.get("/health").json() == {"status": "ok"}
+    assert client.get("/api/tasks").json() == []
+    assert client.get("/api/does-not-exist").status_code == 404
+
+
+def test_no_dashboard_mounted_when_dist_missing(tmp_path):
+    from app.api.main import create_app
+    client = TestClient(create_app(make_settings(frontend_dist=str(tmp_path / "nope")), ScriptedLLM([])))
+    assert client.get("/").status_code == 404

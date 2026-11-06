@@ -34,6 +34,26 @@ class Settings(BaseSettings):
     # Unset by default: fine for localhost-only use, but set it before ever exposing the API.
     api_key: str | None = None
 
+    # ---- Phase 4: scheduler, check-ins, notifications ----
+    scheduler_enabled: bool = False  # opt-in: starts the in-process scheduler with the API
+    scheduler_tick_seconds: int = 60
+    morning_checkin_time: str = "08:00"  # local HH:MM
+    evening_checkin_time: str = "20:00"
+    weekly_checkin_weekday: int = 6  # 0=Monday .. 6=Sunday; sent at the evening time
+    checkin_grace_hours: float = 3.0  # a check-in more than this late is skipped, not sent stale
+    notification_max_per_day: int = 5  # budget for everything except reminders you explicitly asked for
+    checkin_reserve: int = 2  # budget slots held back from nudges so morning/evening check-ins always fit
+    notification_min_priority: Literal["low", "normal", "high"] = "normal"
+    quiet_hours_start: str = "22:00"
+    quiet_hours_end: str = "07:00"
+    telegram_bot_token: str | None = None
+    telegram_chat_id: str | None = None  # the ONLY chat the bot talks to / listens to
+    telegram_inbound: bool = True  # also let you chat with the agent through the bot
+    calendar_ics_url: str | None = None  # secret iCal address of your calendar (read-only)
+
+    # Built dashboard (frontend/dist). Served at / when the directory exists; blank/None disables.
+    frontend_dist: str | None = "frontend/dist"
+
 
 @lru_cache
 def get_settings() -> Settings:

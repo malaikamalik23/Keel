@@ -9,13 +9,14 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.agent.prompts import build_system_prompt
+from app.agent.context import build_context_pack
+from app.agent.prompts import COMPOSE_SYSTEM, build_system_prompt
 from app.agent.summarize import render_messages_for_summary, summarize_messages
 from app.config import Settings
 from app.db.models import Conversation, Message
 from app.errors import NotFoundError
 from app.llm.base import LLMClient
-from app.security.untrusted import contains_untrusted
+from app.security.untrusted import contains_untrusted, extract_urls, urls_in_untrusted_result
 from app.tools.base import ToolContext
 from app.tools.executor import ToolExecutor
 
@@ -69,7 +70,9 @@ class Agent:
         ctx = ToolContext(db=db, tz=self.tz, conversation_id=conv.id)
         # If untrusted content is still in the context window, stay in the stricter permission mode.
         ctx.tainted = contains_untrusted(messages)
-        system_prompt = build_system_prompt(ctx.now(), summary=conv.summary)
+        ctx.seen_urls = extract_urls(messages)
+        context = build_context_pack(db, ctx.today(), message)
+        system_prompt = build_system_prompt(ctx.now(), summary=conv.summary, context=context)
 
         result = ChatResult(conversation_id=conv.id, reply="")
         for _ in range(self.settings.max_agent_steps):
@@ -96,11 +99,12 @@ class Agent:
                 )
                 if outcome.pending_action_id is not None:
                     result.pending_action_ids.append(outcome.pending_action_id)
+                ctx.seen_urls |= urls_in_untrusted_result(outcome.result)  # links the model has now been shown
                 tool_results.append(
                     {
                         "type": "tool_result",
                         "tool_use_id": tu["id"],
-                        "content": json.dumps(outcome.result, default=str),
+                        "content": json.dumps(outcome.result, default=str, ensure_ascii=False),
                         "is_error": outcome.status == "error",
                     }
                 )
@@ -112,6 +116,25 @@ class Agent:
         self._persist(db, conv.id, [{"role": "assistant", "content": [{"type": "text", "text": STEP_LIMIT_REPLY}]}])
         result.reply = STEP_LIMIT_REPLY
         return result
+
+    def compose_message(self, kind: str, facts: dict, fallback: str) -> str:
+        """Word a proactive message (check-in or nudge). One LLM call with NO tools: it cannot change anything.
+
+        The facts come from SQL, not from the model. If the LLM is down or returns nothing, `fallback` (a
+        deterministic text built from the same facts) is sent instead, so a flaky provider never silences a check-in.
+        """
+        try:
+            response = self.llm.complete(
+                system=COMPOSE_SYSTEM,
+                messages=[{"role": "user", "content": [{"type": "text", "text": f"Message type: {kind}\nFacts (JSON, computed by code):\n{json.dumps(facts, default=str)}"}]}],
+                tools=[],
+            )
+            text = response.text.strip()
+            if text:
+                return text[:1500]
+        except Exception:  # noqa: BLE001 - proactive messages must never fail because the LLM did
+            logger.exception("compose_message failed for %s; using fallback", kind)
+        return fallback
 
     # ---------- helpers ----------
     def _get_or_create_conversation(self, db: Session, conversation_id: int | None) -> Conversation:

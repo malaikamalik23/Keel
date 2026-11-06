@@ -1,0 +1,184 @@
+"""The agent: one conversation turn = a bounded loop of (LLM call -> run requested tools -> LLM call ...)."""
+from __future__ import annotations
+
+import json
+import logging
+from dataclasses import dataclass, field
+from zoneinfo import ZoneInfo
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.agent.prompts import build_system_prompt
+from app.agent.summarize import render_messages_for_summary, summarize_messages
+from app.config import Settings
+from app.db.models import Conversation, Message
+from app.errors import NotFoundError
+from app.llm.base import LLMClient
+from app.security.untrusted import contains_untrusted
+from app.tools.base import ToolContext
+from app.tools.executor import ToolExecutor
+
+logger = logging.getLogger(__name__)
+
+STEP_LIMIT_REPLY = (
+    "I hit my step limit while working on that, so I stopped. Tell me what you'd like me to focus on and I'll continue."
+)
+
+
+@dataclass
+class ToolCallRecord:
+    name: str
+    permission: str
+    status: str
+    input: dict
+    result: dict
+
+
+@dataclass
+class ChatResult:
+    conversation_id: int
+    reply: str
+    tool_calls: list[ToolCallRecord] = field(default_factory=list)
+    pending_action_ids: list[int] = field(default_factory=list)
+
+
+def _is_plain_user_message(msg: dict) -> bool:
+    if msg["role"] != "user":
+        return False
+    content = msg["content"]
+    return isinstance(content, str) or not any(b.get("type") == "tool_result" for b in content)
+
+
+class Agent:
+    def __init__(self, llm: LLMClient, executor: ToolExecutor, settings: Settings):
+        self.llm = llm
+        self.executor = executor
+        self.settings = settings
+        self.tz = ZoneInfo(settings.agent_timezone)
+
+    # ---------- public ----------
+    def chat(self, db: Session, message: str, conversation_id: int | None = None) -> ChatResult:
+        self.executor.expire_stale(db)  # housekeeping: pending actions no one confirmed in time
+        conv = self._get_or_create_conversation(db, conversation_id)
+        history = self._load_history(db, conv.id)  # may update conv.summary as a side effect
+        user_msg = {"role": "user", "content": [{"type": "text", "text": message}]}
+        self._persist(db, conv.id, [user_msg])
+
+        messages = history + [user_msg]
+        ctx = ToolContext(db=db, tz=self.tz, conversation_id=conv.id)
+        # If untrusted content is still in the context window, stay in the stricter permission mode.
+        ctx.tainted = contains_untrusted(messages)
+        system_prompt = build_system_prompt(ctx.now(), summary=conv.summary)
+
+        result = ChatResult(conversation_id=conv.id, reply="")
+        for _ in range(self.settings.max_agent_steps):
+            response = self.llm.complete(
+                system=system_prompt,
+                messages=messages,
+                tools=self.executor.registry.specs(),
+            )
+            tool_uses = response.tool_uses if response.stop_reason == "tool_use" else []
+
+            if not tool_uses:
+                # Drop any dangling tool_use (e.g. truncated output): an unanswered tool_use would corrupt history.
+                content = [b for b in response.content if b["type"] == "text" and b["text"]]
+                content = content or [{"type": "text", "text": "(no response)"}]
+                self._persist(db, conv.id, [{"role": "assistant", "content": content}])
+                result.reply = response.text or "(no response)"
+                return result
+
+            tool_results = []
+            for tu in tool_uses:
+                outcome = self.executor.run(ctx, tu["name"], tu["input"])
+                result.tool_calls.append(
+                    ToolCallRecord(tu["name"], outcome.permission, outcome.status, tu["input"], outcome.result)
+                )
+                if outcome.pending_action_id is not None:
+                    result.pending_action_ids.append(outcome.pending_action_id)
+                tool_results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tu["id"],
+                        "content": json.dumps(outcome.result, default=str),
+                        "is_error": outcome.status == "error",
+                    }
+                )
+            # The assistant tool_use message and its tool_result reply are saved together, never one without the other.
+            new = [{"role": "assistant", "content": response.content}, {"role": "user", "content": tool_results}]
+            self._persist(db, conv.id, new)
+            messages += new
+
+        self._persist(db, conv.id, [{"role": "assistant", "content": [{"type": "text", "text": STEP_LIMIT_REPLY}]}])
+        result.reply = STEP_LIMIT_REPLY
+        return result
+
+    # ---------- helpers ----------
+    def _get_or_create_conversation(self, db: Session, conversation_id: int | None) -> Conversation:
+        if conversation_id is None:
+            conv = Conversation()
+            db.add(conv)
+            db.commit()
+            return conv
+        conv = db.get(Conversation, conversation_id)
+        if conv is None:
+            raise NotFoundError(f"No conversation with id {conversation_id}.")
+        return conv
+
+    def _load_history(self, db: Session, conversation_id: int) -> list[dict]:
+        rows = db.scalars(
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
+            .order_by(Message.id.desc())
+            .limit(self.settings.history_message_limit)
+        ).all()
+        rows = list(reversed(rows))
+        # Windowing must not cut a tool_use / tool_result pair in half: start at a plain user message.
+        while rows and not _is_plain_user_message({"role": rows[0].role, "content": rows[0].content}):
+            rows.pop(0)
+
+        if self.settings.summarize_dropped_history:
+            conv = db.get(Conversation, conversation_id)
+            if conv is not None:
+                self._maybe_summarize(db, conv, rows[0].id if rows else None)
+
+        return [{"role": r.role, "content": r.content} for r in rows]
+
+    def _maybe_summarize(self, db: Session, conv: Conversation, window_start_id: int | None) -> None:
+        """Fold messages that just fell out of the replayed window into `conv.summary`.
+
+        Runs incrementally: only the slice between the last summarized message and the new window
+        start is summarized each turn, not the whole history every time.
+        """
+        if window_start_id is None:
+            return
+        already_through = conv.summarized_through_id or 0
+        if window_start_id - 1 <= already_through:
+            return  # nothing new has aged out of the window since we last summarized
+
+        dropped = db.scalars(
+            select(Message)
+            .where(
+                Message.conversation_id == conv.id,
+                Message.id > already_through,
+                Message.id < window_start_id,
+            )
+            .order_by(Message.id)
+        ).all()
+        if not dropped:
+            return
+
+        excerpt = render_messages_for_summary(dropped)
+        try:
+            conv.summary = summarize_messages(self.llm, conv.summary, excerpt)
+        except Exception:
+            # Summarization is a nice-to-have; a flaky/unconfigured LLM must not break the chat turn.
+            logger.exception("Conversation summarization failed for conversation %s; keeping prior summary", conv.id)
+            return
+        conv.summarized_through_id = dropped[-1].id
+        db.commit()
+
+    def _persist(self, db: Session, conversation_id: int, msgs: list[dict]) -> None:
+        for m in msgs:
+            db.add(Message(conversation_id=conversation_id, role=m["role"], content=m["content"]))
+        db.commit()

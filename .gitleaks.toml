@@ -1,0 +1,7 @@
+# Extend the default rules; the placeholders in .env.example are not real secrets.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documentation placeholders"
+paths = ['''\.env\.example$''', '''docs/.*\.md$''', '''README\.md$''', '''tests/.*''']

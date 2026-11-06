@@ -1,252 +1,194 @@
-# Personal AI Agent — Architecture & Roadmap
+# Keel: architecture
 
-A single-user agent that remembers commitments, plans realistic days, tracks whether work actually gets done, and follows up. The design rule: **the LLM decides and talks; code stores, computes, enforces and schedules.** Anything that must be reliable (deadlines, counts, permissions, reminders) lives in the database and in code, not in the prompt.
+Keel is a single-user agent that remembers commitments, plans realistic days, tracks whether work actually gets
+done, and follows up. The design rule: **the LLM decides and talks; code stores, computes, enforces and schedules.**
+Anything that must be reliable (deadlines, counts, permissions, reminders, budgets, security checks) lives in the
+database and in code, not in the prompt.
 
 ---
 
-## 1. System architecture
+## 1. System overview
 
 ```
-                      ┌────────────────────────── Clients ───────────────────────────┐
-                      │  Dashboard (React)   ·   CLI   ·   Telegram bot (Phase 4)     │
-                      └───────────────┬──────────────────────────────────────────────┘
-                                      │ HTTP/JSON
-┌─────────────────────────────────────▼─────────────────────────────────────────────────┐
-│ FastAPI  (app/api)  — thin: validation, HTTP mapping, no business logic                │
-└───────┬───────────────────────────────────────────────────────────┬───────────────────┘
-        │ chat                                                      │ CRUD / confirm / stats
-┌───────▼──────────────┐    tool calls     ┌───────────────────────▼──────────────────┐
-│ Agent  (app/agent)   │──────────────────▶│ ToolExecutor (app/tools/executor.py)      │
-│  prompt + context    │◀──────────────────│  validate → permission policy → run →     │
-│  bounded tool loop   │    tool results   │  audit.  Every call passes through here.  │
-└───────┬──────────────┘                   └───────┬───────────────────────────────────┘
-        │                                          │ uses
-┌───────▼──────────────┐   ┌───────────────────────▼──────────┐   ┌────────────────────┐
-│ LLM client           │   │ Domain services + Tools          │   │ Security            │
-│ (app/llm) swappable  │   │ tasks · goals · projects ·       │   │ permissions, audit, │
-│ Anthropic / other    │   │ commitments · memory · planner · │   │ untrusted-content   │
-└──────────────────────┘   │ calendar · research · files · git│   │ fencing + taint     │
-                           └───────────────┬──────────────────┘   └────────────────────┘
-                                           │
-                        ┌──────────────────▼───────────────────┐
-                        │ SQLite → PostgreSQL (SQLAlchemy 2.0) │
-                        └──────────────────▲───────────────────┘
-                                           │ same services, same tools
-                        ┌──────────────────┴───────────────────┐
-                        │ Scheduler (APScheduler, Phase 4)      │
-                        │ detectors (SQL) → notify → agent run  │
-                        └──────────────────────────────────────┘
+                 ┌──────────────────────── Clients ────────────────────────┐
+                 │  Dashboard (React)  ·  CLI  ·  Telegram (inbound + push)  │
+                 └──────────────┬───────────────────────────────────────────┘
+                                │ HTTP/JSON
+┌───────────────────────────────▼──────────────────────────────────────────────────────────┐
+│ FastAPI (app/api): validation, auth (X-API-Key), rate limit, security headers. No logic.   │
+└───────┬─────────────────────────────────────────────────────────────┬────────────────────┘
+        │ chat                                                         │ CRUD · approve · stats
+┌───────▼───────────────┐   tool calls    ┌────────────────────────────▼────────────────────┐
+│ Agent (app/agent)     │────────────────▶│ ToolExecutor (app/tools/executor.py)             │
+│  system prompt        │◀────────────────│  validate → permission policy → taint gate →     │
+│  + context pack       │   tool results  │  run → audit.  EVERY call passes through here.   │
+│  bounded tool loop    │                 └───────┬──────────────────────────────────────────┘
+└───────┬───────────────┘                         │
+        │                          ┌──────────────▼──────────────┐   ┌───────────────────────┐
+┌───────▼───────────────┐          │ Tools (app/tools) +          │   │ Security (app/security)│
+│ LLM client (app/llm)  │          │ services (app/services)      │   │ permissions · audit ·  │
+│ Anthropic / Groq      │          │ tasks goals projects         │   │ untrusted fencing ·    │
+└───────────────────────┘          │ commitments memory planning  │   │ sanitising             │
+                                   │ reminders calendar web notes │   └───────────────────────┘
+                                   │ github                       │
+                                   └──────────────┬───────────────┘
+                                                  │
+                              ┌───────────────────▼────────────────────┐
+                              │ SQLite (SQLAlchemy 2, Alembic) + FTS5   │
+                              └───────────────────▲────────────────────┘
+                                                  │ same services, same tools
+┌─────────────────────────────────────────────────┴──────────────────────────────────────┐
+│ Scheduler (APScheduler, app/scheduler): tick() → reminders · check-ins · detectors       │
+│   → NotificationService (dedupe, priority, quiet hours, daily budget) → Telegram / log   │
+│   → LLM is asked only to *word* the message (no tools; deterministic fallback text)      │
+└──────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Key decisions**
+### Key decisions
 
 | Decision | Why |
 |---|---|
 | One agent with native tool calling, not multi-agent | Simplest thing that works; multi-agent adds failure modes without benefit at this scale. |
-| Structured data in relational tables; embeddings only for free text | "What did I promise this week?" is a SQL query, not a similarity search. |
-| Permissions and confirmation enforced in `ToolExecutor`, not in the prompt | A prompt can be talked out of a rule; code cannot. |
+| Structured data in relational tables; embeddings avoided | "What did I promise this week?" is a SQL query. Free-text search uses SQLite FTS5 (BM25), not a vector DB. |
+| Permissions, confirmation and taint enforced in `ToolExecutor`, not the prompt | A prompt can be talked out of a rule; code cannot. |
 | Proactivity = deterministic detectors + LLM for wording | SQL decides *whether* something is overdue or neglected; the model only decides *how to say it*. Cheaper, testable, no hallucinated nags. |
-| Messages stored in provider block format | Lets the agent replay tool exchanges exactly. A new provider needs one adapter (`app/llm`). |
-| Same `Container` for API, CLI and scheduler | One code path → identical behaviour and one place to test. |
+| Messages stored in provider block format | Replay tool exchanges exactly; a new provider needs one adapter (`app/llm`). |
+| Same `Container` for API, CLI and scheduler | One code path, identical behaviour, one place to test. |
+| `tick()` is idempotent and catches up | Scheduling by *state* (due items, windows, dedupe keys), not exact timers: a sleeping laptop or a double run can't lose or duplicate a message. |
+| Single process | The scheduler and rate limiter are in-process. Scale-out would need a worker/queue (see §10). |
 
 ---
 
-## 2. Database schema
+## 2. Data model
 
-`✔` = implemented in Phase 1. Everything else is added by Alembic migration in the phase shown.
+Hand-written Alembic migrations `0001`–`0006`; SQLite today, SQLAlchemy keeps PostgreSQL a URL change (notes search needs FTS5, so it is SQLite-only).
 
-| Table | Key columns | Phase |
-|---|---|---|
-| `conversations` ✔ | id, created_at | 1 |
-| `messages` ✔ | id, conversation_id, role, content (JSON blocks), created_at | 1 |
-| `tasks` ✔ | id, title, description, status (todo/in_progress/done/cancelled), priority, due_date, estimated_minutes, **postponement_count**, created_at, updated_at, completed_at | 1 |
-| `pending_actions` ✔ | id, conversation_id, tool_name, tool_input (JSON), summary, status (pending/confirmed/rejected/failed), created_at, resolved_at | 1 |
-| `audit_log` ✔ | id, created_at, actor (agent/user), tool_name, permission, params, status, detail, conversation_id, pending_action_id | 1 |
-| `goals` | id, title, description, horizon (short/long), category (career/education/personal), status, target_date, parent_goal_id, last_activity_at | 2 |
-| `milestones` | id, goal_id, title, order, status | 2 |
-| `projects` | id, name, description, purpose, status, priority, deadline, goal_id, progress (derived) | 2 |
-| `tasks` (+cols) | + project_id, milestone_id, goal_id | 2 |
-| `commitments` | id, text, deadline, importance, project_id, status (open/done/missed/dropped), created_at, completed_at, postponement_count, source_message_id, confirmed (bool) | 2 |
-| `memories` | id, kind (preference/context/fact), content, importance, source_message_id, created_at, last_used_at, is_active | 2 |
-| `task_events` | id, task_id, type (created/postponed/completed/reopened), old_value, new_value, reason, at | 3 |
-| `plans` / `plan_items` | plan(date, capacity_minutes) · item(plan_id, task_id, planned_minutes, status, order) | 3 |
-| `work_sessions` | id, task_id, project_id, started_at, ended_at, minutes, note | 3 |
-| `checkins` | id, kind (morning/evening/weekly), date, summary, user_response | 4 |
-| `reminders` | id, text, fire_at, status, linked_type, linked_id | 4 |
-| `notifications` | id, kind, priority, sent_at, channel, dedupe_key | 4 |
-| `documents` / `chunks` | file path, hash, text chunks (+ embedding column when needed) | 5 |
+| Table | Purpose |
+|---|---|
+| `conversations`, `messages` | Chat history in LLM block format; `conversations.summary` holds the rolling summary of aged-out turns |
+| `tasks` | title, status, priority, due date, estimate, `postponement_count` (a cache of the event log), links to goal/milestone/project |
+| `task_events` | **Append-only history**: created / postponed (old→new date + reason) / completed / reopened / cancelled / skipped. Survives task deletion. |
+| `goals`, `milestones`, `projects` | The goal → milestone → task and project → task hierarchies |
+| `commitments` | "I'll do X by Y": `proposed` until you confirm → `open` → `done` / `dropped`; "missed" is derived, not stored |
+| `memories` | Durable facts about you (preference / context / fact), editable and deletable |
+| `plans`, `plan_items` | One plan per local day; items snapshot the title so history stays readable |
+| `work_sessions` | Time actually worked: the ground truth plans are compared against |
+| `reminders`, `checkins`, `notifications` | Scheduler state. `notifications` *is* the budget: counts and dedupe keys are read from it, so limits survive restarts |
+| `documents`, `chunks`, `chunk_fts` | Notes index (FTS5 virtual table, rowid = chunk id) |
+| `pending_actions`, `audit_log` | The approval queue and the record of every tool call |
 
-**Why `task_events` matters:** `postponement_count` is a cache. The event history (when, why, how far) is what lets the accountability layer say *"you've postponed GRE four times this week"* accurately and analyse patterns in Phase 6.
+**Why `task_events` matters:** `postponement_count` is a cache. The event history (when, how far, *why*) is what lets the
+accountability layer say "you've postponed GRE four times, citing 'too big' twice" without inventing anything.
 
 ---
 
-## 3. Agent architecture
-
-One turn (`app/agent/loop.py`):
+## 3. The agent turn (`app/agent/loop.py`)
 
 ```
-user message
-   │ persist
-   ▼
-build context ──▶ system prompt (persona + rules + current time)
-                  + [Phase 2+] context pack (see §5)
-   ▼
-┌─▶ LLM call (with tool specs)
-│      ├─ text only ───────────────▶ persist, reply   (done)
-│      └─ tool_use ▶ ToolExecutor.run(...) for each call
-│                    persist assistant tool_use + tool_result together
-└──────────────── repeat, max_agent_steps (default 8) ──▶ safe fallback reply
+user message ─persist─▶ build context ─▶ system prompt (persona + rules + date) + summary + CONTEXT PACK
+        ┌───────────────────────────────────────────────────────────────────────────┐
+        ▼                                                                           │
+   LLM call (tool specs) ── text only ─────────▶ persist, reply                     │
+        └── tool_use ▶ ToolExecutor.run(...) for each call ─▶ persist tool_use + tool_result together
+                                                                                    │
+                       repeat, max_agent_steps ────────────────────────────────────┘ else safe fallback reply
 ```
 
-Properties already implemented and tested:
-- **Bounded loop** — cannot run away; ends with a well-formed history.
-- **Atomic history** — a `tool_use` is never saved without its `tool_result`; truncated `tool_use` blocks are dropped; the history window never starts mid-exchange.
-- **Honesty rule** — the prompt forbids claiming an action without a successful tool result, and tool results carry `is_error`.
-- **Persona** lives in `app/agent/prompts.py` (supportive-but-direct, no generic hype, at most 3 priorities, ask *why* when a task keeps slipping).
+- **Context pack** (`app/agent/context.py`): before every call, *code* assembles a compact, size-capped snapshot: today's plan,
+  open tasks, overdue/at-risk commitments, items postponed ≥2×, your preferences, memories matching the message's keywords,
+  and the last proactive message the agent sent you (so "didn't get to it" has context). No LLM involved.
+- **Atomic history:** a `tool_use` is never saved without its `tool_result`; the replay window never starts mid-exchange.
+- **Honesty rule:** the prompt forbids claiming an action without a successful tool result; results carry `is_error`.
+- **Summarisation:** messages aging out of the window are folded into `conversations.summary` (one extra LLM call, incremental).
 
-**Decision-making (spec §10):** tool routing is done by the model from tool descriptions. Descriptions are written as "use when…" so `list_tasks` answers "what should I work on", `search_commitments` (Phase 2) answers "what did I promise", `web_search` (Phase 5) answers research questions. In Phase 6 we add a routing eval set (≈40 prompts → expected tool) to measure this instead of guessing.
-
-**Proactive runs (Phase 4):** the scheduler triggers the *same* agent with a system-initiated message (e.g. `morning_checkin`) plus pre-computed facts. Detectors and a **notification budget** (max N/day, quiet hours, priority threshold, dedupe keys) decide whether anything is sent at all.
-
----
-
-## 4. Tool architecture
+## 4. Tools and permissions
 
 ```python
-Tool(name, description, permission, input_model (pydantic), handler(ctx, params) -> dict,
-     summarize=..., returns_untrusted=False)
+Tool(name, description, permission, input_model, handler(ctx, params) -> dict,
+     summarize=..., returns_untrusted=False, taint_gate=None)
 ```
-- **Input schema is generated from the pydantic model** → the model sees a JSON schema, and the same model validates the call. No drift between the two.
-- **Handlers are plain functions** over a `ToolContext` (db session, timezone, conversation id, taint flag). They call domain logic; they do not talk to the LLM.
-- **Adding a tool = one function + one `register` call.** Nothing else changes.
 
-**Permission tiers (enforced in code by `PermissionPolicy`)**
+The JSON schema the model sees is generated from the pydantic input model that also validates the call. All 42 tools are listed in
+[TOOLS.md](TOOLS.md) (generated from the registry; a test fails if it goes stale).
 
-| Tier | Examples | Behaviour |
-|---|---|---|
-| READ | list_tasks, read_calendar, read_file, github_read | Runs immediately |
-| WRITE | create/update/complete task, save_memory, create_event | Runs immediately; audited. Setting `CONFIRM_WRITES=true` makes it ask first |
-| HIGH_IMPACT | delete_*, send_message, publish, external changes | **Never runs from the model.** Queued as `pending_action`; only the user (API/CLI/UI) can confirm it |
+| Tier | Behaviour |
+|---|---|
+| READ | Runs immediately |
+| WRITE | Runs immediately and is audited. **Needs approval when the session is tainted**, or always with `CONFIRM_WRITES=true` |
+| HIGH_IMPACT | Never runs from the model; queued as a `pending_action` that only you can approve (API/CLI/UI), executed once, in one transaction |
 
-Confirmation is enforced by the executor, not requested in the prompt: the model *cannot* execute a high-impact action even if it wants to. Confirmed actions are marked and executed in one transaction, so they cannot run twice.
+Tools that need configuration (calendar, web, notes, GitHub) are only advertised to the model when configured.
 
-**Tool roadmap:** tasks ✔ → goals/projects/commitments/memory (2) → planner, time tracking (3) → reminders, calendar (4) → web_search, file_search, github (5).
-
----
-
-## 5. Memory architecture
-
-Four layers, each with the right storage:
+## 5. Memory
 
 | Layer | What | Storage | Retrieval |
 |---|---|---|---|
-| **Working** | The current conversation | `messages`, windowed (last 40) | Replayed each turn |
-| **Structured** | Goals, projects, tasks, commitments — the source of truth | Relational tables | Tools + SQL |
-| **Semantic** | Preferences and personal context ("I focus best in the morning", "FYP supervisor is …") | `memories` table | SQLite FTS5 first; embeddings only if FTS proves insufficient |
-| **Behavioural** | Postponement patterns, completion rate, neglected goals | *Computed* from `task_events`, `work_sessions`, `plan_items` | SQL aggregates — never LLM-written |
+| Working | The conversation | `messages`, windowed | Replayed each turn (+ rolling summary) |
+| Structured | Goals, projects, tasks, commitments, plans | Relational tables | Tools + SQL |
+| Semantic | Preferences and context | `memories` | Keyword overlap in the context pack; `search_memories` for depth |
+| Behavioural | Postponement patterns, completion rate, neglected goals, time worked | **Computed** from `task_events`, `work_sessions`, `plan_items` | SQL aggregates, never LLM-written |
 
-**Context pack (Phase 2 ✔ — `app/agent/context.py`; memory relevance is keyword overlap for now, FTS5 is a later upgrade):** before each LLM call, code assembles a compact block — today's plan, top open tasks, overdue/at-risk commitments, most-postponed items, preferences, and the top-k memories relevant to the message. The model gets the essentials without having to remember to look them up, and can still call tools for depth.
+Write policy: commitments are proposed, then confirmed; memories are saved only when useful, are visible in the dashboard, and every
+change is audited. Embeddings were deliberately skipped: keyword + FTS5 covers this scale and avoids a second datastore.
 
-**Write policy**
-- *Commitments:* the model flags candidates ("I'll finish this by Friday"); if deadline or scope is ambiguous it asks once, then stores with `confirmed=true`.
-- *Preferences/context:* saved only when useful for future help (the tool description and prompt say so); each save is shown to the user in the reply.
-- Every memory has a source message, can be viewed/edited/deleted in the dashboard, and each change is audited.
-- A weekly job merges near-duplicates and archives stale items (`is_active=false`, not deleted).
+## 6. Planning and accountability (`app/services/planner.py`, `accountability.py`)
 
----
+The planner is deterministic and unit-tested for its guarantees: usable time is capacity minus a 15% buffer; at most 3 *major*
+priorities (high priority or ≥90 min); a task longer than the whole day is deferred with "split it"; every omission has a stated
+reason; re-planning keeps finished items. Ranking: urgency (overdue > today > ≤3d > ≤7d) + priority + a nudge for tasks that keep slipping.
 
-## 6. MVP feature list (spec §17)
+`accountability_report` aggregates plan adherence, most-postponed tasks (with the reasons given), old open tasks never worked on,
+overdue commitments, neglected goals (no completion, creation or work in N days) and minutes per project. `analytics` adds weekly series,
+streaks, promises kept, estimate accuracy and postponement reasons for the Insights tab.
 
-1. Chat (API + CLI, later dashboard) — **Phase 1 ✔**
-2. Persistent memory
-3. Goals (+ decomposition into milestones/tasks)
-4. Projects
-5. Tasks — **create/list/update/complete/delete ✔**
-6. Commitments (detection, confirmation, postponement tracking)
-7. Daily planning (realistic, ≤3 major priorities, capacity-aware)
-8. Accountability check-ins (morning/evening, pattern diagnosis)
-9. Basic reminders
-10. Simple dashboard (Today, Goals, Projects, Commitments, Memory, Chat)
+## 7. Proactivity (`app/scheduler`)
 
-Also already in place from Phase 1: permission tiers, human confirmation, audit log, untrusted-content fencing.
+`Scheduler.tick()` runs every minute and is safe to run twice:
 
-**Explicitly deferred:** calendar sync, web research, GitHub, file search, analytics, multi-user, mobile app.
+1. **Reminders** due now are sent (exempt from budget/quiet hours; retried with backoff; dropped if >24h late).
+2. **Check-ins** (morning, evening, weekly-replaces-evening) are sent if their time has passed, they're inside the grace window and none
+   was sent today. Facts come from SQL; the LLM, with **no tools**, only words the message; if it fails, a deterministic text is sent.
+3. **Detectors** (overdue commitments, overdue tasks, tasks slipping ≥3×, stalled plan after 14:00, neglected goals) produce nudges with
+   stable dedupe keys. At most one nudge per tick.
 
----
+`NotificationService` decides whether anything is sent: duplicate → priority threshold → quiet hours (high priority may interrupt) →
+daily budget. Nudges draw from their own pool so they can never crowd out the check-ins. Delivery is a `Notifier` (Telegram or log).
 
-## 7. 8-week roadmap
+## 8. Research tools and the injection defences
 
-| Week | Milestone | Done when |
-|---|---|---|
-| **1** | **Phase 1** — chat, agent loop, tools, DB, permissions, audit | Can create/list/complete tasks by chatting; delete needs approval; tests green *(this repo)* |
-| **2** | **Phase 2a** — Alembic, goals, milestones, projects, `memories` + memory CRUD tools, context pack | Agent remembers a preference across restarts; user can list/edit/delete memories |
-| **3** | **Phase 2b/3a** — commitments (detection + confirm), `task_events`, goal decomposition ("become good at pentesting" → milestones → tasks) | "I'll do GRE tonight" becomes a tracked commitment; decomposition produces reviewable tasks |
-| **4** | **Phase 3b** — daily planner (capacity + priority cap), work sessions, accountability queries ("what have I been avoiding?") | Plan never exceeds available time; postponement diagnosis works from real data |
-| **5** | **Dashboard MVP** (React + Vite, consumes the existing API): Today, Goals, Projects, Commitments, Memory, Chat | All spec §13 views except Analytics |
-| **6** | **Phase 4** — APScheduler, morning/evening check-ins, reminders, Telegram delivery, notification budget; Google Calendar (read) | Gets a useful morning message and evening review without opening the app; ≤N notifications/day |
-| **7** | **Phase 5** — web research tool (fenced as untrusted), file search (FTS5), GitHub read-only | Answers "what should I read on explainable IDS" with sources; searches own notes |
-| **8** | **Phase 6** — prompt-injection test suite, tool-routing eval, analytics view, auth on the API, Docker, README + demo for the portfolio | Injection suite passes; eval score tracked; one-command deploy |
+`web_fetch`, `web_search`, `github_*`, `notes_search`, `read_note` and `read_calendar` all return text written by third parties, so
+they are `returns_untrusted`: output is sanitised, fenced in `<untrusted_content>`, and taints the session (WRITE tools then need approval).
+`web_fetch` additionally has an SSRF-hardened fetcher and an exfiltration `taint_gate`. The full threat model, the 12 enforced controls, how
+they are tested (the red-team suite, mutation-checked) and the known limitations are in **[SECURITY.md](../SECURITY.md)**.
 
-The week-6 schedule is the riskiest part (delivery channel, timezones, duplicates), so it has its own week. If time gets tight, cut Calendar, not the accountability features.
+## 9. Quality gates
 
----
+| Gate | What it covers |
+|---|---|
+| `pytest` (345 tests) + `npm test` (15 dashboard tests) | Tools, executor, agent loop, planner, scheduler, API, notes search, SSRF, GitHub/Brave/Telegram clients (all HTTP mocked, LLM scripted) |
+| `tests/injection` | The red-team suite, a compromised model against 7 channels × 7 payloads |
+| `evals/` | Tool-routing eval (~55 cases), scored per category, history tracked; the dataset itself is validated offline |
+| CI | ruff, Python 3.11/3.12, dashboard type-check + build, dependency audit, gitleaks secret scan, Docker build + `/health` |
 
-## 8. Recommended stack
-
-| Concern | Choice | Notes |
-|---|---|---|
-| Language / API | Python 3.11+, FastAPI | Async-capable, auto docs at `/docs` |
-| DB | SQLite → PostgreSQL | SQLAlchemy 2.0 keeps the switch to a URL change; Alembic from Phase 2 |
-| Validation | Pydantic v2 | Also generates the tool JSON schemas |
-| LLM | Anthropic API behind `LLMClient` | Model is one env var (`AGENT_MODEL`) |
-| Search | SQLite FTS5 → embeddings only if needed | Avoids a vector DB entirely at first |
-| Scheduler | APScheduler (in-process) | Move to a worker/queue only if you outgrow it |
-| Notifications | Telegram bot | Free, instant on phone, simple API |
-| Frontend | React + Vite (week 5) | Next.js SSR isn't needed; the API is already JSON |
-| Tests | pytest + a scripted fake LLM | Agent logic is tested without network or cost |
-| Deploy | Docker, single container + volume | Bind to localhost / add API key before exposing |
-
----
-
-## 9. Folder structure
+## 10. Folder structure
 
 ```
-personal-agent/
-├── app/
-│   ├── config.py            # settings from env/.env
-│   ├── container.py         # wires everything; used by API, CLI, scheduler
-│   ├── errors.py
-│   ├── cli.py               # terminal chat + approve/reject
-│   ├── api/                 # main.py (app factory) · routes.py · schemas.py
-│   ├── agent/               # loop.py (turn loop) · prompts.py
-│   ├── llm/                 # base.py (interface) · anthropic_client.py · factory.py
-│   ├── tools/               # base.py · executor.py · tasks.py · system.py   (+ one module per domain)
-│   ├── security/            # permissions.py · audit.py · untrusted.py
-│   └── db/                  # models.py · session.py                         (+ migrations/ from Phase 2)
-├── tests/                   # fakes.py (scripted LLM) · test_tools · test_agent · test_api
-├── docs/ARCHITECTURE.md
-├── requirements.txt · requirements-dev.txt · pytest.ini · .env.example
+app/{agent,api,db,integrations,llm,scheduler,security,services,tools}/   backend
+frontend/         React + Vite + TypeScript dashboard (served by FastAPI from frontend/dist)
+migrations/       hand-written Alembic migrations 0001-0006
+tests/            unit/API tests; tests/injection = red team
+evals/            tool-routing eval        scripts/   doc generators
+docs/             ARCHITECTURE.md · TOOLS.md (generated) · DEMO.md
 ```
-Later phases add: `app/services/` (domain logic shared by tools and API), `app/memory/`, `app/planning/`, `app/scheduler/`, `app/integrations/` (calendar, github, telegram), `frontend/`, `evals/`.
 
----
+## 11. Known limitations and ideas
 
-## 10. Prompt-injection defence (built from day one)
-
-1. **Fence:** tools marked `returns_untrusted=True` have their output wrapped in `<untrusted_content>` tags; the closing tag inside content is neutralised so it can't break out.
-2. **Taint:** once untrusted content has entered the context (this turn *or* still in the history window), WRITE tools require user confirmation. READ tools still work. A poisoned web page therefore cannot silently create, change or send anything.
-3. **Tier enforcement in code:** HIGH_IMPACT is never model-executable.
-4. **Prompt rule:** external text is data, never instructions — a backup, not the primary defence.
-5. **Audit:** every call is logged with actor, params, outcome.
-
-Phase 6 adds a red-team suite (poisoned pages, PDFs, GitHub READMEs, emails) that runs in CI, plus egress limits on the research tool.
-
-## 11. Known limitations of Phase 1 (honest list)
-
-- ~~No memory beyond the conversation window yet.~~ Fixed in Phase 2: `memories` table, memory tools, and the per-turn context pack (`app/agent/context.py`).
-- The Anthropic client is not covered by automated tests (it is a thin adapter; agent logic is tested with a scripted LLM). Run one real chat to verify your key/model.
-- ~~No authentication: bind to localhost only until Phase 6.~~ Fixed: optional `X-API-Key` auth via `API_KEY` (see README § Security notes). Still no per-user auth or rate limiting — fine for a single-user local/self-hosted deployment, not for multi-tenant use.
-- ~~Pending actions never expire.~~ Fixed: `PENDING_ACTION_TTL_HOURS` (default 24) auto-expires unanswered high-impact actions.
-- ~~Long chats just truncate at `history_message_limit` instead of degrading gracefully.~~ Fixed: messages that age out of the window are folded into `conversations.summary` (`SUMMARIZE_DROPPED_HISTORY`).
-- The tainted-session rule is coarse (any untrusted content in the history window). Correct but sometimes over-cautious.
-- ~~`Base.metadata.create_all` is used for schema creation.~~ Fixed in Phase 2: schema is managed by Alembic migrations.
+- **Single user, single process.** One API key, in-process scheduler and rate limiter. Multi-user would need accounts, per-user data
+  isolation, and the scheduler moved to a worker.
+- **Coarse, sticky taint** (see SECURITY.md). A finer-grained scheme (track which values came from where) would reduce approval prompts.
+- **Keyword memory relevance.** Fine at this scale; embeddings are the upgrade if memories grow into the thousands.
+- **Notes search is SQLite-only** (FTS5). A Postgres deployment would need `tsvector` instead.
+- **Calendar is read-only and doesn't yet reduce planning capacity automatically**; `read_calendar` returns `busy_minutes` and the agent is
+  told to subtract them.
+- **No real-browser tests** for the dashboard (it has jsdom render tests only).
+- **DNS rebinding** window in the fetcher (mitigate with an egress firewall).

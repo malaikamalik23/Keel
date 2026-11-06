@@ -1,0 +1,34 @@
+# One command:   docker compose up --build        then open http://127.0.0.1:8000
+#
+# Before you start: copy .env.example to .env and set an LLM key AND an API_KEY (compose refuses to start without it).
+services:
+  keel:
+    build: .
+    image: keel:latest
+    # Published on localhost only. To reach it from elsewhere, put a TLS reverse proxy in front instead of
+    # changing this to 0.0.0.0 (the app itself speaks plain HTTP).
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      API_KEY: "${API_KEY:?Set API_KEY in .env - the API must not run unauthenticated in a container}"
+      DATABASE_URL: sqlite:////app/data/agent.db
+      SCHEDULER_ENABLED: ${SCHEDULER_ENABLED:-true}
+      # NOTES_DIR: /notes            # uncomment together with the notes volume below
+    volumes:
+      - keel-data:/app/data
+      # - ./notes:/notes:ro          # your notes/papers for notes_search, mounted read-only
+    restart: unless-stopped
+    # Defence in depth: the process needs no privileges and no writable filesystem outside the data volume.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  keel-data:

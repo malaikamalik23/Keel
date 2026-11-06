@@ -1,140 +1,171 @@
-# Personal AI Agent
+# Keel
 
-Assistant + accountability partner + productivity coach + memory system.
-Design and roadmap: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+**A self-hosted personal AI agent that remembers your commitments, plans realistic days, tracks what actually gets done, and follows up.**
 
-**Status: Phase 2 complete** — goals (with milestone decomposition), projects, commitments (detected from
-chat and confirmed), memory (view/edit/delete, via chat or REST), a per-turn context pack, plus everything from Phase 1: chat, tool-using
-agent loop, tasks, permission tiers, audit log. Schema changes now go through Alembic migrations.
-Daily planning and the accountability engine (Phase 3) are next.
+Most assistants forget what you said yesterday and happily agree that you'll "start tomorrow". Keel keeps the books:
+what you promised, what you planned, what slipped (and the reason you gave), and what you actually worked on. It uses
+that record to plan days that fit, to ask *why* something keeps slipping, and to check in with you. It runs on your
+machine, with your data in one SQLite file.
 
-## Run
+> **The LLM decides and talks. Code stores, computes and enforces.** Deadlines, counts, plans, permissions, notification
+> limits and security checks are code with tests, not promises in a prompt.
+
+## What it does
+
+| | |
+|---|---|
+| **Chat** | Talk to it in the terminal, the web dashboard, or Telegram. It calls tools to read and change your data. |
+| **Goals → milestones → tasks** | "I want to get good at web pentesting" becomes a goal, ordered milestones, and concrete first tasks. |
+| **Commitments** | Notices "I'll finish the GRE set by Friday", asks you to confirm, tracks it, counts postponements. |
+| **Realistic daily plans** | A deterministic planner: never exceeds your available time (15% buffer), at most 3 major priorities, and tells you what it left out and why. |
+| **Accountability from facts** | "What have I been avoiding?" is answered from the event history: postponements with your reasons, old tasks never touched, neglected goals, time per project. No invented patterns. |
+| **Memory you control** | Preferences and context it saves are visible, editable and deletable. |
+| **Proactive, within a budget** | Morning/evening/weekly check-ins, reminders, and nudges for overdue or repeatedly-slipping items, limited by a daily budget, quiet hours and de-duplication. |
+| **Research** | Web search and page reading, search over your own notes and papers (including Urdu), read-only GitHub and calendar access. |
+| **Insights** | Weekly trends, streaks, promises kept, how long things really take versus your estimates. |
+
+## Security is a feature
+
+An agent that reads the web and can edit your data is a prompt-injection target. Keel assumes the model **cannot be
+trusted once it has read external text** and enforces the rest in code:
+
+- Deletes are **queued for your approval**; the model has no tool to approve anything.
+- Reading external content **taints the session**: further writes also need approval.
+- External text is **fenced and stripped of invisible characters and hidden HTML**.
+- A URL the model *assembled itself* (how data is smuggled out) is **gated**; the fetcher refuses private networks, validates every redirect.
+- Every action is **audited**.
+
+This is verified by a red-team suite that drives a *fully compromised* model through 7 external channels × 7 attack
+payloads and asserts nothing changes. It was mutation-checked: breaking any single defence makes it fail.
+Details and honest limitations: **[SECURITY.md](SECURITY.md)**.
+
+## Quick start
+
+You need Python 3.11+, Node 20+ (only to build the dashboard), and a key for [Anthropic](https://console.anthropic.com/) **or** [Groq](https://console.groq.com/keys).
 
 ```bash
-python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
+git clone https://github.com/malaikamalik23/Keel.git && cd Keel
+python -m venv .venv && source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt
-cp .env.example .env                                    # then set an API key (see below) and AGENT_TIMEZONE
+cp .env.example .env                                      # Windows: copy .env.example .env
+#   then edit .env: set ANTHROPIC_API_KEY (or GROQ_API_KEY) and AGENT_TIMEZONE
 
-pytest                                                  # 83 tests, no API key or network needed
+pytest -q                                                 # 345 tests, no key or network needed
 
-python -m app.cli                                       # terminal chat
-uvicorn app.api.main:create_app --factory --reload      # API at http://127.0.0.1:8000/docs
+(cd frontend && npm ci && npm run build)                  # build the dashboard once
+uvicorn app.api.main:create_app --factory                 # dashboard + API at http://127.0.0.1:8000
+# or, terminal only:
+python -m app.cli
 ```
 
-### Using Groq instead of Anthropic
+The schema is created and migrated automatically on startup (Alembic, `data/agent.db`).
 
-Set `GROQ_API_KEY` in `.env` (get one at [console.groq.com/keys](https://console.groq.com/keys)) and
-set `AGENT_MODEL` to a Groq model that supports tool calling — `llama-3.3-70b-versatile` is a solid
-default; `openai/gpt-oss-120b` also works well. `LLM_PROVIDER=auto` (the default) picks Groq
-automatically once `ANTHROPIC_API_KEY` is unset. Everything else — tools, permissions, memory,
-goals — works identically; only `app/llm/groq_client.py` differs, translating between Groq's
-OpenAI-style tool-calling format and the Anthropic-shaped format the rest of the app uses.
-
-The database schema is created/updated automatically on startup by running Alembic migrations
-against `data/agent.db` (or whatever `DATABASE_URL` points to) — no separate migration step needed
-for normal use.
-
-**If you have a `data/agent.db` from before Phase 2** (created by the old `create_all`, with no
-`alembic_version` table): either delete it and start fresh, or tell Alembic it's already at the
-Phase 1 schema before upgrading:
-```bash
-alembic stamp 0001
-alembic upgrade head
-```
-
-### Working with migrations
+### Docker
 
 ```bash
-alembic upgrade head                      # apply any pending migrations
-alembic revision -m "add reminders"        # hand-write a new migration in migrations/versions/
-alembic downgrade -1                       # undo the last one
+cp .env.example .env     # set an LLM key and API_KEY (compose refuses to start without API_KEY)
+docker compose up --build        # http://127.0.0.1:8000
 ```
-Migrations are hand-written (not autogenerated) to keep them exact and reviewable — see
-`migrations/versions/0002_goals_projects_commitments_memory.py` for the pattern: one `op.create_table`
-per model, plus a `batch_alter_table` for adding columns to `tasks` (SQLite requires batch mode to
-emulate `ALTER TABLE`).
 
-## Try it (CLI)
+The container runs as a non-root user with a read-only filesystem and no capabilities, and is published on localhost only.
+Put a TLS reverse proxy in front if you want to reach it remotely.
+
+> The Dockerfile and compose file are validated and the runtime stage was exercised in a clean virtualenv, but the image
+> itself has not been built in this repository's own CI yet; the first CI run will tell.
+
+### Try it
 
 ```
 you> I want to get good at web penetration testing
-  [tool] create_goal (write) -> ok
-  [tool] add_milestones (write) -> ok
-agent> Set up "Web penetration testing" with milestones: HTTP fundamentals, Authentication, ...
-       Want me to turn the first one into concrete tasks?
-
-you> yes
-  [tool] milestone_to_tasks (write) -> ok
-agent> Added: "Read HTTP spec basics", "Set up Burp proxy". Both start today.
-
+you> Plan my day, I have 4 hours
 you> I'll finish the GRE quant set by Friday
-  [tool] propose_commitment (write) -> ok
-agent> Got it — finish the GRE quant set by Friday. Confirm that's right?
-you> yes
-  [tool] confirm_commitment (write) -> ok
-
-you> what did I promise this week?
-  [tool] list_commitments (read) -> ok
-
-you> delete the literature review task           <- queued, NOT executed
-  (waiting for your approval: /confirm 1 or /reject 1)
-you> /confirm 1                                  <- only you can approve it
-you> /audit
+you> Move the GRE task to Monday, it's too big          (it should ask why, and the reason is recorded)
+you> What have I been avoiding?
+you> delete the literature review task                   (queued: approve with /confirm 1 or in the dashboard)
+you> Remind me tomorrow at 9 to email my supervisor
 ```
 
-## API
+More in **[docs/DEMO.md](docs/DEMO.md)**.
 
-| Endpoint | Purpose |
+## Configuration
+
+Everything is an environment variable (or a line in `.env`); every option is documented in [`.env.example`](.env.example).
+The ones you'll touch first:
+
+| Setting | Why |
 |---|---|
-| `POST /api/chat` `{message, conversation_id?}` | Talk to the agent |
-| `GET /api/tasks?status=open` | Tasks |
-| `GET /api/goals?status=active` | Goals, each with its milestones |
-| `GET /api/projects?status=active` | Projects |
-| `GET /api/commitments?status=open` | Commitments (`open`, `proposed`, `done`, `dropped`) |
-| `GET /api/memories?kind=all` | Stored memories (`preference`, `context`, `fact`) |
-| `PATCH /api/memories/{id}` `{content?, kind?, importance?}` · `DELETE /api/memories/{id}` | Edit / delete a memory (audited as `user`) |
-| `PATCH /api/commitments/{id}` `{text?, deadline?, importance?, status?}` | Edit a commitment; `status` may be `open`, `dropped`, `done`. Pushing a deadline later counts as a postponement |
-| `GET /api/pending-actions` | Actions awaiting approval |
-| `POST /api/pending-actions/{id}/confirm` · `/reject` | Approve / reject |
-| `GET /api/audit-log` | Everything the agent did |
-| `GET /api/conversations/{id}/messages` | Conversation history |
+| `ANTHROPIC_API_KEY` / `GROQ_API_KEY`, `AGENT_MODEL` | The LLM. Groq models must support tool calling. |
+| `AGENT_TIMEZONE` | "Today", check-in times and quiet hours use it. |
+| `API_KEY` | **Set this before exposing the API anywhere.** |
+| `SCHEDULER_ENABLED=true` | Turns on check-ins, reminders and nudges (run one process only). |
+| `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Deliver messages to, and chat from, your phone. |
+| `NOTES_DIR` | A folder of notes/papers for `notes_search`. |
+| `BRAVE_API_KEY` | Enables `web_search`. |
+| `WEB_ALLOWED_DOMAINS` | Restrict the web fetcher to a short allow-list. |
+| `CALENDAR_ICS_URL`, `GITHUB_USER`/`GITHUB_TOKEN` | Calendar and GitHub (both read-only). |
 
-Edits and deletes made through these REST endpoints are performed by *you*, so they skip the approval
-queue (the queue exists to stop the *model* acting unilaterally) but still go through the same validation
-and are written to the audit log with `actor="user"`. Via chat, deleting a memory still needs `/confirm`.
+## How it works
 
-### Context pack
+```
+Dashboard (React) · CLI · Telegram ──▶ FastAPI ──▶ Agent loop ──▶ ToolExecutor ──▶ tools ──▶ SQLite
+                                                       │             │  validate → permission policy
+                                                  LLM (Anthropic /   │  → taint gate → run → audit
+                                                  Groq, swappable)   └─ queues HIGH_IMPACT for you
+Scheduler ──▶ detectors (SQL) ──▶ notification budget ──▶ LLM only words the message ──▶ Telegram/log
+```
 
-Before every LLM call, `app/agent/context.py` assembles a compact snapshot straight from the database
-(no LLM involved) and appends it to the system prompt: open tasks (soonest first), commitments overdue or
-due within 2 days, items postponed 2+ times, proposed commitments awaiting confirmation, your stored
-preferences, and any other memories whose keywords overlap the current message. It is capped at 3000
-characters and omitted when there is nothing to show.
+- **One agent, native tool calling**, bounded loop (`MAX_AGENT_STEPS`), atomic history (a `tool_use` is never saved without its result).
+- **42 tools** in three permission tiers; see the generated **[docs/TOOLS.md](docs/TOOLS.md)**.
+- **Proactivity = detectors + budget.** SQL decides *whether* something is overdue or neglected; the model only decides *how to say it*, and a deterministic fallback text is sent if the LLM is down.
+- Full design: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
-### Security notes
+## Testing
 
-- **Auth**: unset by default (fine for `127.0.0.1`-only use). Set `API_KEY` in `.env` to require every
-  `/api/*` request (`/health` excepted) to send a matching `X-API-Key` header before exposing the API
-  beyond localhost — e.g. `curl -H "X-API-Key: $API_KEY" http://host:8000/api/tasks`.
-- **Pending-action expiry**: a high-impact action nobody confirmed or rejected within
-  `PENDING_ACTION_TTL_HOURS` (default 24) automatically moves to `expired` — confirming/rejecting it
-  after that returns 409, same as an already-resolved action. Set it to `0` to disable expiry.
-- **History summarization**: once a conversation grows past `HISTORY_MESSAGE_LIMIT`, the messages that
-  age out of the replayed window are folded into a short running summary (`conversations.summary`)
-  instead of being silently dropped, so the agent doesn't lose track of earlier commitments/preferences
-  in very long chats. This costs one extra LLM call only on the turn where something first ages out.
-  Set `SUMMARIZE_DROPPED_HISTORY=false` to go back to plain truncation.
+```bash
+pytest -q                          # everything
+pytest tests/injection -q          # the prompt-injection red-team suite
+ruff check .                       # lint
+python -m evals.run_routing        # how often does the model pick the right tool? (needs an API key)
+```
+
+- Agent logic is tested against a scripted fake LLM, and all HTTP (Telegram, Brave, GitHub, web pages, calendar) against mocked transports, so CI needs no keys and no network.
+- `evals/` holds ~55 routing cases scored per category, with history tracked in `evals/history.jsonl`. [More](evals/README.md).
+- CI (GitHub Actions): lint, tests on Python 3.11 and 3.12, red-team suite, dashboard tests + build, dependency audit, secret scan, Docker build.
+
+## Honest status
+
+- **Tested with mocks, not yet against every live service.** The Telegram, Brave Search and GitHub integrations are verified against mocked
+  HTTP; try them once with your own keys (see [docs/DEMO.md](docs/DEMO.md)) and please open an issue if a real API behaves differently.
+- The dashboard is type-checked and has 15 jsdom tests that render every tab against a mocked API (including empty states, a malformed response and the approval flow), and it was smoke-tested served over HTTP. It has **not** had real-browser (Playwright-style) tests.
+- Single-user by design: one API key, no accounts. Not multi-tenant.
+- See [SECURITY.md](SECURITY.md#known-limitations-read-these) for the security limitations (sticky taint, DNS rebinding, and more).
+
+## Project layout
+
+```
+app/
+  agent/        the turn loop, system prompt, context pack, summariser
+  tools/        one module per domain; every tool = pydantic model + handler + permission
+  security/     permission policy, audit log, untrusted-content fencing and sanitising
+  services/     planner, accountability, analytics, notifications, notes indexer (shared by tools and API)
+  scheduler/    tick loop, detectors, check-ins
+  integrations/ Telegram, calendar (iCal), safe HTTP fetcher, Brave search, GitHub
+  llm/          provider-neutral interface + Anthropic and Groq adapters
+  api/ db/      FastAPI app, SQLAlchemy models, Alembic session
+frontend/       React + Vite + TypeScript dashboard
+migrations/     hand-written Alembic migrations
+tests/          unit/API tests + tests/injection (red team)
+evals/          tool-routing eval
+```
 
 ## Adding a tool
 
 1. Define a pydantic input model and a handler `def my_tool(ctx, params) -> dict` in `app/tools/`.
-2. Register it with a `Permission` (READ / WRITE / HIGH_IMPACT) in that module's `register()`.
-3. Add a test. The agent, permission checks, confirmation and audit pick it up automatically.
+2. Register it with a `Permission` (`READ` / `WRITE` / `HIGH_IMPACT`). If it returns text from outside, set `returns_untrusted=True`.
+3. Add tests (and, if it touches external data, extend `tests/injection/`). Permissions, confirmation, audit and the OpenAPI/tool schemas pick it up automatically.
 
-## Adding a table / column
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-1. Add or change the model in `app/db/models.py`.
-2. Hand-write a migration in `migrations/versions/` (see `0002_...py` for the pattern) — don't rely
-   on `create_all`, since it silently does nothing for existing databases.
-3. Run `pytest`: `init_db` applies migrations to a fresh in-memory database on every test run, so a
-   missing or wrong migration fails immediately.
+## License
+
+[MIT](LICENSE). Built by [Malaika Adnan](https://github.com/malaikamalik23).

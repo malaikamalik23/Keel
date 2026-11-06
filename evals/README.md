@@ -1,7 +1,7 @@
 # Tool-routing eval
 
 Keel's model decides which tool to call from the tool descriptions and the system prompt. This eval **measures** that
-instead of guessing: `routing_cases.json` holds ~55 realistic user messages and the tool(s) that are acceptable as the
+instead of guessing: `routing_cases.json` holds 57 realistic user messages and the tool(s) that are acceptable as the
 model's first call (or "no tool" for small talk and for questions the agent should ask back, like "plan my day" with
 no time given).
 

@@ -167,7 +167,7 @@ they are tested (the red-team suite, mutation-checked) and the known limitations
 |---|---|
 | `pytest` (345 tests) + `npm test` (15 dashboard tests) | Tools, executor, agent loop, planner, scheduler, API, notes search, SSRF, GitHub/Brave/Telegram clients (all HTTP mocked, LLM scripted) |
 | `tests/injection` | The red-team suite, a compromised model against 7 channels × 7 payloads |
-| `evals/` | Tool-routing eval (~55 cases), scored per category, history tracked; the dataset itself is validated offline |
+| `evals/` | Tool-routing eval (57 cases), scored per category, history tracked; the dataset itself is validated offline |
 | CI | ruff, Python 3.11/3.12, dashboard type-check + build, dependency audit, gitleaks secret scan, Docker build + `/health` |
 
 ## 10. Folder structure

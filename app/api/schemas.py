@@ -225,3 +225,12 @@ class NotificationOut(BaseModel):
     text: str
     status: str
     sent_at: datetime
+
+
+class DocumentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    path: str
+    size: int
+    chunk_count: int
+    indexed_at: datetime

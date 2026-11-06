@@ -8,12 +8,14 @@ from sqlalchemy import select
 from app.container import build_container
 from app.db.models import AuditLog, Conversation, PendingAction, Task
 from app.errors import AppError
+from app.services.documents import NotesUnavailable
 from app.tools.base import ToolContext
 from app.tools.planning import get_plan, plan_dict
 
 HELP = """Commands:
   /tasks            list open tasks
   /plan             show today's plan
+  /index            (re)index your notes folder (NOTES_DIR) for notes_search
   /pending          list actions waiting for your approval
   /confirm <id>     approve a pending action
   /reject <id>      reject a pending action
@@ -58,6 +60,8 @@ def main() -> int:
                         print(f"  {out['planned_minutes']} of {out['usable_minutes']} usable minutes planned")
                         for i in out["items"]:
                             print(f"  [{i['status']:7}] #{i['item_id']} {i['title']} ({i['minutes']} min{', major' if i['major'] else ''})")
+                elif line == "/index":
+                    print(f"  {c.index_notes()}")
                 elif line == "/pending":
                     rows = db.scalars(select(PendingAction).where(PendingAction.status == "pending")).all()
                     print("\n".join(f"  #{p.id} {p.summary}" for p in rows) or "  (nothing pending)")
@@ -78,7 +82,7 @@ def main() -> int:
                     print(f"\nagent> {res.reply}")
                     for pid in res.pending_action_ids:
                         print(f"  (waiting for your approval: /confirm {pid} or /reject {pid})")
-            except AppError as exc:
+            except (AppError, NotesUnavailable) as exc:
                 print(f"  error: {exc}")
             except (ValueError, IndexError):
                 print("  usage error, try /help")

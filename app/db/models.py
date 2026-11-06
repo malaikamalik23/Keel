@@ -307,3 +307,32 @@ class Notification(Base):
     dedupe_key: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(8), default="sent")  # sent|failed
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
+class Document(Base):
+    """A file from the user's notes folder that has been indexed for search. `path` is relative to NOTES_DIR."""
+
+    __tablename__ = "documents"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    path: Mapped[str] = mapped_column(String(500), unique=True)
+    sha256: Mapped[str] = mapped_column(String(64))
+    size: Mapped[int] = mapped_column(Integer)
+    mtime: Mapped[float] = mapped_column()
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+    indexed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    chunks: Mapped[list[Chunk]] = relationship(back_populates="document", cascade="all, delete-orphan", order_by="Chunk.position")
+
+
+class Chunk(Base):
+    """A paragraph-sized slice of a document. Its id doubles as the rowid in the `chunk_fts` FTS5 table."""
+
+    __tablename__ = "chunks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), index=True)
+    position: Mapped[int] = mapped_column(Integer)
+    text: Mapped[str] = mapped_column(Text)
+
+    document: Mapped[Document] = relationship(back_populates="chunks")

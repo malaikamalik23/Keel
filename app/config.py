@@ -51,6 +51,16 @@ class Settings(BaseSettings):
     telegram_inbound: bool = True  # also let you chat with the agent through the bot
     calendar_ics_url: str | None = None  # secret iCal address of your calendar (read-only)
 
+    # ---- Phase 5: research tools ----
+    web_fetch_enabled: bool = True
+    web_allowed_domains: str = ""  # comma-separated; if set, web_fetch only reaches these (and subdomains)
+    web_blocked_domains: str = ""
+    brave_api_key: str | None = None  # enables web_search
+    notes_dir: str | None = None  # folder of notes/papers to index for notes_search
+    github_enabled: bool = True
+    github_token: str | None = None  # optional: private repos and higher rate limits (read-only scope is enough)
+    github_user: str | None = None  # default owner for github_list_repos
+
     # Built dashboard (frontend/dist). Served at / when the directory exists; blank/None disables.
     frontend_dist: str | None = "frontend/dist"
 
@@ -58,3 +68,7 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def csv_list(value: str) -> list[str]:
+    return [v.strip().lower() for v in value.split(",") if v.strip()]

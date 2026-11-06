@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -18,6 +19,11 @@ def create_app(settings: Settings | None = None, llm: LLMClient | None = None, n
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
+        if container.settings.notes_dir:
+            try:
+                container.index_notes()
+            except Exception:  # noqa: BLE001 - a bad notes folder must not stop the app from starting
+                logging.getLogger(__name__).exception("Could not index NOTES_DIR at startup")
         if container.settings.scheduler_enabled:
             container.scheduler.start()
         try:

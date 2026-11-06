@@ -12,12 +12,12 @@ from sqlalchemy.orm import Session
 from app.api import schemas
 from app.container import Container
 from app.db.models import (
-    AuditLog, Checkin, Commitment, Conversation, Goal, Memory, Message, Notification, PendingAction, PlanItem, Project,
+    AuditLog, Checkin, Document, Commitment, Conversation, Goal, Memory, Message, Notification, PendingAction, PlanItem, Project,
     Reminder, Task, TaskEvent, WorkSession,
 )
 from app.services import accountability as accountability_svc
 from app.tools.planning import get_plan, plan_dict
-from app.errors import NotFoundError
+from app.errors import ConflictError, NotFoundError
 from app.tools.base import ToolContext
 
 
@@ -274,3 +274,19 @@ def notifications(limit: int = Query(50, ge=1, le=500), db: Session = Depends(ge
 def scheduler_tick(c: Container = Depends(get_container)):
     """Run one scheduler pass now (what the background job does every minute). Handy for testing delivery."""
     return c.scheduler.tick()
+
+
+@router.get("/documents", response_model=list[schemas.DocumentOut])
+def documents(db: Session = Depends(get_db)):
+    return db.scalars(select(Document).order_by(Document.path)).all()
+
+
+@router.post("/documents/index")
+def index_documents(c: Container = Depends(get_container)):
+    """Re-scan NOTES_DIR (incremental). Run after adding or editing notes."""
+    from app.services.documents import NotesUnavailable
+
+    try:
+        return c.index_notes()
+    except NotesUnavailable as exc:
+        raise ConflictError(str(exc)) from None

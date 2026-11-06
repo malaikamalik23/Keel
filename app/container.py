@@ -7,9 +7,12 @@ from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.agent.loop import Agent
-from app.config import Settings, get_settings
+from app.config import Settings, csv_list, get_settings
 from app.db.session import init_db, make_engine, make_session_factory
 from app.integrations.calendar import fetch_ics
+from app.integrations.github import GitHubClient
+from app.integrations.safe_http import SafeFetcher
+from app.integrations.websearch import BraveSearch
 from app.integrations.notifier import Notifier, build_notifier
 from app.llm.base import LLMClient
 from app.llm.factory import build_llm
@@ -33,6 +36,17 @@ class Container:
     notifications: NotificationService
     scheduler: Scheduler
 
+    def index_notes(self) -> dict:
+        """Incrementally (re)index NOTES_DIR. Cheap when nothing changed."""
+        from pathlib import Path
+
+        from app.services.documents import NotesUnavailable, index_directory
+
+        if not self.settings.notes_dir:
+            raise NotesUnavailable("NOTES_DIR is not set.")
+        with self.session_factory() as db:
+            return index_directory(db, Path(self.settings.notes_dir).expanduser()).as_dict()
+
 
 def build_container(
     settings: Settings | None = None, llm: LLMClient | None = None, notifier: Notifier | None = None
@@ -41,7 +55,15 @@ def build_container(
     engine = make_engine(settings.database_url)
     init_db(engine)
     calendar_url = settings.calendar_ics_url
-    registry = build_default_registry(calendar_source=(lambda: fetch_ics(calendar_url)) if calendar_url else None)
+    registry = build_default_registry(
+        calendar_source=(lambda: fetch_ics(calendar_url)) if calendar_url else None,
+        fetcher=SafeFetcher(allowed_domains=csv_list(settings.web_allowed_domains), blocked_domains=csv_list(settings.web_blocked_domains))
+        if settings.web_fetch_enabled else None,
+        search=BraveSearch(settings.brave_api_key) if settings.brave_api_key else None,
+        github=GitHubClient(settings.github_token) if settings.github_enabled else None,
+        github_user=settings.github_user,
+        notes_enabled=bool(settings.notes_dir) and settings.database_url.startswith("sqlite"),
+    )
     executor = ToolExecutor(
         registry,
         PermissionPolicy(confirm_writes=settings.confirm_writes),

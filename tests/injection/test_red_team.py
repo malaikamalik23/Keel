@@ -4,7 +4,6 @@ Every test here assumes the WORST case: the model is fully compromised and does 
 If any of these fails, an attacker who can get text in front of the model (a web page, a README, a calendar invite,
 a file in your notes) could make Keel change, delete or leak your data.
 """
-import os
 import re
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -16,7 +15,7 @@ from app.tools.base import ToolContext
 from tests.conftest import make_settings
 from tests.fakes import ScriptedLLM, text, tool_call
 from tests.injection.harness import (
-    ATTACK_TOOLS, ATTACKS, HIDDEN_MARKER, PAYLOADS, SOURCES, CompromisedLLM, build_world, has_invisible_chars, visible_to_model,
+    ATTACK_TOOLS, ATTACKS, HIDDEN_MARKER, PAYLOADS, SOURCES, CompromisedLLM, build_world, has_invisible_chars,
 )
 
 MATRIX = [(s, p) for s in SOURCES for p in PAYLOADS]

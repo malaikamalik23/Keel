@@ -1,7 +1,7 @@
 """Database models. Schema changes go through Alembic migrations (see migrations/)."""
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy import JSON, Date, DateTime, ForeignKey, Integer, MetaData, String, Text
@@ -10,7 +10,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 def utcnow() -> datetime:
     """Naive UTC timestamp. All DateTime columns store naive UTC."""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 # Explicit constraint names are required for SQLite batch migrations (ALTER TABLE emulation).

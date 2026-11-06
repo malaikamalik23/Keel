@@ -33,16 +33,15 @@ def analytics(db: Session, today: date, tz: ZoneInfo, *, weeks: int = 8, streak_
     for i in range(weeks):
         start = first_week + timedelta(weeks=i)
         end = start + timedelta(days=6)
-        in_week = lambda d: start <= d <= end  # noqa: E731
-        ev = [e for e in events if in_week(to_local_date(e.at, tz))]
-        its = [it for it, d in items if in_week(d)]
+        ev = [e for e in events if start <= to_local_date(e.at, tz) <= end]
+        its = [it for it, d in items if start <= d <= end]
         series.append({
             "week_start": start.isoformat(),
             "created": sum(e.type == "created" for e in ev),
             "completed": sum(e.type == "completed" for e in ev),
             "postponed": sum(e.type == "postponed" for e in ev),
             "planned_items": len(its), "planned_done": sum(i.status == "done" for i in its),
-            "minutes_worked": sum(s.minutes for s in sessions if in_week(to_local_date(s.started_at, tz))),
+            "minutes_worked": sum(s.minutes for s in sessions if start <= to_local_date(s.started_at, tz) <= end),
         })
 
     # ---- streak: consecutive days (ending today, or yesterday if today is still empty) with real progress ----

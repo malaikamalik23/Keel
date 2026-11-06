@@ -13,9 +13,17 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
-    Commitment, Goal, Plan, PlanItem, Project, Task, TaskEvent, WorkSession, utcnow,
+    Commitment,
+    Goal,
+    Plan,
+    PlanItem,
+    Project,
+    Task,
+    TaskEvent,
+    WorkSession,
+    utcnow,
 )
-from app.services.timeutil import to_local_date, window_utc
+from app.services.timeutil import window_utc
 
 OPEN = ("todo", "in_progress")
 

@@ -11,9 +11,9 @@ from app.config import Settings, csv_list, get_settings
 from app.db.session import init_db, make_engine, make_session_factory
 from app.integrations.calendar import fetch_ics
 from app.integrations.github import GitHubClient
+from app.integrations.notifier import Notifier, build_notifier
 from app.integrations.safe_http import SafeFetcher
 from app.integrations.websearch import BraveSearch
-from app.integrations.notifier import Notifier, build_notifier
 from app.llm.base import LLMClient
 from app.llm.factory import build_llm
 from app.scheduler.runner import Scheduler

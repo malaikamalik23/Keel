@@ -19,9 +19,9 @@ from __future__ import annotations
 
 import ipaddress
 import socket
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from html.parser import HTMLParser
-from typing import Callable, Iterable
 from urllib.parse import urljoin, urlsplit
 
 import httpx
@@ -155,7 +155,7 @@ def html_to_text(html: str) -> tuple[str, str]:
     try:
         p.feed(html)
         p.close()
-    except Exception:  # noqa: BLE001 - malformed HTML must never crash a tool
+    except Exception:  # noqa: BLE001, S110 - malformed HTML must never crash a tool; partial text is still useful
         pass
     lines = [" ".join(line.split()) for line in "".join(p.parts).splitlines()]
     out: list[str] = []

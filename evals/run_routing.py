@@ -13,7 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from app.config import get_settings
@@ -56,7 +56,7 @@ def main(argv: list[str] | None = None, llm=None) -> int:
 
     if not args.no_save:
         args.out.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
         payload = {"model": report.model, "score": report.score, "n": len(report.results), "results": [r.__dict__ for r in report.results]}
         (args.out / f"{stamp}.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
         with (HERE / "history.jsonl").open("a", encoding="utf-8") as fh:

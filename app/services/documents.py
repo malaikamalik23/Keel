@@ -14,8 +14,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sqlalchemy import text as sql
 from sqlalchemy import select
+from sqlalchemy import text as sql
 from sqlalchemy.orm import Session
 
 from app.db.models import Chunk, Document, utcnow

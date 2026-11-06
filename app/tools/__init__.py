@@ -1,4 +1,4 @@
-from typing import Callable
+from collections.abc import Callable
 
 from app.tools import calendar, commitments, goals, memory, notes, planning, projects, reminders, system, tasks
 from app.tools import github as github_tools

@@ -11,7 +11,6 @@ import json
 import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import httpx
 

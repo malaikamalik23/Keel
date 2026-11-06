@@ -69,7 +69,7 @@ class GitHubClient:
         rows: Any = self._get(f"/repos/{owner}/{name}/issues", {"state": state, "per_page": min(limit, 50)}).json()
         return [
             {"number": r["number"], "title": r["title"][:200], "state": r["state"], "is_pull_request": "pull_request" in r,
-             "author": (r.get("user") or {}).get("login"), "labels": [l["name"] for l in r.get("labels", [])][:5],
+             "author": (r.get("user") or {}).get("login"), "labels": [lab["name"] for lab in r.get("labels", [])][:5],
              "updated_at": r.get("updated_at")}
             for r in rows
         ]

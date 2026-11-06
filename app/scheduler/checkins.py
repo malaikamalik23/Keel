@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import Settings
-from app.db.models import Checkin, Commitment, Plan, Task, WorkSession
+from app.db.models import Checkin, Commitment, Task, WorkSession
 from app.services import accountability
 from app.services.notifications import parse_hhmm
 from app.services.timeutil import window_utc

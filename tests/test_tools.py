@@ -1,4 +1,3 @@
-from datetime import date
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -8,7 +7,6 @@ from sqlalchemy import select
 from app.db.models import AuditLog, PendingAction, Task
 from app.errors import ConflictError
 from app.tools.base import Permission, Tool, ToolContext
-from app.tools.executor import ToolExecutor
 
 
 @pytest.fixture

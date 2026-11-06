@@ -5,8 +5,8 @@ Each detector returns Nudges with a stable `dedupe_key`, so the same problem is 
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from dataclasses import dataclass
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select

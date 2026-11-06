@@ -6,7 +6,7 @@ without a reply. Approving high-impact actions is deliberately NOT possible from
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from collections.abc import Callable
 
 from app.integrations.notifier import NotificationError, TelegramNotifier
 

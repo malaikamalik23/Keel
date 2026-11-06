@@ -7,9 +7,9 @@ The `notifications` table is the source of truth for all of it, so the limits su
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
-from typing import Callable
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select

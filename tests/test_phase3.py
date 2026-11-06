@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.main import create_app
-from app.db.models import Goal, Task, TaskEvent, WorkSession, utcnow
+from app.db.models import Goal, Task, TaskEvent, utcnow
 from app.services import accountability
 from app.services.planner import MAX_MAJOR, build_plan, priority_score, rank_tasks, usable_capacity
 from app.tools.base import ToolContext

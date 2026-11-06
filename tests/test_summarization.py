@@ -1,5 +1,5 @@
 from app.agent.summarize import render_messages_for_summary, summarize_messages
-from app.db.models import Conversation, Message
+from app.db.models import Conversation
 from tests.fakes import ScriptedLLM, text
 
 

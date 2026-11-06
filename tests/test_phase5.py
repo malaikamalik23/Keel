@@ -1,6 +1,5 @@
 import json
 import os
-from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -9,7 +8,6 @@ from fastapi.testclient import TestClient
 
 from app.agent.loop import Agent
 from app.api.main import create_app
-from app.container import build_container
 from app.integrations.github import GitHubClient, GitHubError, validate_repo
 from app.integrations.safe_http import FetchError, SafeFetcher, UnsafeURLError, html_to_text, is_public_ip, validate_url
 from app.integrations.websearch import BraveSearch, SearchError

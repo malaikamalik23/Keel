@@ -4,7 +4,7 @@ import pytest
 
 from evals.common import full_registry, judge, load_cases, run_eval
 from evals.run_routing import main
-from tests.fakes import ScriptedLLM, text, tool_call
+from tests.fakes import text, tool_call
 
 
 class RoutingStub:

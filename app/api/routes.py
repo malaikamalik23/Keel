@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import hmac
+from collections.abc import Iterator
 from datetime import date, datetime
-from typing import Iterator, Literal
+from typing import Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
@@ -12,14 +13,28 @@ from sqlalchemy.orm import Session
 from app.api import schemas
 from app.container import Container
 from app.db.models import (
-    AuditLog, Checkin, Document, Commitment, Conversation, Goal, Memory, Message, Notification, PendingAction, PlanItem, Project,
-    Reminder, Task, TaskEvent, WorkSession,
+    AuditLog,
+    Checkin,
+    Commitment,
+    Conversation,
+    Document,
+    Goal,
+    Memory,
+    Message,
+    Notification,
+    PendingAction,
+    PlanItem,
+    Project,
+    Reminder,
+    Task,
+    TaskEvent,
+    WorkSession,
 )
+from app.errors import ConflictError, NotFoundError
 from app.services import accountability as accountability_svc
 from app.services import analytics as analytics_svc
-from app.tools.planning import get_plan, plan_dict
-from app.errors import ConflictError, NotFoundError
 from app.tools.base import ToolContext
+from app.tools.planning import get_plan, plan_dict
 
 
 def get_container(request: Request) -> Container:

@@ -2,7 +2,6 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from app.config import Settings
 from app.errors import LLMError
 from app.llm.factory import build_llm
 from app.llm.groq_client import GroqClient, _messages_to_groq, _response_from_groq, _tools_to_groq

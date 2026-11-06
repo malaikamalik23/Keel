@@ -5,12 +5,13 @@ import Approvals from "./views/Approvals";
 import Chat from "./views/Chat";
 import Commitments from "./views/Commitments";
 import Goals from "./views/Goals";
+import Insights from "./views/Insights";
 import MemoryView from "./views/MemoryView";
 import Projects from "./views/Projects";
 import Today from "./views/Today";
 import type { PendingAction } from "./types";
 
-const TABS = ["Today", "Goals", "Projects", "Commitments", "Memory", "Chat", "Activity", "Approvals"] as const;
+const TABS = ["Today", "Goals", "Projects", "Commitments", "Memory", "Chat", "Insights", "Activity", "Approvals"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function App() {
@@ -57,6 +58,7 @@ export default function App() {
         {tab === "Commitments" && <Commitments />}
         {tab === "Memory" && <MemoryView />}
         {tab === "Chat" && <Chat onChange={changed} />}
+        {tab === "Insights" && <Insights />}
         {tab === "Activity" && <Activity />}
         {tab === "Approvals" && <Approvals onChange={changed} />}
       </main>

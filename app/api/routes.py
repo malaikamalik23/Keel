@@ -16,6 +16,7 @@ from app.db.models import (
     Reminder, Task, TaskEvent, WorkSession,
 )
 from app.services import accountability as accountability_svc
+from app.services import analytics as analytics_svc
 from app.tools.planning import get_plan, plan_dict
 from app.errors import ConflictError, NotFoundError
 from app.tools.base import ToolContext
@@ -304,3 +305,9 @@ def index_documents(c: Container = Depends(get_container)):
         return c.index_notes()
     except NotesUnavailable as exc:
         raise ConflictError(str(exc)) from None
+
+
+@router.get("/analytics")
+def analytics(weeks: int = Query(8, ge=2, le=26), db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    tz = ZoneInfo(c.settings.agent_timezone)
+    return analytics_svc.analytics(db, datetime.now(tz).date(), tz, weeks=weeks)

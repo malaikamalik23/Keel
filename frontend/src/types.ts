@@ -23,3 +23,12 @@ export interface Accountability {
 export interface Reminder { id: number; text: string; fire_at: string; status: string; linked_type: string | null; linked_id: number | null; sent_at: string | null; }
 export interface Checkin { id: number; kind: string; checkin_date: string; summary: string; user_response: string | null; created_at: string; }
 export interface NotificationRow { id: number; kind: string; priority: string; channel: string; text: string; status: string; sent_at: string; }
+export interface WeekStat { week_start: string; created: number; completed: number; postponed: number; planned_items: number; planned_done: number; minutes_worked: number; }
+export interface Analytics {
+  weeks: WeekStat[];
+  streak: { current_days: number; longest_days: number; window_days: number };
+  commitments: { done: number; dropped: number; overdue: number; kept_rate: number | null };
+  estimates: { tasks_measured: number; median_actual_vs_estimate: number | null };
+  postponement: { total: number; avg_before_completion: number | null; top_reasons: { reason: string; count: number }[] };
+  completions_by_weekday: Record<string, number>;
+}

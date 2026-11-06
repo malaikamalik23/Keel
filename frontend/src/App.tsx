@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, api, getApiKey, setApiKey } from "./api";
 import Activity from "./views/Activity";
 import Approvals from "./views/Approvals";
+import ErrorBoundary from "./ErrorBoundary";
 import Chat from "./views/Chat";
 import Commitments from "./views/Commitments";
 import Goals from "./views/Goals";
@@ -51,16 +52,19 @@ export default function App() {
           </button>
         ))}
       </nav>
-      <main key={`${tab}-${version}`}>
+      {/* Chat stays mounted (just hidden) so the conversation survives tab switches and data refreshes. */}
+      <main hidden={tab !== "Chat"} className="chat-pane"><Chat onChange={changed} /></main>
+      <main hidden={tab === "Chat"} key={`${tab}-${version}`}>
+        <ErrorBoundary>
         {tab === "Today" && <Today />}
         {tab === "Goals" && <Goals />}
         {tab === "Projects" && <Projects />}
         {tab === "Commitments" && <Commitments />}
         {tab === "Memory" && <MemoryView />}
-        {tab === "Chat" && <Chat onChange={changed} />}
         {tab === "Insights" && <Insights />}
         {tab === "Activity" && <Activity />}
         {tab === "Approvals" && <Approvals onChange={changed} />}
+        </ErrorBoundary>
       </main>
     </div>
   );

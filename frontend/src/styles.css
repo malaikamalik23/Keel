@@ -31,6 +31,7 @@ textarea { width: 100%; }
 .muted { color: var(--muted); } .small { font-size: 13px; } .error { color: var(--bad); }
 .toolbar { margin-bottom: 12px; } progress { width: 100%; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; } th, td { text-align: left; padding: 5px 6px; border-top: 1px solid var(--border); }
+main[hidden] { display: none; }
 .chat { display: flex; flex-direction: column; height: calc(100vh - 140px); min-height: 360px; }
 .messages { flex: 1; overflow-y: auto; padding-bottom: 12px; }
 .msg { margin: 10px 0; display: flex; flex-direction: column; gap: 4px; } .msg.user { align-items: flex-end; }

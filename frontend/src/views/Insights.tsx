@@ -7,7 +7,7 @@ function Bars({ values, labels, unit = "" }: { values: number[]; labels: string[
   return (
     <div className="bars" role="img" aria-label={labels.map((l, i) => `${l}: ${values[i]}${unit}`).join(", ")}>
       {values.map((v, i) => (
-        <div key={labels[i]} className="bar-col" title={`${labels[i]}: ${v}${unit}`}>
+        <div key={`${i}-${labels[i]}`} className="bar-col" title={`${labels[i]}: ${v}${unit}`}>
           <span className="bar-value">{v || ""}</span>
           <div className="bar" style={{ height: `${(v / max) * 100}%` }} />
           <span className="bar-label">{labels[i]}</span>

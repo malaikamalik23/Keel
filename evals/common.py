@@ -1,0 +1,88 @@
+"""Shared pieces for the tool-routing eval: dataset loading, a registry with every tool, scoring."""
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+from app.agent.prompts import build_system_prompt
+from app.integrations.github import GitHubClient
+from app.integrations.safe_http import SafeFetcher
+from app.integrations.websearch import BraveSearch
+from app.llm.base import LLMClient
+from app.tools import build_default_registry
+
+CASES_PATH = Path(__file__).parent / "routing_cases.json"
+FIXED_NOW = datetime(2026, 11, 9, 9, 30, tzinfo=ZoneInfo("Asia/Karachi"))  # a Monday; keeps prompts reproducible
+
+
+def load_cases(path: Path = CASES_PATH) -> list[dict]:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def full_registry():
+    """A registry with every optional integration switched on. Only the specs matter: nothing is ever executed."""
+    return build_default_registry(
+        calendar_source=lambda: "", fetcher=SafeFetcher(), search=BraveSearch("unused"), github=GitHubClient(),
+        github_user="me", notes_enabled=True,
+    )
+
+
+@dataclass
+class CaseResult:
+    id: str
+    category: str
+    prompt: str
+    expected: list[str]
+    allow_none: bool
+    got: str | None  # first tool the model called, or None if it answered in text
+    passed: bool
+    error: str | None = None
+
+
+@dataclass
+class EvalReport:
+    model: str
+    results: list[CaseResult] = field(default_factory=list)
+
+    @property
+    def score(self) -> float:
+        return sum(r.passed for r in self.results) / len(self.results) if self.results else 0.0
+
+    def by_category(self) -> dict[str, tuple[int, int]]:
+        out: dict[str, list[int]] = {}
+        for r in self.results:
+            d = out.setdefault(r.category, [0, 0])
+            d[0] += r.passed
+            d[1] += 1
+        return {k: (v[0], v[1]) for k, v in out.items()}
+
+    def failures(self) -> list[CaseResult]:
+        return [r for r in self.results if not r.passed]
+
+
+def judge(case: dict, got: str | None) -> bool:
+    expect, allow_none = case.get("expect", []), case.get("allow_none", False)
+    return (got in expect) if got is not None else allow_none
+
+
+def run_eval(llm: LLMClient, cases: list[dict], model: str = "?", on_result=None) -> EvalReport:
+    system = build_system_prompt(FIXED_NOW)
+    tools = full_registry().specs()
+    report = EvalReport(model=model)
+    for case in cases:
+        got, error = None, None
+        try:
+            resp = llm.complete(system=system, messages=[{"role": "user", "content": [{"type": "text", "text": case["prompt"]}]}], tools=tools)
+            uses = resp.tool_uses if resp.stop_reason == "tool_use" else []
+            got = uses[0]["name"] if uses else None
+        except Exception as exc:  # noqa: BLE001 - a provider hiccup is a failed case, not a crashed run
+            error = f"{type(exc).__name__}: {exc}"[:200]
+        passed = error is None and judge(case, got)
+        res = CaseResult(case["id"], case["category"], case["prompt"], case.get("expect", []), case.get("allow_none", False), got, passed, error)
+        report.results.append(res)
+        if on_result:
+            on_result(res)
+    return report

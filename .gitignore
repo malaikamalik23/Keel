@@ -14,3 +14,6 @@ frontend/dist/
 .idea/
 .vscode/
 *.db
+
+# eval outputs (history.jsonl is tracked on purpose)
+evals/results/*.json

@@ -1,0 +1,72 @@
+[
+ {"id":"task-create-1","category":"tasks","prompt":"Add a task: write the FYP introduction, about 90 minutes","expect":["create_task"]},
+ {"id":"task-create-2","category":"tasks","prompt":"Create a task to submit the poster by Nov 20","expect":["create_task","get_current_datetime"]},
+ {"id":"task-list-1","category":"tasks","prompt":"What's on my to-do list?","expect":["list_tasks"]},
+ {"id":"task-list-2","category":"tasks","prompt":"What should I work on right now?","expect":["list_tasks","get_daily_plan","get_current_datetime"]},
+ {"id":"task-list-3","category":"tasks","prompt":"Which tasks are overdue?","expect":["list_tasks","get_current_datetime"]},
+ {"id":"task-complete","category":"tasks","prompt":"I finished the literature review task","expect":["complete_task","list_tasks"]},
+ {"id":"task-delete","category":"tasks","prompt":"Delete the old GRE practice task","expect":["delete_task","list_tasks"]},
+ {"id":"task-postpone","category":"tasks","prompt":"Move the dataset cleaning task to next Friday, I'm too sick this week","expect":["update_task","list_tasks","get_current_datetime"]},
+ {"id":"task-priority","category":"tasks","prompt":"Mark the report task as high priority","expect":["update_task","list_tasks"]},
+
+ {"id":"goal-create","category":"goals","prompt":"I want to get good at web penetration testing","expect":["create_goal"]},
+ {"id":"goal-milestones","category":"goals","prompt":"Break my pentesting goal into milestones","expect":["add_milestones","list_goals"]},
+ {"id":"goal-list","category":"goals","prompt":"What goals do I have?","expect":["list_goals"]},
+ {"id":"goal-tasks","category":"goals","prompt":"Turn the first milestone of my GRE goal into concrete tasks","expect":["milestone_to_tasks","list_goals"]},
+ {"id":"goal-pause","category":"goals","prompt":"Mark my pentesting goal as paused","expect":["update_goal","list_goals"]},
+
+ {"id":"project-create","category":"projects","prompt":"Start a project for my FYP: the purpose is to graduate with a strong IDS thesis","expect":["create_project"]},
+ {"id":"project-list","category":"projects","prompt":"Show my active projects","expect":["list_projects"]},
+ {"id":"project-update","category":"projects","prompt":"Update my FYP project deadline to March 1st","expect":["update_project","list_projects"]},
+
+ {"id":"commit-propose","category":"commitments","prompt":"I'll finish the GRE quant set by Friday","expect":["propose_commitment","get_current_datetime"]},
+ {"id":"commit-list","category":"commitments","prompt":"What did I promise this week?","expect":["list_commitments"]},
+ {"id":"commit-confirm","category":"commitments","prompt":"Yes, that commitment is right","expect":["confirm_commitment","list_commitments"]},
+ {"id":"commit-complete","category":"commitments","prompt":"I did finish the poster I promised","expect":["complete_commitment","list_commitments"]},
+ {"id":"commit-move","category":"commitments","prompt":"Move my poster deadline to Monday","expect":["update_commitment","list_commitments","get_current_datetime"]},
+
+ {"id":"mem-save","category":"memory","prompt":"Remember that I focus best in the morning","expect":["save_memory"]},
+ {"id":"mem-search","category":"memory","prompt":"What do you know about how I like to study?","expect":["search_memories"]},
+ {"id":"mem-delete","category":"memory","prompt":"Forget the note about studying in the evening","expect":["delete_memory","search_memories"]},
+ {"id":"mem-update","category":"memory","prompt":"Actually I prefer afternoons now, not mornings","expect":["update_memory","search_memories","save_memory"]},
+
+ {"id":"plan-create","category":"planning","prompt":"Plan my day, I have 4 hours","expect":["create_daily_plan"]},
+ {"id":"plan-ask-time","category":"planning","prompt":"Plan my day","expect":[],"allow_none":true,"note":"capacity is unknown: the agent should ask once, not guess"},
+ {"id":"plan-get","category":"planning","prompt":"What's my plan for today?","expect":["get_daily_plan"]},
+ {"id":"plan-skip","category":"planning","prompt":"Skip the second item in today's plan, I'm not in the mood","expect":["update_plan_item","get_daily_plan"]},
+ {"id":"work-log","category":"planning","prompt":"I worked 45 minutes on the FYP intro","expect":["log_work_session","list_tasks"]},
+ {"id":"work-list","category":"planning","prompt":"How much time have I worked this week?","expect":["list_work_sessions","accountability_report"]},
+
+ {"id":"acct-avoid","category":"accountability","prompt":"What have I been avoiding lately?","expect":["accountability_report"]},
+ {"id":"acct-slip","category":"accountability","prompt":"Why does the GRE task keep slipping?","expect":["task_history","accountability_report","list_tasks"]},
+ {"id":"acct-week","category":"accountability","prompt":"Give me a review of my week","expect":["accountability_report"]},
+ {"id":"acct-procrastinate","category":"accountability","prompt":"I keep postponing the GRE quant set. What should I do?","expect":["task_history","accountability_report","list_tasks"]},
+
+ {"id":"remind-create","category":"reminders","prompt":"Remind me tomorrow at 9am to email Dr. Khan","expect":["create_reminder","get_current_datetime"]},
+ {"id":"remind-list","category":"reminders","prompt":"What reminders do I have?","expect":["list_reminders"]},
+ {"id":"remind-cancel","category":"reminders","prompt":"Cancel the reminder about the fees","expect":["cancel_reminder","list_reminders"]},
+
+ {"id":"cal-tomorrow","category":"calendar","prompt":"What's on my calendar tomorrow?","expect":["read_calendar","get_current_datetime"]},
+ {"id":"cal-free","category":"calendar","prompt":"How much free time do I have today?","expect":["read_calendar","get_current_datetime"]},
+
+ {"id":"time-today","category":"datetime","prompt":"What day is it today?","expect":["get_current_datetime"],"allow_none":true,"note":"the current date is already in the system prompt"},
+
+ {"id":"web-search-1","category":"web","prompt":"Search for recent papers on explainable intrusion detection","expect":["web_search"]},
+ {"id":"web-search-2","category":"web","prompt":"What are the latest techniques for Roman Urdu phishing detection?","expect":["web_search","notes_search"]},
+ {"id":"web-fetch","category":"web","prompt":"Summarise https://arxiv.org/abs/2401.00001 for me","expect":["web_fetch"]},
+
+ {"id":"gh-commits","category":"github","prompt":"What did I last commit on malaikamalik23/Keel?","expect":["github_recent_commits"]},
+ {"id":"gh-issues","category":"github","prompt":"Show the open issues on malaikamalik23/Keel","expect":["github_list_issues"]},
+ {"id":"gh-repos","category":"github","prompt":"List my GitHub repositories","expect":["github_list_repos"]},
+ {"id":"gh-readme","category":"github","prompt":"Read the README of someone/project","expect":["github_get_readme"]},
+
+ {"id":"notes-search-1","category":"notes","prompt":"What did I write about phishing detection in my notes?","expect":["notes_search"]},
+ {"id":"notes-search-2","category":"notes","prompt":"Find my notes on federated learning","expect":["notes_search"]},
+ {"id":"notes-read","category":"notes","prompt":"Open my note ideas.md","expect":["read_note","notes_search"]},
+
+ {"id":"chat-hi","category":"no_tool","prompt":"Hi!","expect":[],"allow_none":true},
+ {"id":"chat-thanks","category":"no_tool","prompt":"Thanks, that's helpful","expect":[],"allow_none":true},
+ {"id":"chat-knowledge","category":"no_tool","prompt":"Explain what a honeypot is in two sentences","expect":[],"allow_none":true,"note":"general knowledge: no need to search"},
+ {"id":"chat-creative","category":"no_tool","prompt":"Write me a haiku about deadlines","expect":[],"allow_none":true},
+ {"id":"chat-overwhelmed","category":"no_tool","prompt":"I'm feeling overwhelmed with everything today","expect":["list_tasks","accountability_report","get_daily_plan"],"allow_none":true,"note":"empathy first; looking at the real workload is also fine"}
+]

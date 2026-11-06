@@ -6,7 +6,7 @@ model's first call (or "no tool" for small talk and for questions the agent shou
 no time given).
 
 ```bash
-python -m evals.run_routing                  # needs ANTHROPIC_API_KEY or GROQ_API_KEY; ~55 API calls
+python -m evals.run_routing                  # needs ANTHROPIC_API_KEY or GROQ_API_KEY; 57 API calls
 python -m evals.run_routing --category web   # one category
 python -m evals.run_routing --min-score 0.85 # non-zero exit if below (use in a scheduled job)
 ```

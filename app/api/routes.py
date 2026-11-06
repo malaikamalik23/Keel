@@ -39,12 +39,26 @@ def require_api_key(
 router = APIRouter(prefix="/api", dependencies=[Depends(require_api_key)])
 
 
+def rate_limit(request: Request, x_api_key: str | None = Header(default=None, alias="X-API-Key")) -> None:
+    """Dependency for endpoints that spend LLM tokens. Keyed by client address (+ API key, if any)."""
+    limiter = getattr(request.app.state, "limiter", None)
+    if limiter is None:
+        return
+    client = request.client.host if request.client else "unknown"
+    wait = limiter.check(f"{client}|{x_api_key or ''}")
+    if wait is not None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many requests; slow down.",
+            headers={"Retry-After": str(int(wait) + 1)},
+        )
+
+
 def get_db(container: Container = Depends(get_container)) -> Iterator[Session]:
     with container.session_factory() as db:
         yield db
 
 
-@router.post("/chat", response_model=schemas.ChatResponse)
+@router.post("/chat", response_model=schemas.ChatResponse, dependencies=[Depends(rate_limit)])
 def chat(req: schemas.ChatRequest, db: Session = Depends(get_db), c: Container = Depends(get_container)):
     result = c.agent.chat(db, req.message, req.conversation_id)
     return schemas.ChatResponse(
@@ -270,7 +284,7 @@ def notifications(limit: int = Query(50, ge=1, le=500), db: Session = Depends(ge
     return db.scalars(select(Notification).order_by(Notification.id.desc()).limit(limit)).all()
 
 
-@router.post("/scheduler/tick")
+@router.post("/scheduler/tick", dependencies=[Depends(rate_limit)])
 def scheduler_tick(c: Container = Depends(get_container)):
     """Run one scheduler pass now (what the background job does every minute). Handy for testing delivery."""
     return c.scheduler.tick()

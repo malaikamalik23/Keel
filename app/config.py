@@ -61,6 +61,8 @@ class Settings(BaseSettings):
     github_token: str | None = None  # optional: private repos and higher rate limits (read-only scope is enough)
     github_user: str | None = None  # default owner for github_list_repos
 
+    rate_limit_per_minute: int = 30  # per client, for endpoints that call the LLM (/api/chat, /api/scheduler/tick). 0 = off
+
     # Built dashboard (frontend/dist). Served at / when the directory exists; blank/None disables.
     frontend_dist: str | None = "frontend/dist"
 

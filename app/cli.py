@@ -31,7 +31,7 @@ def main() -> int:
         last = db.scalars(select(Conversation).order_by(Conversation.id.desc())).first()
         conversation_id = last.id if last else None
         ctx = ToolContext(db=db, tz=c.agent.tz)
-        print(f"Personal agent (model: {c.settings.agent_model}). Type /help for commands.")
+        print(f"Keel (model: {c.settings.agent_model}). Type /help for commands.")
 
         while True:
             try:

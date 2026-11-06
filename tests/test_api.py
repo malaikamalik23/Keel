@@ -138,3 +138,32 @@ def test_no_dashboard_mounted_when_dist_missing(tmp_path):
     from app.api.main import create_app
     client = TestClient(create_app(make_settings(frontend_dist=str(tmp_path / "nope")), ScriptedLLM([])))
     assert client.get("/").status_code == 404
+
+
+def test_rate_limit_applies_to_chat_only_and_resets():
+    from app.api.ratelimit import RateLimiter
+    client = client_with([text("ok")] * 10)
+    client.app.state.limiter = RateLimiter(3)
+    codes = [client.post("/api/chat", json={"message": "hi"}).status_code for _ in range(5)]
+    assert codes == [200, 200, 200, 429, 429]
+    r = client.post("/api/chat", json={"message": "hi"})
+    assert r.status_code == 429 and int(r.headers["retry-after"]) >= 1
+    assert client.get("/api/tasks").status_code == 200  # reads are not limited
+
+
+def test_rate_limiter_window_and_disable():
+    from app.api.ratelimit import RateLimiter
+    t = [0.0]
+    rl = RateLimiter(2, clock=lambda: t[0])
+    assert rl.check("a") is None and rl.check("a") is None and rl.check("a") is not None
+    assert rl.check("b") is None  # separate clients
+    t[0] = 61
+    assert rl.check("a") is None
+    assert RateLimiter(0).check("x") is None
+
+
+def test_security_headers_present():
+    r = client_with([]).get("/health")
+    assert r.headers["x-content-type-options"] == "nosniff" and r.headers["x-frame-options"] == "DENY"
+    assert "default-src 'self'" in r.headers["content-security-policy"] and "frame-ancestors 'none'" in r.headers["content-security-policy"]
+    assert client_with([]).get("/api/tasks").headers["cache-control"] == "no-store"

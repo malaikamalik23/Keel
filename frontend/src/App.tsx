@@ -43,7 +43,7 @@ export default function App() {
   return (
     <div className="app">
       <nav>
-        <strong>Personal Agent</strong>
+        <strong>Keel</strong>
         {TABS.map((t) => (
           <button key={t} className={t === tab ? "active" : ""} onClick={() => setTab(t)}>
             {t}{t === "Approvals" && pending > 0 && <span className="pill">{pending}</span>}

@@ -177,9 +177,18 @@ class DeleteTaskInput(BaseModel):
 def delete_task(ctx: ToolContext, p: DeleteTaskInput) -> dict:
     task = _get_task(ctx, p.task_id)
     title = task.title
+    # A deleted task must not linger in today's plan as a ghost entry (it would count against plan adherence and show
+    # up in the evening review). Items already done/skipped stay: they are history of what actually happened.
+    removed = 0
+    for item in ctx.db.scalars(select(PlanItem).where(PlanItem.task_id == task.id, PlanItem.status == "planned")):
+        ctx.db.delete(item)
+        removed += 1
     ctx.db.delete(task)
     ctx.db.flush()
-    return {"deleted_task_id": p.task_id, "title": title}
+    out = {"deleted_task_id": p.task_id, "title": title}
+    if removed:
+        out["removed_from_plan"] = removed
+    return out
 
 
 def _summarize_delete(ctx: ToolContext, p: DeleteTaskInput) -> str:

@@ -247,3 +247,23 @@ def test_dashboard_actions_complete_task_and_check_off_plan_items():
     assert client.patch(f"/api/plan-items/{items[1]['item_id']}", json={"status": "bogus"}).status_code == 422
     assert client.post("/api/tasks/99/complete").status_code == 404
     assert [e["type"] for e in client.get("/api/tasks/2/events").json()] == ["created", "skipped"]
+
+
+def test_deleting_a_task_removes_its_planned_item_but_keeps_history(env):
+    c, ctx, db = env
+    a = run(env, "create_task", title="Doomed", estimated_minutes=30)["task"]["id"]
+    b = run(env, "create_task", title="Survivor", estimated_minutes=30)["task"]["id"]
+    d = run(env, "create_task", title="Done earlier", estimated_minutes=30)["task"]["id"]
+    run(env, "create_daily_plan", capacity_minutes=240)
+    run(env, "complete_task", task_id=d)  # its plan item becomes 'done' (real history)
+    pending = c.executor.run(ctx, "delete_task", {"task_id": a}).pending_action_id
+    out = c.executor.confirm(ctx, pending)
+    assert out.status == "ok" and out.result["removed_from_plan"] == 1
+    db.expire_all()
+    plan = run(env, "get_daily_plan")
+    assert {i["title"]: i["status"] for i in plan["items"]} == {"Survivor": "planned", "Done earlier": "done"}
+    assert b and plan["planned_minutes"] == 60
+    # deleting a task that was never planned doesn't mention the plan
+    e = run(env, "create_task", title="Unplanned")["task"]["id"]
+    pending = c.executor.run(ctx, "delete_task", {"task_id": e}).pending_action_id
+    assert "removed_from_plan" not in c.executor.confirm(ctx, pending).result

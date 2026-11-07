@@ -21,3 +21,9 @@ def test_env_example_documents_every_setting():
 def test_required_project_files_exist():
     for name in ("README.md", "SECURITY.md", "CONTRIBUTING.md", "Dockerfile", "docker-compose.yml", ".github/workflows/ci.yml", "docs/ARCHITECTURE.md", "docs/DEMO.md"):
         assert (ROOT / name).is_file(), name
+
+
+def test_dashboard_declares_a_favicon_so_browsers_do_not_log_a_404():
+    html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    assert 'rel="icon"' in html and "/favicon.svg" in html
+    assert (ROOT / "frontend" / "public" / "favicon.svg").is_file()

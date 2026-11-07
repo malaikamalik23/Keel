@@ -35,7 +35,7 @@ export default function App() {
         <h1>API key required</h1>
         <p className="muted">This server has API_KEY set. Enter it to continue (kept for this browser tab only).</p>
         <form onSubmit={(e) => { e.preventDefault(); setApiKey(keyInput); setNeedsKey(false); void refreshPending(); }}>
-          <input type="password" value={keyInput} onChange={(e) => setKeyInput(e.target.value)} aria-label="API key" />
+          <input type="password" name="api_key" autoComplete="off" value={keyInput} onChange={(e) => setKeyInput(e.target.value)} aria-label="API key" />
           <button type="submit">Continue</button>
         </form>
       </main>
@@ -53,7 +53,7 @@ export default function App() {
         ))}
       </nav>
       {/* Chat stays mounted (just hidden) so the conversation survives tab switches and data refreshes. */}
-      <main hidden={tab !== "Chat"} className="chat-pane"><Chat onChange={changed} /></main>
+      <main hidden={tab !== "Chat"} className="chat-pane"><ErrorBoundary><Chat onChange={changed} /></ErrorBoundary></main>
       <main hidden={tab === "Chat"} key={`${tab}-${version}`}>
         <ErrorBoundary>
         {tab === "Today" && <Today />}

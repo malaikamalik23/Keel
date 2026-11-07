@@ -33,7 +33,7 @@ function mockFetch(overrides: Record<string, unknown> = {}, status = 200) {
 }
 
 let errors: unknown[][];
-beforeEach(() => { Element.prototype.scrollIntoView = vi.fn(); errors = []; vi.spyOn(console, "error").mockImplementation((...a) => { errors.push(a); }); sessionStorage.clear(); });
+beforeEach(() => { Element.prototype.scrollIntoView = vi.fn(() => Promise.resolve()) as unknown as typeof Element.prototype.scrollIntoView; /* current Chrome returns a Promise */ errors = []; vi.spyOn(console, "error").mockImplementation((...a) => { errors.push(a); }); sessionStorage.clear(); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("dashboard smoke tests", () => {

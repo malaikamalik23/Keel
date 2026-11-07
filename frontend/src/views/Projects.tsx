@@ -9,7 +9,7 @@ export default function Projects() {
   return (
     <div>
       <div className="toolbar">
-        <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Project status">
+        <select name="status" value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Project status">
           {["active", "paused", "completed", "archived", "all"].map((s) => <option key={s}>{s}</option>)}
         </select>
       </div>

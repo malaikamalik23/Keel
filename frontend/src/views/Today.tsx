@@ -30,7 +30,8 @@ export default function Today() {
       <Card title="Today's plan" right={p?.exists ? <Badge>{p.planned_minutes} / {p.usable_minutes} min</Badge> : undefined}>
         <Loading loading={plan.loading} error={plan.error} />
         {p && !p.exists && <Empty>No plan yet. Ask the agent in Chat: “Plan my day, I have 4 hours.”</Empty>}
-        {p?.exists && (
+        {p?.exists && p.items.length === 0 && <Empty>Nothing is planned for today (the plan's tasks were removed). Ask in Chat to plan again.</Empty>}
+        {p?.exists && p.items.length > 0 && (
           <ul className="list">
             {p.items.map((i) => (
               <li key={i.item_id} className={i.status !== "planned" ? "done" : ""}>

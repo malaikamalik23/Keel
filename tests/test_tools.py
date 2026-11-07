@@ -160,3 +160,47 @@ def test_tool_specs_are_valid_and_clean(make_container):
     assert create["input_schema"]["type"] == "object"
     assert "title" in create["input_schema"]["properties"]  # a property called 'title' survives cleanup
     assert "title" not in create["input_schema"]  # schema-level noise is gone
+
+
+def test_approving_a_delete_is_refused_if_the_target_id_now_points_at_a_different_task(make_container):
+    """SQLite reuses ids of deleted rows. A queued 'delete task #1' must not hit a *different* task #1 later."""
+    from app.db.models import PendingAction, Task
+
+    c = make_container()
+    with c.session_factory() as db:
+        ctx = ToolContext(db=db, tz=ZoneInfo("UTC"))
+        first = c.executor.run(ctx, "create_task", {"title": "Original"}).result["task"]["id"]
+        queued = c.executor.run(ctx, "delete_task", {"task_id": first})
+        assert queued.status == "pending_confirmation"
+        # meanwhile the user deletes it themselves and creates a new task, which reuses the id
+        db.delete(db.get(Task, first))
+        db.commit()
+        reused = c.executor.run(ctx, "create_task", {"title": "Precious new task"}).result["task"]["id"]
+        assert reused == first
+        out = c.executor.confirm(ctx, queued.pending_action_id)
+        assert out.status == "error" and "Original" in out.result["error"] and "Precious new task" in out.result["error"]
+        assert db.get(Task, reused).title == "Precious new task"  # untouched
+        assert db.get(PendingAction, queued.pending_action_id).status == "failed"
+        from app.errors import ConflictError
+
+        with pytest.raises(ConflictError):  # and it cannot be approved a second time
+            c.executor.confirm(ctx, queued.pending_action_id)
+
+
+def test_approving_a_delete_is_refused_when_the_target_no_longer_exists_and_normal_approvals_still_work(make_container):
+    from app.db.models import AuditLog, Task
+
+    c = make_container()
+    with c.session_factory() as db:
+        ctx = ToolContext(db=db, tz=ZoneInfo("UTC"))
+        gone = c.executor.run(ctx, "create_task", {"title": "Vanishes"}).result["task"]["id"]
+        keep = c.executor.run(ctx, "create_task", {"title": "Deleted normally"}).result["task"]["id"]
+        q_gone = c.executor.run(ctx, "delete_task", {"task_id": gone})
+        q_keep = c.executor.run(ctx, "delete_task", {"task_id": keep})
+        db.delete(db.get(Task, gone))
+        db.commit()
+        refused = c.executor.confirm(ctx, q_gone.pending_action_id)
+        assert refused.status == "error" and "no longer exists" in refused.result["error"]
+        assert c.executor.confirm(ctx, q_keep.pending_action_id).status == "ok"  # the unchanged one goes through
+        assert db.get(Task, keep) is None
+        assert any(a.status == "error" and "target changed" in (a.detail or "") for a in db.query(AuditLog))

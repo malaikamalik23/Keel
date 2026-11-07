@@ -38,7 +38,7 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
 ## What is enforced (in code)
 
 1. **Permission tiers.** Every tool is READ, WRITE or HIGH_IMPACT. Deletes are HIGH_IMPACT: the model can only *queue*
-   them; only you (dashboard, CLI or REST) can approve. There is no tool that approves, rejects or edits the queue.
+   them; only you (dashboard, CLI or REST) can approve. There is no tool that approves, rejects or edits the queue. A queued action is re-checked at approval time: if its target changed in the meantime (for example SQLite reused the id of a deleted task), it is refused instead of acting on the wrong item.
 2. **Taint tracking.** When any tool returns external text, the session is *tainted*. While it is, every WRITE tool also
    needs your approval. Taint lasts as long as that content stays in the model's replayed history window.
 3. **Untrusted fencing.** External text is wrapped in `<untrusted_content>` tags. The closing tag is neutralised

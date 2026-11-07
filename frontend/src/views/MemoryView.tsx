@@ -13,7 +13,7 @@ export default function MemoryView() {
   return (
     <div>
       <div className="toolbar">
-        <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Memory kind">{["all", "preference", "context", "fact"].map((k) => <option key={k}>{k}</option>)}</select>
+        <select name="kind" value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Memory kind">{["all", "preference", "context", "fact"].map((k) => <option key={k}>{k}</option>)}</select>
       </div>
       <p className="muted small">Everything the agent remembers about you. Edit or delete anything — changes are audited.</p>
       <ErrorNote error={actionError} />
@@ -25,7 +25,7 @@ export default function MemoryView() {
             <li key={m.id}>
               {editing?.id === m.id ? (
                 <>
-                  <textarea value={editing.text} onChange={(e) => setEditing({ id: m.id, text: e.target.value })} rows={2} aria-label="Edit memory" />
+                  <textarea name="content" value={editing.text} onChange={(e) => setEditing({ id: m.id, text: e.target.value })} rows={2} aria-label="Edit memory" />
                   <span className="actions">
                     <button onClick={() => run(async () => { await api.patch(`/api/memories/${m.id}`, { content: editing.text }); setEditing(null); })}>Save</button>
                     <button className="ghost" onClick={() => setEditing(null)}>Cancel</button>

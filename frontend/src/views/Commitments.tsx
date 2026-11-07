@@ -13,7 +13,7 @@ export default function Commitments() {
   return (
     <div>
       <div className="toolbar">
-        <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Commitment status">{STATUSES.map((s) => <option key={s}>{s}</option>)}</select>
+        <select name="status" value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Commitment status">{STATUSES.map((s) => <option key={s}>{s}</option>)}</select>
       </div>
       <ErrorNote error={actionError} />
       <Loading loading={loading} error={error} />
@@ -31,7 +31,7 @@ export default function Commitments() {
                 {c.status === "proposed" && <button onClick={() => run(() => api.patch(`/api/commitments/${c.id}`, { status: "open" }))}>Confirm</button>}
                 {(c.status === "open" || c.status === "proposed") && (
                   <>
-                    <input type="date" aria-label="New deadline" value={c.deadline ?? ""} onChange={(e) => e.target.value && run(() => api.patch(`/api/commitments/${c.id}`, { deadline: e.target.value }))} />
+                    <input type="date" name="deadline" aria-label="New deadline" value={c.deadline ?? ""} onChange={(e) => e.target.value && run(() => api.patch(`/api/commitments/${c.id}`, { deadline: e.target.value }))} />
                     <button onClick={() => run(() => api.patch(`/api/commitments/${c.id}`, { status: "done" }))}>Done</button>
                     <button className="ghost" onClick={() => run(() => api.patch(`/api/commitments/${c.id}`, { status: "dropped" }))}>Drop</button>
                   </>

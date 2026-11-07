@@ -69,6 +69,29 @@ class ToolExecutor:
             ctx.db.commit()
             return ToolOutcome("error", {"error": _format_validation_error(exc)}, tool.permission.value)
 
+        # Stale-target check. SQLite reuses the id of a deleted row, so "delete task #1" approved later could hit a
+        # *different* task #1. The summary stored when the request was queued names the target; if it no longer
+        # matches what that id refers to now (or the item is gone), refuse rather than act on the wrong thing.
+        if tool.summarize is not None:
+            try:
+                fresh: str | None = tool.summarize(ctx, params)
+            except ToolError:
+                fresh = None
+            if fresh != pa.summary:
+                pa.status, pa.resolved_at = "failed", utcnow()
+                record_audit(
+                    ctx.db, actor="user", tool_name=pa.tool_name, permission=tool.permission.value, params=pa.tool_input,
+                    status="error", detail="Refused: the target changed since this request was queued.",
+                    conversation_id=pa.conversation_id, pending_action_id=pa.id,
+                )
+                ctx.db.commit()
+                now = f'it now refers to: {fresh}' if fresh else "it no longer exists"
+                return ToolOutcome(
+                    "error",
+                    {"error": f'Nothing was done. This request was "{pa.summary}", but {now}. Ask again if you still want it.'},
+                    tool.permission.value,
+                )
+
         # Mark confirmed in the same transaction as the action itself, so it can never run twice.
         pa.status, pa.resolved_at = "confirmed", utcnow()
         outcome = self._execute(ctx, tool, params, actor="user", pending_action_id=pa.id)

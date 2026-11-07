@@ -11,6 +11,8 @@ cd frontend && npm ci && cd ..
 pytest -q                 # no API key or network needed (all LLM and HTTP calls are faked)
 ruff check .
 cd frontend && npm test && npm run build   # dashboard tests, then type-check + build
+pip install -r requirements-e2e.txt && python -m playwright install chromium
+pytest tests/e2e -q       # real-browser tests (skipped automatically if Playwright or frontend/dist is missing)
 ```
 
 ## The rules that matter

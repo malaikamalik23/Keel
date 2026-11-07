@@ -13,7 +13,8 @@ export default function Chat({ onChange }: { onChange: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [resolved, setResolved] = useState<Record<number, string>>({});
   const end = useRef<HTMLDivElement>(null);
-  useEffect(() => end.current?.scrollIntoView({ behavior: "smooth" }), [turns]);
+  // Braces matter: an effect's return value is treated as its cleanup function, and current Chrome's scrollIntoView() returns a Promise.
+  useEffect(() => { end.current?.scrollIntoView({ behavior: "smooth" }); }, [turns]);
 
   const send = async () => {
     const message = input.trim();
@@ -54,7 +55,7 @@ export default function Chat({ onChange }: { onChange: () => void }) {
       </div>
       <ErrorNote error={error} />
       <form onSubmit={(e) => { e.preventDefault(); void send(); }} className="composer">
-        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Message your agent…" aria-label="Message" disabled={busy} />
+        <input name="message" autoComplete="off" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Message your agent…" aria-label="Message" disabled={busy} />
         <button type="submit" disabled={busy || !input.trim()}>Send</button>
         <button type="button" className="ghost" onClick={() => { setTurns([]); setConv(null); }}>New</button>
       </form>

@@ -9,7 +9,7 @@ export default function Goals() {
   return (
     <div>
       <div className="toolbar">
-        <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Goal status">
+        <select name="status" value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Goal status">
           {["active", "paused", "achieved", "dropped", "all"].map((s) => <option key={s}>{s}</option>)}
         </select>
       </div>

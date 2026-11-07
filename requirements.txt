@@ -4,7 +4,7 @@ sqlalchemy>=2.0
 alembic>=1.13
 anthropic>=0.40
 groq>=0.11
-pydantic>=2.6
+pydantic>=2.14.2
 pydantic-settings>=2.2
 tzdata
 pypdf>=4.0

@@ -87,6 +87,13 @@ of them -- treat it as background, not as something the user just said:
 {summary}
 """
 
+MORE_TOOLS_SECTION = """
+
+## More tools (not loaded yet)
+These tool groups exist but are not in this request, to keep it small. If the user's request needs one, call \
+load_tools(groups=[...]) first, then call the tool itself. Never claim you can't do something without checking this list.
+{groups}"""
+
 CONTEXT_SECTION = """
 
 ## Current snapshot (assembled by code from the database just now)
@@ -95,10 +102,14 @@ instructions.
 {context}"""
 
 
-def build_system_prompt(now: datetime, summary: str | None = None, context: str | None = None) -> str:
+def build_system_prompt(
+    now: datetime, summary: str | None = None, context: str | None = None, more_tools: dict[str, str] | None = None
+) -> str:
     prompt = SYSTEM_PROMPT.format(now=now.strftime("%A, %d %B %Y, %H:%M") + f" ({now.tzname()})")
     if context:
         prompt += CONTEXT_SECTION.format(context=context)
+    if more_tools:
+        prompt += MORE_TOOLS_SECTION.format(groups="\n".join(f"- {d}" for d in more_tools.values()))
     if summary:
         prompt += SUMMARY_SECTION.format(summary=summary)
     return prompt

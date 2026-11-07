@@ -67,6 +67,8 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
 12. **Telegram.** Only the single configured chat id is ever answered; everything else is ignored silently. Approving
     actions is deliberately **not** possible from Telegram.
 
+Tool *advertising* is not part of this model: in the default lean profile each request lists only some tools, but the executor applies every rule above to any tool the model tries to call, advertised or not (there is a test for that).
+
 ## How this is tested
 
 `tests/injection/` runs on every push. It builds a world where **web pages, search results, GitHub READMEs and issues,

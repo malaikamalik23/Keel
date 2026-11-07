@@ -30,6 +30,7 @@ def main(argv: list[str] | None = None, llm=None) -> int:
     ap.add_argument("--category", default=None, help="only run one category")
     ap.add_argument("--min-score", type=float, default=None, help="exit non-zero below this score (0-1)")
     ap.add_argument("--out", type=Path, default=HERE / "results")
+    ap.add_argument("--profile", choices=["lean", "full"], default=None, help="tool profile to evaluate (default: TOOL_PROFILE from .env)")
     ap.add_argument("--no-save", action="store_true")
     args = ap.parse_args(argv)
 
@@ -44,8 +45,9 @@ def main(argv: list[str] | None = None, llm=None) -> int:
 
     settings = get_settings()
     llm = llm or build_llm(settings)
-    print(f"Routing eval: {len(cases)} cases, model={settings.agent_model}")
-    report = run_eval(llm, cases, settings.agent_model, on_result=lambda r: print(f"  {'PASS' if r.passed else 'FAIL'}  {r.id:20} -> {r.got or '(text)'}" + (f"   [{r.error}]" if r.error else "")))
+    profile = args.profile or settings.tool_profile
+    print(f"Routing eval: {len(cases)} cases, model={settings.agent_model}, tool profile={profile}")
+    report = run_eval(llm, cases, settings.agent_model, profile=profile, on_result=lambda r: print(f"  {'PASS' if r.passed else 'FAIL'}  {r.id:20} -> {r.got or '(text)'}" + (f"   [{r.error}]" if r.error else "")))
 
     print(f"\nScore: {report.score:.0%} ({sum(r.passed for r in report.results)}/{len(report.results)})")
     for cat, (ok, n) in sorted(report.by_category().items()):
@@ -57,10 +59,10 @@ def main(argv: list[str] | None = None, llm=None) -> int:
     if not args.no_save:
         args.out.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-        payload = {"model": report.model, "score": report.score, "n": len(report.results), "results": [r.__dict__ for r in report.results]}
+        payload = {"model": report.model, "profile": profile, "score": report.score, "n": len(report.results), "results": [r.__dict__ for r in report.results]}
         (args.out / f"{stamp}.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
         with (HERE / "history.jsonl").open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps({"at": stamp, "model": report.model, "score": round(report.score, 3), "n": len(report.results)}) + "\n")
+            fh.write(json.dumps({"at": stamp, "model": report.model, "profile": profile, "score": round(report.score, 3), "n": len(report.results)}) + "\n")
 
     return 1 if args.min_score is not None and report.score < args.min_score else 0
 

@@ -72,7 +72,7 @@ def _response_from_groq(message, finish_reason: str) -> LLMResponse:
 
 class GroqClient:
     def __init__(self, api_key: str, model: str, max_tokens: int = 1500):
-        self._client = groq.Groq(api_key=api_key)
+        self._client = groq.Groq(api_key=api_key, max_retries=4)  # honours Retry-After on 429s (free tier is token-per-minute limited)
         self._model = model
         self._max_tokens = max_tokens
 

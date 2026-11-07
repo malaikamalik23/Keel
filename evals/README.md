@@ -8,6 +8,7 @@ no time given).
 ```bash
 python -m evals.run_routing                  # needs ANTHROPIC_API_KEY or GROQ_API_KEY; 57 API calls
 python -m evals.run_routing --category web   # one category
+python -m evals.run_routing --profile full   # evaluate with every tool advertised (default: your TOOL_PROFILE, lean)
 python -m evals.run_routing --min-score 0.85 # non-zero exit if below (use in a scheduled job)
 ```
 
@@ -16,5 +17,5 @@ Each run prints per-category scores and every failure (what the model did vs wha
 prompt, re-run it and compare. When a failure turns out to be a *reasonable* alternative, add it to that case's
 `expect` list; when it's a real mistake, fix the description.
 
-The dataset itself is validated offline in `tests/test_evals.py` (every expected tool exists, no duplicates, every
+In the **lean** profile the eval uses exactly the tools and system prompt the app would send for each prompt, and a `load_tools` call for the group that contains an acceptable tool counts as a pass. The dataset itself is validated offline in `tests/test_evals.py` (every expected tool exists, no duplicates, every
 tool is covered), so CI never needs an API key.

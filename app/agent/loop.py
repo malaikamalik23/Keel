@@ -19,6 +19,7 @@ from app.llm.base import LLMClient
 from app.security.untrusted import contains_untrusted, extract_urls, urls_in_untrusted_result
 from app.tools.base import ToolContext
 from app.tools.executor import ToolExecutor
+from app.tools.groups import not_loaded, recent_groups, select_groups
 
 logger = logging.getLogger(__name__)
 
@@ -72,14 +73,23 @@ class Agent:
         ctx.tainted = contains_untrusted(messages)
         ctx.seen_urls = extract_urls(messages)
         context = build_context_pack(db, ctx.today(), message)
-        system_prompt = build_system_prompt(ctx.now(), summary=conv.summary, context=context)
+
+        registry = self.executor.registry
+        lean = self.settings.tool_profile == "lean"
+        available = registry.available_groups()
+        if lean:  # advertise only the tools this message plausibly needs (see app/tools/groups.py)
+            ctx.active_groups = select_groups(message, recent_groups(history), available)
 
         result = ChatResult(conversation_id=conv.id, reply="")
         for _ in range(self.settings.max_agent_steps):
+            # Rebuilt each step: a load_tools call during this turn changes which tools and which catalog entries apply.
+            system_prompt = build_system_prompt(
+                ctx.now(), summary=conv.summary, context=context, more_tools=not_loaded(ctx.active_groups, available) if lean else None
+            )
             response = self.llm.complete(
                 system=system_prompt,
                 messages=messages,
-                tools=self.executor.registry.specs(),
+                tools=registry.specs(ctx.active_groups) if lean else registry.specs(),
             )
             tool_uses = response.tool_uses if response.stop_reason == "tool_use" else []
 

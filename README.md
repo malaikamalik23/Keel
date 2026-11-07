@@ -94,7 +94,7 @@ The ones you'll touch first:
 
 | Setting | Why |
 |---|---|
-| `ANTHROPIC_API_KEY` / `GROQ_API_KEY`, `AGENT_MODEL` | The LLM. Groq models must support tool calling. |
+| `ANTHROPIC_API_KEY` / `GROQ_API_KEY`, `AGENT_MODEL` | The LLM. Groq models must support tool calling (`openai/gpt-oss-120b` works on Groq's free tier; set `HISTORY_MESSAGE_LIMIT=12` there). |
 | `AGENT_TIMEZONE` | "Today", check-in times and quiet hours use it. |
 | `API_KEY` | **Set this before exposing the API anywhere.** |
 | `SCHEDULER_ENABLED=true` | Turns on check-ins, reminders and nudges (run one process only). |
@@ -115,7 +115,8 @@ Scheduler ──▶ detectors (SQL) ──▶ notification budget ──▶ LLM 
 ```
 
 - **One agent, native tool calling**, bounded loop (`MAX_AGENT_STEPS`), atomic history (a `tool_use` is never saved without its result).
-- **42 tools** in three permission tiers; see the generated **[docs/TOOLS.md](docs/TOOLS.md)**.
+- **43 tools** in three permission tiers (one is the small `load_tools` helper); see the generated **[docs/TOOLS.md](docs/TOOLS.md)**.
+- **Lean tool profile (default).** A request that carries all 42 tool definitions is ~7,000 tokens before the conversation starts. Keel sends the core task tools plus only the groups the message needs (keywords, groups used recently, or a `load_tools` call), about 2.6-3.2k tokens. That is cheaper everywhere and is what makes it usable on Groq's free tier (8,000 tokens/minute). `TOOL_PROFILE=full` restores everything.
 - **Proactivity = detectors + budget.** SQL decides *whether* something is overdue or neglected; the model only decides *how to say it*, and a deterministic fallback text is sent if the LLM is down.
 - Full design: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
@@ -133,6 +134,8 @@ python -m evals.run_routing        # how often does the model pick the right too
 - CI (GitHub Actions): lint, tests on Python 3.11 and 3.12, red-team suite, dashboard tests + build, dependency audit, secret scan, Docker build.
 
 ## Honest status
+
+- **First real-model run: Groq `openai/gpt-oss-120b`.** Task creation, daily planning and the approval gate worked. The lean profile's keyword selection covered 72% of fresh phrasings before I added patterns for the misses, and the remainder is handled by `load_tools`; real-model routing accuracy has not been measured yet (`python -m evals.run_routing`).
 
 - **Tested with mocks, not yet against every live service.** The Telegram, Brave Search and GitHub integrations are verified against mocked
   HTTP; try them once with your own keys (see [docs/DEMO.md](docs/DEMO.md)) and please open an issue if a real API behaves differently.

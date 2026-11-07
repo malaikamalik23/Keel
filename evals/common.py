@@ -13,6 +13,7 @@ from app.integrations.safe_http import SafeFetcher
 from app.integrations.websearch import BraveSearch
 from app.llm.base import LLMClient
 from app.tools import build_default_registry
+from app.tools.groups import LOAD_TOOLS, group_of, not_loaded, select_groups
 
 CASES_PATH = Path(__file__).parent / "routing_cases.json"
 FIXED_NOW = datetime(2026, 11, 9, 9, 30, tzinfo=ZoneInfo("Asia/Karachi"))  # a Monday; keeps prompts reproducible
@@ -40,6 +41,7 @@ class CaseResult:
     got: str | None  # first tool the model called, or None if it answered in text
     passed: bool
     error: str | None = None
+    loaded_groups: list[str] = field(default_factory=list)  # groups requested when `got` is load_tools
 
 
 @dataclass
@@ -63,25 +65,38 @@ class EvalReport:
         return [r for r in self.results if not r.passed]
 
 
-def judge(case: dict, got: str | None) -> bool:
+def judge(case: dict, got: str | None, loaded_groups: list[str] | None = None) -> bool:
+    """Pass if the first call is an acceptable tool, or no tool where that's acceptable. In the lean profile a
+    load_tools call for the group that holds an acceptable tool also passes: it is the intended route to a tool that
+    was not advertised in the first request."""
     expect, allow_none = case.get("expect", []), case.get("allow_none", False)
+    if got == LOAD_TOOLS:
+        return any(group_of(t) in (loaded_groups or []) for t in expect)
     return (got in expect) if got is not None else allow_none
 
 
-def run_eval(llm: LLMClient, cases: list[dict], model: str = "?", on_result=None) -> EvalReport:
-    system = build_system_prompt(FIXED_NOW)
-    tools = full_registry().specs()
+def run_eval(llm: LLMClient, cases: list[dict], model: str = "?", on_result=None, profile: str = "lean") -> EvalReport:
+    """Score the model's first decision, using exactly the tools and system prompt the app would send for each prompt."""
+    registry = full_registry()
+    available = registry.available_groups()
     report = EvalReport(model=model)
     for case in cases:
-        got, error = None, None
+        got, error, loaded = None, None, []
         try:
+            if profile == "lean":
+                active = select_groups(case["prompt"], set(), available)
+                system, tools = build_system_prompt(FIXED_NOW, more_tools=not_loaded(active, available)), registry.specs(active)
+            else:
+                system, tools = build_system_prompt(FIXED_NOW), registry.specs()
             resp = llm.complete(system=system, messages=[{"role": "user", "content": [{"type": "text", "text": case["prompt"]}]}], tools=tools)
             uses = resp.tool_uses if resp.stop_reason == "tool_use" else []
             got = uses[0]["name"] if uses else None
+            if got == LOAD_TOOLS:
+                loaded = list(uses[0]["input"].get("groups", []))
         except Exception as exc:  # noqa: BLE001 - a provider hiccup is a failed case, not a crashed run
             error = f"{type(exc).__name__}: {exc}"[:200]
-        passed = error is None and judge(case, got)
-        res = CaseResult(case["id"], case["category"], case["prompt"], case.get("expect", []), case.get("allow_none", False), got, passed, error)
+        passed = error is None and judge(case, got, loaded)
+        res = CaseResult(case["id"], case["category"], case["prompt"], case.get("expect", []), case.get("allow_none", False), got, passed, error, loaded)
         report.results.append(res)
         if on_result:
             on_result(res)

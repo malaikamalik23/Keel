@@ -35,7 +35,7 @@ def test_dataset_is_well_formed_and_every_expected_tool_exists():
 def test_every_tool_is_exercised_by_at_least_one_case():
     cases = load_cases()
     covered = {t for c in cases for t in c["expect"]}
-    uncovered = {t.name for t in full_registry().all()} - covered
+    uncovered = {t.name for t in full_registry().all()} - covered - {"load_tools"}  # load_tools is a helper, scored via lean mode
     assert uncovered == set(), f"add routing cases for: {sorted(uncovered)}"
 
 
@@ -64,7 +64,7 @@ def test_provider_errors_count_as_failures_not_crashes():
     assert r.score == 0 and all(x.error and "503" in x.error for x in r.results)
 
 
-def test_tool_specs_handed_to_the_model_include_every_tool():
+def test_full_profile_hands_the_model_every_tool_lean_a_subset():
     seen = {}
 
     class Spy:
@@ -72,8 +72,17 @@ def test_tool_specs_handed_to_the_model_include_every_tool():
             seen["tools"], seen["system"] = {t["name"] for t in tools}, system
             return text("ok")
 
-    run_eval(Spy(), load_cases()[:1], "x")
-    assert seen["tools"] == {t.name for t in full_registry().all()} and "Monday, 09 November 2026" in seen["system"]
+    domain = {t.name for t in full_registry().all()} - {"load_tools"}
+    run_eval(Spy(), load_cases()[:1], "x", profile="full")
+    assert seen["tools"] == domain and "Monday, 09 November 2026" in seen["system"] and "More tools" not in seen["system"]
+    run_eval(Spy(), [{"id": "x", "category": "c", "prompt": "Hi!", "expect": [], "allow_none": True}], "x", profile="lean")
+    assert "create_task" in seen["tools"] and "load_tools" in seen["tools"] and "web_search" not in seen["tools"] and "More tools" in seen["system"]
+
+
+def test_load_tools_for_the_right_group_counts_as_a_pass_in_lean_mode():
+    case = {"expect": ["create_reminder"]}
+    assert judge(case, "load_tools", ["reminders"]) and not judge(case, "load_tools", ["web"]) and not judge(case, "load_tools", [])
+    assert not judge({"expect": [], "allow_none": True}, "load_tools", ["web"])  # small talk must not load anything
 
 
 def test_cli_runs_saves_results_and_enforces_min_score(tmp_path, monkeypatch, capsys):

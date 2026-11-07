@@ -28,6 +28,7 @@ class ToolContext:
     conversation_id: int | None = None
     tainted: bool = False  # set once untrusted external content has entered this turn
     seen_urls: set[str] = field(default_factory=set)  # URLs already present in the context (see taint_gate)
+    active_groups: set[str] = field(default_factory=set)  # tool groups advertised to the model this turn (lean profile)
 
     def now(self) -> datetime:
         return datetime.now(self.tz)
@@ -84,5 +85,25 @@ class ToolRegistry:
     def all(self) -> list[Tool]:
         return list(self._tools.values())
 
-    def specs(self) -> list[dict]:
-        return [t.spec() for t in self._tools.values()]
+    def specs(self, groups: set[str] | None = None) -> list[dict]:
+        """Tool definitions for an LLM request. `groups=None` means every domain tool (the FULL profile).
+
+        With `groups`, only tools in those groups are included, and the `load_tools` helper is included only while
+        there is still something left to load (so a fully loaded request doesn't carry it for nothing).
+        """
+        from app.tools.groups import LOAD_TOOLS, group_of
+
+        available = {group_of(t.name) for t in self._tools.values() if t.name != LOAD_TOOLS}
+        out = []
+        for t in self._tools.values():
+            if t.name == LOAD_TOOLS:
+                if groups is not None and available - groups:
+                    out.append(t.spec())
+            elif groups is None or group_of(t.name) in groups:
+                out.append(t.spec())
+        return out
+
+    def available_groups(self) -> set[str]:
+        from app.tools.groups import LOAD_TOOLS, group_of
+
+        return {group_of(t.name) for t in self._tools.values() if t.name != LOAD_TOOLS}

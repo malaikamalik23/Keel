@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     # Unset by default: fine for localhost-only use, but set it before ever exposing the API.
     api_key: str | None = None
 
+    # lean: each request carries only the core tools + the groups the message needs (about 3k tokens of overhead instead of
+    # 7k; required on Groq's free tier). full: every tool in every request (best routing, most tokens).
+    tool_profile: Literal["lean", "full"] = "lean"
+
     # ---- Phase 4: scheduler, check-ins, notifications ----
     scheduler_enabled: bool = False  # opt-in: starts the in-process scheduler with the API
     scheduler_tick_seconds: int = 60

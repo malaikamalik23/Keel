@@ -1,6 +1,6 @@
 from collections.abc import Callable
 
-from app.tools import calendar, commitments, goals, memory, notes, planning, projects, reminders, system, tasks
+from app.tools import calendar, commitments, goals, groups, memory, notes, planning, projects, reminders, system, tasks
 from app.tools import github as github_tools
 from app.tools import web as web_tools
 from app.tools.base import ToolRegistry
@@ -27,4 +27,5 @@ def build_default_registry(
         github_tools.register(registry, github, github_user)
     if notes_enabled:
         notes.register(registry)
+    groups.register_load_tools(registry)
     return registry

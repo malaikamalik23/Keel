@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -75,12 +76,17 @@ def judge(case: dict, got: str | None, loaded_groups: list[str] | None = None) -
     return (got in expect) if got is not None else allow_none
 
 
-def run_eval(llm: LLMClient, cases: list[dict], model: str = "?", on_result=None, profile: str = "lean") -> EvalReport:
-    """Score the model's first decision, using exactly the tools and system prompt the app would send for each prompt."""
+def run_eval(
+    llm: LLMClient, cases: list[dict], model: str = "?", on_result=None, profile: str = "lean", pause_seconds: float = 0, sleep=None
+) -> EvalReport:
+    """Score the model's first decision, using exactly the tools and system prompt the app would send for each prompt.
+    pause_seconds waits between cases (not before the first), for token-per-minute limited free tiers."""
     registry = full_registry()
     available = registry.available_groups()
     report = EvalReport(model=model)
-    for case in cases:
+    for n, case in enumerate(cases):
+        if n and pause_seconds > 0:
+            (sleep or time.sleep)(pause_seconds)
         got, error, loaded = None, None, []
         try:
             if profile == "lean":

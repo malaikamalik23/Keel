@@ -3,6 +3,7 @@
     python -m evals.run_routing                      # run all cases against the configured provider (costs API calls)
     python -m evals.run_routing --limit 10           # quick smoke run
     python -m evals.run_routing --min-score 0.85     # exit 1 if the score is lower (for scheduled CI runs)
+    python -m evals.run_routing --limit 15 --sleep 20  # pause between cases (Groq free tier: 8,000 tokens/minute)
 
 Only the model's FIRST tool decision is judged: it is the one that reveals whether the tool descriptions and system
 prompt steer the model correctly, and it needs no database or side effects. Results are written to
@@ -32,6 +33,7 @@ def main(argv: list[str] | None = None, llm=None) -> int:
     ap.add_argument("--out", type=Path, default=HERE / "results")
     ap.add_argument("--profile", choices=["lean", "full"], default=None, help="tool profile to evaluate (default: TOOL_PROFILE from .env)")
     ap.add_argument("--no-save", action="store_true")
+    ap.add_argument("--sleep", type=float, default=0, metavar="SECONDS", help="pause between cases, for rate-limited free tiers")
     args = ap.parse_args(argv)
 
     cases = load_cases(args.cases)
@@ -47,7 +49,7 @@ def main(argv: list[str] | None = None, llm=None) -> int:
     llm = llm or build_llm(settings)
     profile = args.profile or settings.tool_profile
     print(f"Routing eval: {len(cases)} cases, model={settings.agent_model}, tool profile={profile}")
-    report = run_eval(llm, cases, settings.agent_model, profile=profile, on_result=lambda r: print(f"  {'PASS' if r.passed else 'FAIL'}  {r.id:20} -> {r.got or '(text)'}" + (f"   [{r.error}]" if r.error else "")))
+    report = run_eval(llm, cases, settings.agent_model, profile=profile, pause_seconds=args.sleep, on_result=lambda r: print(f"  {'PASS' if r.passed else 'FAIL'}  {r.id:20} -> {r.got or '(text)'}" + (f"   [{r.error}]" if r.error else "")))
 
     print(f"\nScore: {report.score:.0%} ({sum(r.passed for r in report.results)}/{len(report.results)})")
     for cat, (ok, n) in sorted(report.by_category().items()):

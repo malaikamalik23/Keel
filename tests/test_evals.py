@@ -96,3 +96,17 @@ def test_cli_runs_saves_results_and_enforces_min_score(tmp_path, monkeypatch, ca
     assert main(["--out", str(out), "--no-save", "--min-score", "0.9"], llm=RoutingStub(cases, wrong={c["id"] for c in cases[:20]})) == 1
     assert "FAILED" in capsys.readouterr().out
     assert main(["--category", "nonexistent", "--no-save"], llm=RoutingStub(cases)) == 2
+
+
+def test_pause_between_cases_is_applied_between_but_not_before_the_first(monkeypatch):
+    cases = load_cases()[:3]
+    waits: list[float] = []
+    run_eval(RoutingStub(cases), cases, "stub", pause_seconds=20, sleep=waits.append)
+    assert waits == [20, 20]
+    run_eval(RoutingStub(cases), cases, "stub", sleep=waits.append)  # default: no pause
+    assert waits == [20, 20]
+    import evals.common as common
+    monkeypatch.setattr(common.time, "sleep", waits.append)
+    from evals.run_routing import main
+    assert main(["--limit", "2", "--sleep", "5", "--no-save"], llm=RoutingStub(cases)) == 0
+    assert waits == [20, 20, 5]

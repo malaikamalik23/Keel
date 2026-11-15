@@ -90,6 +90,19 @@ describe("dashboard smoke tests", () => {
     await waitFor(() => expect(calls).toContainEqual({ method: "POST", path: "/api/pending-actions/3/confirm" }));
   });
 
+  it("Skip on a plan item does nothing when the reason prompt is cancelled, and skips when it is answered", async () => {
+    const calls = mockFetch();
+    const prompt = vi.spyOn(window, "prompt").mockReturnValueOnce(null).mockReturnValueOnce("");
+    const user = userEvent.setup();
+    render(<App />);
+    const skipButton = await screen.findByRole("button", { name: "Skip" });
+    await user.click(skipButton);  // Cancel
+    expect(prompt).toHaveBeenCalledTimes(1);
+    expect(calls.filter((c) => c.method === "PATCH")).toEqual([]);
+    await user.click(skipButton);  // OK with no reason
+    await waitFor(() => expect(calls).toContainEqual({ method: "PATCH", path: "/api/plan-items/1" }));
+  });
+
   it("asks for the API key on 401 and sends it afterwards", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: string, init?: RequestInit) => {
       const key = (init?.headers as Record<string, string> | undefined)?.["X-API-Key"];

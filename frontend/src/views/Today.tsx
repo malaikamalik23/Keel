@@ -12,8 +12,10 @@ export default function Today() {
   const { run, error } = useAction(refresh);
 
   const skip = (id: number) => {
-    const reason = window.prompt("Why skip this? (optional, helps spot patterns)") ?? undefined;
-    return run(() => api.patch(`/api/plan-items/${id}`, { status: "skipped", reason }));
+    // Cancel on this prompt must mean "don't skip" (it used to skip anyway, with no reason). OK with an empty box still skips.
+    const reason = window.prompt("Why skip this? (optional, helps spot patterns)");
+    if (reason === null) return;
+    return run(() => api.patch(`/api/plan-items/${id}`, { status: "skipped", reason: reason.trim() || undefined }));
   };
   const p = plan.data;
   const a = acct.data;

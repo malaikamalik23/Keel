@@ -50,7 +50,7 @@ pip install -r requirements-dev.txt
 cp .env.example .env                                      # Windows: copy .env.example .env
 #   then edit .env: set ANTHROPIC_API_KEY (or GROQ_API_KEY) and AGENT_TIMEZONE
 
-pytest -q                                                 # 345 tests, no key or network needed
+pytest -q                                                 # ~370 tests, no key or network needed
 
 (cd frontend && npm ci && npm run build)                  # build the dashboard once
 uvicorn app.api.main:create_app --factory                 # dashboard + API at http://127.0.0.1:8000
@@ -139,7 +139,7 @@ python -m evals.run_routing        # how often does the model pick the right too
 
 - **Tested with mocks, not yet against every live service.** The Telegram, Brave Search and GitHub integrations are verified against mocked
   HTTP; try them once with your own keys (see [docs/DEMO.md](docs/DEMO.md)) and please open an issue if a real API behaves differently.
-- The dashboard is type-checked, has 15 jsdom tests (every tab, empty states, a malformed response, the approval flow) and 2 **real-Chromium end-to-end tests** (`tests/e2e`, Playwright; CI job `e2e`) that drive the real server through chat, plan, delete-and-approve and reminders and fail on any console error. The browser tests exist because the first manual run found a Chrome-only crash that jsdom could not see.
+- The dashboard is type-checked, has 16 jsdom tests (every tab, empty states, a malformed response, the approval flow, skip-cancel) and 2 **real-Chromium end-to-end tests** (`tests/e2e`, Playwright; CI job `e2e`) that drive the real server through chat, plan, delete-and-approve and reminders and fail on any console error. The browser tests exist because the first manual run found a Chrome-only crash that jsdom could not see.
 - Single-user by design: one API key, no accounts. Not multi-tenant.
 - See [SECURITY.md](SECURITY.md#known-limitations-read-these) for the security limitations (sticky taint, DNS rebinding, and more).
 

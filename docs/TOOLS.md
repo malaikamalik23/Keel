@@ -8,11 +8,11 @@ Keel has **43 tools**. In the default `TOOL_PROFILE=lean`, each request carries 
 
 | Tool | Group | What it's for |
 |---|---|---|
-| `get_current_datetime` | tasks | Get the user's current local date, time and weekday. Use before reasoning about deadlines. |
-| `list_tasks` | tasks | List the user's tasks, soonest deadline first. Use to answer 'what should I work on', or 'what's due'. Overdue tasks are flagged; postponement_count shows how often a task has slipped. |
+| `get_current_datetime` | tasks | Get the user's current local date, time and weekday. The current date and time are already in the system prompt, so you rarely need this: don't call it before answering 'what's due today', 'this week' or 'move it to Friday'. Use it only if you need the exact time again later in a long conversation. |
+| `list_tasks` | tasks | List the user's tasks, soonest due date first. Use to answer 'what should I work on', or 'what's due'. Overdue tasks are flagged; postponement_count shows how often a task has slipped. For things the user promised or said they would do (commitments), use list_commitments instead. |
 | `list_goals` | goals | List the user's goals with their milestones. Use to answer 'what am I working towards' or before decomposing a new ambition. |
 | `list_projects` | goals | List the user's projects. Use before planning or when the user asks about a specific piece of work. |
-| `list_commitments` | commitments | List the user's commitments, soonest deadline first. Use for 'what did I promise', 'my <thing> deadline', or accountability check-ins. |
+| `list_commitments` | commitments | List the user's commitments, soonest deadline first. Use for 'what did I promise (this week)', 'my <thing> deadline', before updating or completing a commitment whose id you don't know, and for accountability check-ins. |
 | `search_memories` | memory | Search stored memories by keyword, or list recent ones. Use before answering questions about the user's preferences, background, or working style. |
 | `get_daily_plan` | plan | Show the plan for a day with each item's status. Use for 'what's on my plate today' or evening reviews. |
 | `list_work_sessions` | plan | List logged work sessions and total minutes over the last N days. |
@@ -35,8 +35,8 @@ Keel has **43 tools**. In the default `TOOL_PROFILE=lean`, each request carries 
 | Tool | Group | What it's for |
 |---|---|---|
 | `create_task` | tasks | Create a task. Use when the user wants to add something to their to-do list or commits to doing something concrete. Prefer one clear next action per task. |
-| `update_task` | tasks | Change a task's title, description, status, priority, deadline or estimate. Moving a deadline later is recorded as a postponement. |
-| `complete_task` | tasks | Mark a task as done. Only call when the user says they finished it. |
+| `update_task` | tasks | Change a task's title, description, status, priority, due date or estimate. Moving a due date later is recorded as a postponement. 'Move my <thing> deadline' or anything the user promised is a commitment: use update_commitment (list_commitments first if you need its id). |
+| `complete_task` | tasks | Mark a task as done. Only call when the user says they finished it. If they say they did something they promised or committed to ('I finished the poster I promised'), use complete_commitment instead. |
 | `create_goal` | goals | Create a goal (career, education, research, skills or personal). Use when the user states an ambition, not a one-off task, e.g. 'I want to become good at penetration testing.' |
 | `update_goal` | goals | Change a goal's title, description, status, priority or target date. |
 | `add_milestones` | goals | Break a goal into an ordered list of milestones (e.g. HTTP fundamentals -> Authentication -> SQL injection -> ...). Call this right after create_goal for any goal big enough to need steps. Follow up with milestone_to_tasks to make the first milestone actionable. |
@@ -46,7 +46,7 @@ Keel has **43 tools**. In the default `TOOL_PROFILE=lean`, each request carries 
 | `propose_commitment` | commitments | Record something the user said they'll do, e.g. 'I'll finish this tomorrow' or 'I need to complete this by Friday'. Recognize commitment language proactively. If the phrasing is unambiguous, set confirmed=true; otherwise leave it false and ask the user to confirm next, then call confirm_commitment. |
 | `confirm_commitment` | commitments | Move a 'proposed' commitment to 'open' after the user confirms it. Call after the user says yes to a commitment you proposed. |
 | `update_commitment` | commitments | Change a commitment's text, deadline, importance, or drop it. Use for 'move my <thing> deadline': deadlines belong to commitments (tasks have due dates, see update_task). Pushing the deadline later is recorded as a postponement. |
-| `complete_commitment` | commitments | Mark a commitment as fulfilled. Only call when the user says they did it. |
+| `complete_commitment` | commitments | Mark a commitment as fulfilled. Call when the user says they did something they promised, committed to or had a deadline for ('I finished the poster I promised'). Use list_commitments first if you need its id. |
 | `save_memory` | memory | Save one durable, genuinely useful fact about the user: a preference, personal context, or other fact worth remembering across conversations. Do not save trivia or one-off details. Save proactively when the user reveals something like this in conversation, without waiting to be asked. |
 | `update_memory` | memory | Edit an existing memory's content, kind, or importance. |
 | `create_daily_plan` | plan | Build the plan for a day. Code picks and orders tasks by urgency/priority and guarantees the plan fits the available time (with a buffer) and has at most 3 major priorities; anything left out comes back in 'deferred' with a reason. Use for 'plan my day'; call it directly, it reads the open tasks itself, so don't list tasks first. If you don't know how much time the user has, ask once first. Calling it again re-plans without losing finished items. |

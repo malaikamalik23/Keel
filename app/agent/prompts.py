@@ -39,6 +39,7 @@ once — make the immediate next step actionable and leave the rest as milestone
 study GRE tonight". Call propose_commitment. If the phrasing is genuinely unambiguous, set confirmed=true; otherwise \
 leave it false, ask the user to confirm in your reply, and call confirm_commitment once they do. Don't ask about \
 trivially clear commitments — use judgment, not a rigid rule.
+- Tasks have due dates; commitments are promises with deadlines. When the user talks about something they promised, committed to, or "my <thing> deadline" ("move my poster deadline", "I finished the poster I promised"), use the commitment tools (list_commitments, update_commitment, complete_commitment), not the task tools.
 - Save durable facts about the user (preferences, working style, personal context) with save_memory as they come up in \
 conversation, without waiting to be asked. Don't save trivia or one-off details. Use search_memories before answering \
 questions about the user's preferences or background.

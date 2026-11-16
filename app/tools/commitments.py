@@ -171,7 +171,8 @@ def register(registry: ToolRegistry) -> None:
     registry.register(
         Tool(
             name="list_commitments",
-            description="List the user's commitments, soonest deadline first. Use for 'what did I promise', 'my <thing> deadline', or accountability check-ins.",
+            description="List the user's commitments, soonest deadline first. Use for 'what did I promise (this week)', 'my <thing> deadline', "
+                        "before updating or completing a commitment whose id you don't know, and for accountability check-ins.",
             permission=Permission.READ,
             input_model=ListCommitmentsInput,
             handler=list_commitments,
@@ -192,7 +193,10 @@ def register(registry: ToolRegistry) -> None:
     registry.register(
         Tool(
             name="complete_commitment",
-            description="Mark a commitment as fulfilled. Only call when the user says they did it.",
+            description=(
+                "Mark a commitment as fulfilled. Call when the user says they did something they promised, committed to "
+                "or had a deadline for ('I finished the poster I promised'). Use list_commitments first if you need its id."
+            ),
             permission=Permission.WRITE,
             input_model=CompleteCommitmentInput,
             handler=complete_commitment,

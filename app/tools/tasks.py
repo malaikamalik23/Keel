@@ -213,9 +213,10 @@ def register(registry: ToolRegistry) -> None:
         Tool(
             name="list_tasks",
             description=(
-                "List the user's tasks, soonest deadline first. Use to answer 'what should I work on', "
+                "List the user's tasks, soonest due date first. Use to answer 'what should I work on', "
                 "or 'what's due'. Overdue tasks are flagged; postponement_count shows how often "
-                "a task has slipped."
+                "a task has slipped. For things the user promised or said they would do (commitments), use "
+                "list_commitments instead."
             ),
             permission=Permission.READ,
             input_model=ListTasksInput,
@@ -226,8 +227,9 @@ def register(registry: ToolRegistry) -> None:
         Tool(
             name="update_task",
             description=(
-                "Change a task's title, description, status, priority, deadline or estimate. Moving a deadline "
-                "later is recorded as a postponement."
+                "Change a task's title, description, status, priority, due date or estimate. Moving a due date "
+                "later is recorded as a postponement. 'Move my <thing> deadline' or anything the user promised is a "
+                "commitment: use update_commitment (list_commitments first if you need its id)."
             ),
             permission=Permission.WRITE,
             input_model=UpdateTaskInput,
@@ -237,7 +239,10 @@ def register(registry: ToolRegistry) -> None:
     registry.register(
         Tool(
             name="complete_task",
-            description="Mark a task as done. Only call when the user says they finished it.",
+            description=(
+                "Mark a task as done. Only call when the user says they finished it. If they say they did something "
+                "they promised or committed to ('I finished the poster I promised'), use complete_commitment instead."
+            ),
             permission=Permission.WRITE,
             input_model=CompleteTaskInput,
             handler=complete_task,

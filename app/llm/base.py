@@ -13,6 +13,9 @@ from typing import Protocol
 class LLMResponse:
     content: list[dict]  # [{"type": "text", "text": ...}, {"type": "tool_use", "id", "name", "input"}]
     stop_reason: str  # "end_turn" | "tool_use" | "max_tokens" | ...
+    # Token counts as reported by the provider for this one request (None if it did not say). Used by the eval.
+    input_tokens: int | None = None
+    output_tokens: int | None = None
 
     @property
     def text(self) -> str:

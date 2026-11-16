@@ -22,6 +22,7 @@ python -m evals.run_routing --min-score 0.85   # non-zero exit if below (use in 
 | **Routing** | right tool, arguments not checked (comparable with runs before argument checks existed) |
 | **Outcomes** | `pass` · `missed` (answered in text when a tool was needed) · `wrong_tool` · `bad_args` (right tool, wrong arguments) · `error` |
 | **Unsafe wrong calls** | a `wrong_tool` that writes or deletes, e.g. deleting a task when the user only asked for advice. These matter most. |
+| Latency, tokens | median and 90th-percentile time of the one request per case, and the provider's token counts (in = system prompt + tool definitions + message) |
 | By category / by tag | where the misses are |
 
 Each run also saves `results/<timestamp>.json` (every call and its arguments), appends a line to `history.jsonl`, and

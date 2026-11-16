@@ -55,3 +55,36 @@ def test_runs_without_a_results_file_still_appear_but_add_no_case_data(tmp_path)
     page = render(CASES, runs)
     assert "No run results yet." in page
     assert "<td class='num'>57</td>" in page
+
+
+def test_latency_and_tokens_are_recorded_per_case_and_shown_per_run(tmp_path):
+    from app.llm.base import LLMResponse
+    from evals.common import cost_summary, percentile, run_eval
+
+    class Metered:
+        def __init__(self):
+            self.n = 0
+
+        def complete(self, *, system, messages, tools):
+            self.n += 1
+            if self.n == 3:
+                raise RuntimeError("429")
+            return LLMResponse([{"type": "tool_use", "id": "1", "name": "create_task", "input": {"title": "x"}}], "tool_use",
+                               input_tokens=3000 + self.n, output_tokens=40)
+
+    report = run_eval(Metered(), CASES, profile="full")
+    a, b, c = report.results
+    assert a.input_tokens == 3001 and a.output_tokens == 40 and a.latency_ms is not None and a.latency_ms >= 0
+    assert c.outcome == "error" and c.latency_ms is None and c.input_tokens is None  # a failed request costs nothing here
+
+    cost = cost_summary(report.results)
+    assert cost["input_tokens_p50"] == 3001 and cost["input_tokens_total"] == 6003 and cost["output_tokens_total"] == 80
+    assert percentile([10, 20, 30, 40, 50, 60, 70, 80, 90, 100], 90) == 90 and percentile([None], 50) is None
+
+    saved = [dict(r.__dict__, latency_ms=ms) for r, ms in zip(report.results, (800, 1200, None), strict=True)]
+    runs = _write(tmp_path, [("20261101-100000", [_result("a", "pass")], "before these were recorded"),
+                             ("20261102-100000", saved, "metered")])
+    page = render(CASES, runs)
+    assert "800 ms" in page and "1,200 ms" in page and "3,001" in page  # median and 90th percentile, tokens in
+    old_row = page.split("before these were recorded")[0].rsplit("<tr>", 1)[1]
+    assert old_row.count("–") == 4  # the older run shows dashes, not zeros

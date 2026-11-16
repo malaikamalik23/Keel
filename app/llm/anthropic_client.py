@@ -32,4 +32,6 @@ class AnthropicClient:
                 blocks.append({"type": "text", "text": b.text})
             elif b.type == "tool_use":
                 blocks.append({"type": "tool_use", "id": b.id, "name": b.name, "input": b.input})
-        return LLMResponse(content=blocks, stop_reason=resp.stop_reason or "end_turn")
+        usage = getattr(resp, "usage", None)
+        return LLMResponse(content=blocks, stop_reason=resp.stop_reason or "end_turn",
+                           input_tokens=getattr(usage, "input_tokens", None), output_tokens=getattr(usage, "output_tokens", None))

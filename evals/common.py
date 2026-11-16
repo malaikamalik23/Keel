@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import time
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -52,6 +53,9 @@ class CaseResult:
     unsafe: bool = False  # called a tool that writes or deletes when that tool was not acceptable
     tags: list[str] = field(default_factory=list)
     got_input: dict = field(default_factory=dict)
+    latency_ms: int | None = None  # wall-clock time of the one LLM request (None if it errored)
+    input_tokens: int | None = None  # as reported by the provider: system prompt + tool definitions + the message
+    output_tokens: int | None = None
 
 
 @dataclass
@@ -187,13 +191,17 @@ def run_eval(
         if n and pause_seconds > 0:
             (sleep or time.sleep)(pause_seconds)
         got, error, loaded, got_input = None, None, [], {}
+        latency_ms = tokens_in = tokens_out = None
         try:
             if profile == "lean":
                 active = select_groups(case["prompt"], set(), available)
                 system, tools = build_system_prompt(FIXED_NOW, more_tools=not_loaded(active, available)), registry.specs(active)
             else:
                 system, tools = build_system_prompt(FIXED_NOW), registry.specs()
+            started = time.perf_counter()
             resp = llm.complete(system=system, messages=[{"role": "user", "content": [{"type": "text", "text": case["prompt"]}]}], tools=tools)
+            latency_ms = round((time.perf_counter() - started) * 1000)
+            tokens_in, tokens_out = getattr(resp, "input_tokens", None), getattr(resp, "output_tokens", None)
             uses = resp.tool_uses if resp.stop_reason == "tool_use" else []
             got = uses[0]["name"] if uses else None
             got_input = dict(uses[0].get("input") or {}) if uses else {}
@@ -205,9 +213,31 @@ def run_eval(
         res = CaseResult(
             case["id"], case["category"], case["prompt"], case.get("expect", []), case.get("allow_none", False), got,
             verdict["passed"], error, loaded, verdict["routing_ok"], verdict["outcome"], verdict["arg_problems"],
-            verdict["unsafe"], list(case.get("tags", [])), got_input,
+            verdict["unsafe"], list(case.get("tags", [])), got_input, latency_ms, tokens_in, tokens_out,
         )
         report.results.append(res)
         if on_result:
             on_result(res)
     return report
+
+
+def percentile(values: list[float], p: float) -> float | None:
+    """Nearest-rank percentile (p in 0-100) of the values that are present; None if there are none."""
+    xs = sorted(v for v in values if v is not None)
+    if not xs:
+        return None
+    return xs[min(len(xs) - 1, max(0, math.ceil(p / 100 * len(xs)) - 1))]
+
+
+def cost_summary(results: list) -> dict:
+    """Latency and token use of the answered cases. Accepts CaseResult objects or their saved dicts."""
+    get = (lambda r, k: r.get(k)) if results and isinstance(results[0], dict) else (lambda r, k: getattr(r, k, None))
+    done = [r for r in results if get(r, "outcome") != "error"]
+    lat = [get(r, "latency_ms") for r in done]
+    tin, tout = [get(r, "input_tokens") for r in done], [get(r, "output_tokens") for r in done]
+    return {
+        "latency_ms_p50": percentile(lat, 50), "latency_ms_p90": percentile(lat, 90),
+        "input_tokens_p50": percentile(tin, 50), "output_tokens_p50": percentile(tout, 50),
+        "input_tokens_total": sum(v for v in tin if v is not None) if any(v is not None for v in tin) else None,
+        "output_tokens_total": sum(v for v in tout if v is not None) if any(v is not None for v in tout) else None,
+    }

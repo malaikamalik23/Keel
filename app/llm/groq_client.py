@@ -114,4 +114,7 @@ class GroqClient:
                 raise LLMError(f"LLM request failed: {exc2}") from exc2
 
         choice = resp.choices[0]
-        return _response_from_groq(choice.message, choice.finish_reason)
+        out = _response_from_groq(choice.message, choice.finish_reason)
+        usage = getattr(resp, "usage", None)
+        out.input_tokens, out.output_tokens = getattr(usage, "prompt_tokens", None), getattr(usage, "completion_tokens", None)
+        return out

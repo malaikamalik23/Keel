@@ -189,7 +189,7 @@ def html_to_text(html: str) -> tuple[str, str]:
         p.feed(html)
         p.close()
     except Exception:  # noqa: BLE001, S110 - malformed HTML must never crash a tool; partial text is still useful
-        pass
+        pass  # nosec B110
     lines = [" ".join(line.split()) for line in "".join(p.parts).splitlines()]
     out: list[str] = []
     for line in lines:

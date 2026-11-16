@@ -81,6 +81,21 @@ jobs:
       - run: npm audit --omit=dev --audit-level=high
         working-directory: frontend
 
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install bandit semgrep
+      - name: Bandit (common Python security mistakes)
+        run: bandit -q -r app scripts evals
+      - name: Semgrep (python, security-audit and secrets rule sets)
+        run: >
+          semgrep scan --config p/python --config p/security-audit --config p/secrets --metrics=off --error
+          app scripts evals Dockerfile docker-compose.yml .github
+
   secret-scan:
     runs-on: ubuntu-latest
     steps:

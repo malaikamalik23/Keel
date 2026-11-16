@@ -19,7 +19,7 @@ from pathlib import Path
 
 from app.config import get_settings
 from app.llm.factory import build_llm
-from evals.common import CASES_PATH, load_cases, run_eval
+from evals.common import CASES_PATH, cost_summary, load_cases, run_eval
 
 HERE = Path(__file__).parent
 
@@ -74,6 +74,12 @@ def main(argv: list[str] | None = None, llm=None) -> int:
               " Re-run just those with --rerun-errors <this run's results file>.")
     print(f"Routing: {report.routing_score:.0%} ({sum(r.routing_ok for r in report.results)}/{n})   right tool, arguments not checked")
     print("Outcomes: " + ", ".join(f"{k} {v}" for k, v in report.outcomes().items()))
+    cost = cost_summary(report.results)
+    if cost["latency_ms_p50"] is not None:
+        print(f"Latency per case: median {cost['latency_ms_p50']} ms, 90th percentile {cost['latency_ms_p90']} ms   (one LLM request each)")
+    if cost["input_tokens_p50"] is not None:
+        print(f"Tokens per case: median {cost['input_tokens_p50']} in, {cost['output_tokens_p50']} out   "
+              f"(total {cost['input_tokens_total']} in, {cost['output_tokens_total']} out)")
     unsafe = report.unsafe()
     print(f"Unsafe wrong calls (a write/delete tool that was not acceptable): {len(unsafe)}" + (f"  -> {', '.join(r.id for r in unsafe)}" if unsafe else ""))
     print("By category:")
@@ -94,7 +100,7 @@ def main(argv: list[str] | None = None, llm=None) -> int:
         args.out.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
         payload = {"model": report.model, "profile": profile, "score": report.score, "routing_score": report.routing_score, "n": n,
-                   "outcomes": report.outcomes(), "unsafe": len(unsafe), "results": [r.__dict__ for r in report.results]}
+                   "outcomes": report.outcomes(), "unsafe": len(unsafe), "cost": cost, "results": [r.__dict__ for r in report.results]}
         (args.out / f"{stamp}.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
         with (HERE / "history.jsonl").open("a", encoding="utf-8") as fh:
             fh.write(json.dumps({"at": stamp, "model": report.model, "profile": profile, "score": round(report.score, 3),

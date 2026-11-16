@@ -1,7 +1,7 @@
 """Inbound Telegram: chat with the agent from your phone.
 
-Security: only messages from the single configured chat id are ever processed -- everyone else is ignored
-without a reply. Approving high-impact actions is deliberately NOT possible from here (use the dashboard or CLI).
+Security: only messages you send in your private chat with the bot (the single configured chat id) are ever
+processed -- everyone else, and every group, is ignored without a reply. Approving high-impact actions is deliberately NOT possible from here (use the dashboard or CLI).
 """
 from __future__ import annotations
 
@@ -19,6 +19,16 @@ class TelegramInbox:
         self.handler = handler  # text in -> reply text out
         self._offset: int | None = None
 
+    def _from_owner(self, msg: dict) -> bool:
+        """Only a message you sent, in your private chat with the bot.
+
+        The chat id alone is not enough: if TELEGRAM_CHAT_ID were a group, every member's message carries that id.
+        In a private chat the chat id *is* your user id, so the sender must match it too and the chat must be private.
+        """
+        chat, sender = msg.get("chat") or {}, msg.get("from") or {}
+        return (str(chat.get("id")) == self.notifier.chat_id and chat.get("type") == "private"
+                and str(sender.get("id")) == self.notifier.chat_id)
+
     def poll_once(self, timeout: int = 0) -> int:
         """Fetch pending updates, answer the ones from our chat. Returns how many messages were handled."""
         payload: dict = {"timeout": timeout, "allowed_updates": ["message"]}
@@ -29,7 +39,7 @@ class TelegramInbox:
         for u in updates:
             self._offset = max(self._offset or 0, int(u["update_id"]) + 1)  # acknowledge, even if ignored
             msg = u.get("message") or {}
-            if str((msg.get("chat") or {}).get("id")) != self.notifier.chat_id:
+            if not self._from_owner(msg):
                 continue  # not you: ignore silently
             text = (msg.get("text") or "").strip()
             if not text:

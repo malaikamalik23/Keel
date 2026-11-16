@@ -84,7 +84,8 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
     context pack shows each stored item as one flattened, clipped line inside a section labelled as user data, so it
     can't forge a heading of the system prompt or close a fence.
 12. **Audit log.** Every tool call (allowed, queued, rejected, failed, expired) is recorded with actor and parameters.
-13. **Telegram.** Only the single configured chat id is ever answered; everything else is ignored silently. Approving
+13. **Telegram.** Only messages you send in your private chat with the bot are answered (the chat id must match, the chat
+    must be private and the sender must be you); groups and everyone else are ignored silently. Approving
     actions is deliberately **not** possible from Telegram.
 
 Tool *advertising* is not part of this model: in the default lean profile each request lists only some tools, but the executor applies every rule above to any tool the model tries to call, advertised or not (there is a test for that).
@@ -121,6 +122,10 @@ Further suites cover the cases that are about *time* rather than one turn:
 - `tests/test_dns_pinning.py`: a resolver that answers public first and `127.0.0.1` / `10.x` / `169.254.169.254` /
   `::1` second is refused before any socket opens; the connection goes to the checked IP; HTTPS keeps the hostname for
   certificate checks; and a guard fails if an httpx upgrade silently removes the pinning.
+
+`python -m scripts.security_demo` runs twelve of these attacks in a readable form; `tests/test_security_demo.py` checks that it
+reports a failure when the permission gate, the fetch gate, the browser checks or the local-only check is switched off.
+CI also runs **Bandit** and **Semgrep** (python, security-audit and secrets rule sets) on every push.
 
 The suite was **mutation-checked**: each defence (taint escalation, HIGH_IMPACT tier, exfiltration gate, fence
 neutralisation, invisible-character stripping, hidden-HTML removal, SSRF check, untrusted flag) was deliberately

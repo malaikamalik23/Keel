@@ -24,6 +24,17 @@ machine, with your data in one SQLite file.
 | **Research** | Web search and page reading, search over your own notes and papers (including Urdu), read-only GitHub and calendar access. |
 | **Insights** | Weekly trends, streaks, promises kept, how long things really take versus your estimates. |
 
+## What it looks like
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/today-dark.png"><img src="docs/screenshots/today-light.png" alt="Today: a plan that fits the time available, open tasks with postponement counts, and what needs attention" width="100%"></picture>
+
+| | |
+|---|---|
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/approvals-dark.png"><img src="docs/screenshots/approvals-light.png" alt="Approvals: a delete and a memory the agent queued, waiting for the user, next to the audit log" width="100%"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/insights-dark.png"><img src="docs/screenshots/insights-light.png" alt="Insights: weekly trends, a streak, promises kept, and the reasons things slipped" width="100%"></picture> |
+| **Approvals.** Deletes, and every write after reading external content, wait here. | **Insights.** Trends and "why things slip", computed from the event history. |
+
+<sub>Made-up demo data. Regenerate with `python -m scripts.screenshots`.</sub>
+
 ## Security is a feature
 
 An agent that reads the web and can edit your data is a prompt-injection target. Keel assumes the model **cannot be
@@ -37,7 +48,9 @@ trusted once it has read external text** and enforces the rest in code:
 
 This is verified by a red-team suite that drives a *fully compromised* model through 7 external channels × 7 attack
 payloads and asserts nothing changes. It was mutation-checked: breaking any single defence makes it fail.
-Details and honest limitations: **[SECURITY.md](SECURITY.md)**.
+See it for yourself: `python -m scripts.security_demo` runs 12 attacks (injected deletes, memory poisoning, data in URLs,
+link choice, CSRF and DNS rebinding against the local API, eight simultaneous approvals...) against a throwaway instance and
+shows each one blocked. Details and honest limitations: **[SECURITY.md](SECURITY.md)**.
 
 ## Quick start
 
@@ -50,7 +63,7 @@ pip install -r requirements-dev.txt
 cp .env.example .env                                      # Windows: copy .env.example .env
 #   then edit .env: set ANTHROPIC_API_KEY (or GROQ_API_KEY) and AGENT_TIMEZONE
 
-pytest -q                                                 # ~440 tests, no key or network needed
+pytest -q                                                 # ~465 tests, no key or network needed
 
 (cd frontend && npm ci && npm run build)                  # build the dashboard once
 uvicorn app.api.main:create_app --factory                 # dashboard + API at http://127.0.0.1:8000
@@ -125,13 +138,14 @@ Scheduler ──▶ detectors (SQL) ──▶ notification budget ──▶ LLM 
 ```bash
 pytest -q                          # everything
 pytest tests/injection -q          # the prompt-injection red-team suite
+python -m scripts.security_demo    # 12 attacks, explained, each shown blocked
 ruff check .                       # lint
 python -m evals.run_routing        # how often does the model pick the right tool? (needs an API key)
 ```
 
 - Agent logic is tested against a scripted fake LLM, and all HTTP (Telegram, Brave, GitHub, web pages, calendar) against mocked transports, so CI needs no keys and no network.
-- `evals/` holds 160 routing cases (55 with argument checks, tagged for natural-language deadlines, ambiguity, multi-step, safety, Roman Urdu and regressions), scored per category and tag, with history in `evals/history.jsonl` and a generated [dashboard](evals/dashboard.html) of scores over time. [More](evals/README.md).
-- CI (GitHub Actions): lint, tests on Python 3.11 and 3.12, red-team suite, dashboard tests + build, real-Chromium end-to-end tests, dependency audit, secret scan, Docker build.
+- `evals/` holds 160 routing cases (55 with argument checks, tagged for natural-language deadlines, ambiguity, multi-step, safety, Roman Urdu and regressions), scored per category and tag, with history in `evals/history.jsonl` and a generated [dashboard](evals/dashboard.html) of scores over time, plus latency and token use per run. [More](evals/README.md).
+- CI (GitHub Actions): lint, tests on Python 3.11 and 3.12, red-team suite, dashboard tests + build, real-Chromium end-to-end tests, dependency audit, secret scan, static analysis (Bandit and Semgrep's python, security-audit and secrets rules), Docker build plus the deployment guide's backup and restore.
 
 ## Honest status
 

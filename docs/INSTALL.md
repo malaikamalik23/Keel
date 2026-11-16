@@ -54,7 +54,7 @@ On Groq's free tier also set `HISTORY_MESSAGE_LIMIT=12`. Every other option is d
 pytest -q
 ```
 
-About 440 tests should pass in a few minutes. They need no key and no network, so a failure here is an install problem,
+About 465 tests should pass in a few minutes. They need no key and no network, so a failure here is an install problem,
 not a provider problem.
 
 ## 4. Build the dashboard and start

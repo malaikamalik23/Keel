@@ -70,7 +70,8 @@ class Agent:
         messages = history + [user_msg]
         ctx = ToolContext(db=db, tz=self.tz, conversation_id=conv.id)
         # If untrusted content is still in the context window, stay in the stricter permission mode.
-        ctx.tainted = contains_untrusted(messages)
+        # A summary built from external content counts too: the page may be gone from the window, its instructions not.
+        ctx.tainted = contains_untrusted(messages) or bool(conv.summary_tainted)
         ctx.seen_urls = extract_urls(messages)
         context = build_context_pack(db, ctx.today(), message)
 
@@ -84,7 +85,7 @@ class Agent:
         for _ in range(self.settings.max_agent_steps):
             # Rebuilt each step: a load_tools call during this turn changes which tools and which catalog entries apply.
             system_prompt = build_system_prompt(
-                ctx.now(), summary=conv.summary, context=context, more_tools=not_loaded(ctx.active_groups, available) if lean else None
+                ctx.now(), summary=conv.summary, summary_untrusted=bool(conv.summary_tainted), context=context, more_tools=not_loaded(ctx.active_groups, available) if lean else None
             )
             response = self.llm.complete(
                 system=system_prompt,
@@ -202,6 +203,7 @@ class Agent:
             return
 
         excerpt = render_messages_for_summary(dropped)
+        external = contains_untrusted([{"content": r.content} for r in dropped])
         try:
             conv.summary = summarize_messages(self.llm, conv.summary, excerpt)
         except Exception:
@@ -209,6 +211,8 @@ class Agent:
             logger.exception("Conversation summarization failed for conversation %s; keeping prior summary", conv.id)
             return
         conv.summarized_through_id = dropped[-1].id
+        if external:
+            conv.summary_tainted = True  # sticky: the merged summary may still carry what the page said
         db.commit()
 
     def _persist(self, db: Session, conversation_id: int, msgs: list[dict]) -> None:

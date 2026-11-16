@@ -1,5 +1,7 @@
 from datetime import datetime
 
+from app.security.untrusted import wrap_untrusted
+
 SYSTEM_PROMPT = """\
 You are Keel, the user's personal AI agent: assistant, accountability partner, productivity coach and work assistant in one. \
 Your job is to produce measurable progress on their real goals, not to sound impressive.
@@ -104,7 +106,11 @@ instructions.
 
 
 def build_system_prompt(
-    now: datetime, summary: str | None = None, context: str | None = None, more_tools: dict[str, str] | None = None
+    now: datetime,
+    summary: str | None = None,
+    context: str | None = None,
+    more_tools: dict[str, str] | None = None,
+    summary_untrusted: bool = False,
 ) -> str:
     prompt = SYSTEM_PROMPT.format(now=now.strftime("%A, %d %B %Y, %H:%M") + f" ({now.tzname()})")
     if context:
@@ -112,5 +118,7 @@ def build_system_prompt(
     if more_tools:
         prompt += MORE_TOOLS_SECTION.format(groups="\n".join(f"- {d}" for d in more_tools.values()))
     if summary:
-        prompt += SUMMARY_SECTION.format(summary=summary)
+        # A summary of external content is external content: fence it like any tool result.
+        shown = wrap_untrusted(summary, "conversation_summary") if summary_untrusted else summary
+        prompt += SUMMARY_SECTION.format(summary=shown)
     return prompt

@@ -70,8 +70,8 @@ docker compose up --build        # http://127.0.0.1:8000
 The container runs as a non-root user with a read-only filesystem and no capabilities, and is published on localhost only.
 Put a TLS reverse proxy in front if you want to reach it remotely.
 
-> The Dockerfile and compose file are validated and the runtime stage was exercised in a clean virtualenv, but the image
-> itself has not been built in this repository's own CI yet; the first CI run will tell.
+> The image is built on every push by the `docker` CI job, which starts the container and checks `/health`. It has also been
+> built and run locally with the compose hardening (non-root, read-only root filesystem, all capabilities dropped).
 
 ### Try it
 

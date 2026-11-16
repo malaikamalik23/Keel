@@ -8,6 +8,7 @@ no time given), and for 55 of them what the call's **arguments** must be.
 ```bash
 python -m evals.run_routing --sleep 20         # all 160 cases (160 API calls; the pause keeps Groq's free tier under its TPM limit)
 python -m evals.run_routing --tag regression   # only cases that have failed in a real run before
+python -m evals.run_routing --rerun-errors results/<run>.json   # finish a run that hit a daily rate limit
 python -m evals.run_routing --category web     # one category
 python -m evals.run_routing --profile full     # every tool advertised (default: your TOOL_PROFILE, lean)
 python -m evals.run_routing --min-score 0.85   # non-zero exit if below (use in a scheduled job)

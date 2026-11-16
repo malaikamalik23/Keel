@@ -202,3 +202,30 @@ def test_report_counts_outcomes_tags_and_unsafe_calls(capsys):
     assert main(["--tag", "regression", "--no-save"], llm=RoutingStub(cases)) == 0
     out = capsys.readouterr().out
     assert "Routing:" in out and "Unsafe wrong calls" in out and "By tag:" in out and "regression" in out
+
+
+def test_rerun_errors_runs_only_the_cases_that_got_no_answer(tmp_path, capsys):
+    cases = load_cases()
+    saved = tmp_path / "run.json"
+    saved.write_text(json.dumps({"results": [{"id": cases[0]["id"], "outcome": "pass"}, {"id": cases[1]["id"], "outcome": "error", "error": "429"}]}))
+    assert main(["--rerun-errors", str(saved), "--no-save"], llm=RoutingStub(cases)) == 0
+    out = capsys.readouterr().out
+    assert "Routing eval: 1 cases" in out and cases[1]["id"] in out and cases[0]["id"] not in out
+
+
+def test_provider_errors_are_reported_separately_from_answered_cases(capsys):
+    class HalfDown(RoutingStub):
+        def complete(self, *, system, messages, tools):
+            if messages[0]["content"][0]["text"] == self.down:
+                raise RuntimeError("429 rate limit")
+            return super().complete(system=system, messages=messages, tools=tools)
+
+    cases = load_cases()[:4]
+    llm = HalfDown(cases)
+    llm.down = cases[3]["prompt"]
+    from unittest.mock import patch
+
+    with patch("evals.run_routing.load_cases", return_value=cases):
+        main(["--no-save"], llm=llm)
+    out = capsys.readouterr().out
+    assert "1 case(s) got no answer" in out and "100% of the 3 answered cases passed" in out

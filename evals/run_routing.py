@@ -35,9 +35,14 @@ def main(argv: list[str] | None = None, llm=None) -> int:
     ap.add_argument("--profile", choices=["lean", "full"], default=None, help="tool profile to evaluate (default: TOOL_PROFILE from .env)")
     ap.add_argument("--no-save", action="store_true")
     ap.add_argument("--sleep", type=float, default=0, metavar="SECONDS", help="pause between cases, for rate-limited free tiers")
+    ap.add_argument("--rerun-errors", type=Path, default=None, metavar="RESULTS_JSON",
+                    help="only re-run the cases that ended in an error (e.g. a provider's daily limit) in that saved run")
     args = ap.parse_args(argv)
 
     cases = load_cases(args.cases)
+    if args.rerun_errors:
+        errored = {r["id"] for r in json.loads(args.rerun_errors.read_text(encoding="utf-8"))["results"] if r.get("outcome") == "error" or r.get("error")}
+        cases = [c for c in cases if c["id"] in errored]
     if args.category:
         cases = [c for c in cases if c["category"] == args.category]
     if args.tag:
@@ -60,7 +65,13 @@ def main(argv: list[str] | None = None, llm=None) -> int:
     report = run_eval(llm, cases, settings.agent_model, profile=profile, pause_seconds=args.sleep, on_result=show)
 
     n = len(report.results)
+    errors = report.outcomes()["error"]
     print(f"\nScore: {report.score:.0%} ({sum(r.passed for r in report.results)}/{n})   right tool and right arguments")
+    if errors:
+        answered = n - errors
+        rate = sum(r.passed for r in report.results) / answered if answered else 0.0
+        print(f"   {errors} case(s) got no answer (provider error, e.g. a rate limit): {rate:.0%} of the {answered} answered cases passed."
+              " Re-run just those with --rerun-errors <this run's results file>.")
     print(f"Routing: {report.routing_score:.0%} ({sum(r.routing_ok for r in report.results)}/{n})   right tool, arguments not checked")
     print("Outcomes: " + ", ".join(f"{k} {v}" for k, v in report.outcomes().items()))
     unsafe = report.unsafe()
@@ -87,7 +98,8 @@ def main(argv: list[str] | None = None, llm=None) -> int:
         (args.out / f"{stamp}.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
         with (HERE / "history.jsonl").open("a", encoding="utf-8") as fh:
             fh.write(json.dumps({"at": stamp, "model": report.model, "profile": profile, "score": round(report.score, 3),
-                                 "routing": round(report.routing_score, 3), "unsafe": len(unsafe), "n": n}) + "\n")
+                                 "routing": round(report.routing_score, 3), "unsafe": len(unsafe), "errors": errors, "n": n}) + "\n")
+        print(f"\nSaved {args.out / f'{stamp}.json'}")
 
     return 1 if args.min_score is not None and report.score < args.min_score else 0
 

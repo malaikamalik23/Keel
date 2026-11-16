@@ -21,6 +21,12 @@ services:
       - keel-data:/app/data
       # - ./notes:/notes:ro          # your notes/papers for notes_search, mounted read-only
     restart: unless-stopped
+    # Keep at most 5 x 10 MB of container logs, so they can't fill the disk.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     # Defence in depth: the process needs no privileges and no writable filesystem outside the data volume.
     read_only: true
     tmpfs:

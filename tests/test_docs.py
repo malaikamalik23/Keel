@@ -19,7 +19,7 @@ def test_env_example_documents_every_setting():
 
 
 def test_required_project_files_exist():
-    for name in ("README.md", "SECURITY.md", "CONTRIBUTING.md", "Dockerfile", "docker-compose.yml", ".github/workflows/ci.yml", "docs/ARCHITECTURE.md", "docs/DEMO.md"):
+    for name in ("README.md", "SECURITY.md", "CONTRIBUTING.md", "Dockerfile", "docker-compose.yml", ".github/workflows/ci.yml", "docs/ARCHITECTURE.md", "docs/DEMO.md", "docs/INSTALL.md", "docs/DEPLOY.md"):
         assert (ROOT / name).is_file(), name
 
 

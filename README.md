@@ -68,7 +68,7 @@ docker compose up --build        # http://127.0.0.1:8000
 ```
 
 The container runs as a non-root user with a read-only filesystem and no capabilities, and is published on localhost only.
-Put a TLS reverse proxy in front if you want to reach it remotely.
+To run it on a server (API key, TLS, firewall, backups), follow **[docs/DEPLOY.md](docs/DEPLOY.md)**.
 
 > The image is built on every push by the `docker` CI job, which starts the container and checks `/health`. It has also been
 > built and run locally with the compose hardening (non-root, read-only root filesystem, all capabilities dropped).
@@ -85,7 +85,7 @@ you> delete the literature review task                   (queued: approve with /
 you> Remind me tomorrow at 9 to email my supervisor
 ```
 
-More in **[docs/DEMO.md](docs/DEMO.md)**.
+More in **[docs/DEMO.md](docs/DEMO.md)**. Step-by-step install and fixes for common problems: **[docs/INSTALL.md](docs/INSTALL.md)**.
 
 ## Configuration
 

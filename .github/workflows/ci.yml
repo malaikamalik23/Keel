@@ -101,3 +101,22 @@ jobs:
           docker run -d --name keel -p 8000:8000 keel:ci
           for i in $(seq 1 20); do curl -fsS http://127.0.0.1:8000/health && exit 0; sleep 2; done
           docker logs keel; exit 1
+      - name: The commands in docs/DEPLOY.md work (compose, API key, backup, restore)
+        env:
+          API_KEY: ci-only-not-a-secret
+        run: |
+          docker rm -f keel
+          docker compose up -d --build
+          for i in $(seq 1 20); do curl -fsS http://127.0.0.1:8000/health && break; sleep 2; done
+          curl -fsS http://127.0.0.1:8000/health
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/tasks)" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H "X-API-Key: $API_KEY" http://127.0.0.1:8000/api/tasks)" = 200
+          docker compose exec -T keel python -m scripts.backup
+          mkdir -p "$HOME/keel-backups" && docker compose cp keel:/app/data/backups/. "$HOME/keel-backups/"
+          backup="$(ls "$HOME/keel-backups" | grep '\.db$' | head -1)" && test -n "$backup"
+          docker compose stop keel
+          chmod 700 "$HOME/keel-backups"
+          docker compose run --rm --no-deps -T keel sh -c 'cat > /app/data/agent.db' < "$HOME/keel-backups/$backup"
+          docker compose up -d
+          for i in $(seq 1 20); do curl -fsS http://127.0.0.1:8000/health && break; sleep 2; done
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H "X-API-Key: $API_KEY" http://127.0.0.1:8000/api/tasks)" = 200 || { docker compose logs keel; exit 1; }

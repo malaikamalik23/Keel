@@ -18,6 +18,8 @@ RUN pip install -r requirements.txt
 
 COPY app ./app
 COPY migrations ./migrations
+# scripts/backup.py, so `docker compose exec keel python -m scripts.backup` works (docs/DEPLOY.md)
+COPY scripts ./scripts
 COPY alembic.ini ./
 COPY --from=web /web/dist ./frontend/dist
 

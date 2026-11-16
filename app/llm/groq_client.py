@@ -70,6 +70,21 @@ def _response_from_groq(message, finish_reason: str) -> LLMResponse:
     return LLMResponse(content=blocks, stop_reason=_FINISH_REASON_MAP.get(finish_reason, finish_reason))
 
 
+_RETRY_NOTE = (
+    "[Automatic note from Keel, not written by the user] Your last tool call was rejected before it ran: {reason} "
+    "Call the tool again with arguments that match its schema, or answer in text if you cannot."
+)
+
+
+def _rejected_tool_call(exc: Exception) -> str | None:
+    """The validator's message if Groq refused the request because a generated tool call did not match its schema."""
+    body = getattr(exc, "body", None)
+    err = body.get("error", body) if isinstance(body, dict) else None
+    if getattr(exc, "status_code", None) != 400 or not isinstance(err, dict) or err.get("code") != "tool_use_failed":
+        return None
+    return str(err.get("message") or "the arguments did not match the tool's schema.")[:300]
+
+
 class GroqClient:
     def __init__(self, api_key: str, model: str, max_tokens: int = 1500):
         self._client = groq.Groq(api_key=api_key, max_retries=4)  # honours Retry-After on 429s (free tier is token-per-minute limited)
@@ -87,7 +102,16 @@ class GroqClient:
         try:
             resp = self._client.chat.completions.create(**kwargs)
         except groq.APIError as exc:
-            raise LLMError(f"LLM request failed: {exc}") from exc
+            reason = _rejected_tool_call(exc)
+            if reason is None:
+                raise LLMError(f"LLM request failed: {exc}") from exc
+            # Groq validates tool arguments against the schema server-side and fails the whole request when the model
+            # gets one wrong. Give the model one chance to correct itself instead of ending the user's turn with an error.
+            retry = {**kwargs, "messages": [*kwargs["messages"], {"role": "user", "content": _RETRY_NOTE.format(reason=reason)}]}
+            try:
+                resp = self._client.chat.completions.create(**retry)
+            except groq.APIError as exc2:
+                raise LLMError(f"LLM request failed: {exc2}") from exc2
 
         choice = resp.choices[0]
         return _response_from_groq(choice.message, choice.finish_reason)

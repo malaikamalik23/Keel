@@ -9,10 +9,10 @@ Keel has **43 tools**. In the default `TOOL_PROFILE=lean`, each request carries 
 | Tool | Group | What it's for |
 |---|---|---|
 | `get_current_datetime` | tasks | Get the user's current local date, time and weekday. Use before reasoning about deadlines. |
-| `list_tasks` | tasks | List the user's tasks, soonest deadline first. Use to answer 'what should I work on', 'what's due', or before planning. Overdue tasks are flagged; postponement_count shows how often a task has slipped. |
+| `list_tasks` | tasks | List the user's tasks, soonest deadline first. Use to answer 'what should I work on', or 'what's due'. Overdue tasks are flagged; postponement_count shows how often a task has slipped. |
 | `list_goals` | goals | List the user's goals with their milestones. Use to answer 'what am I working towards' or before decomposing a new ambition. |
 | `list_projects` | goals | List the user's projects. Use before planning or when the user asks about a specific piece of work. |
-| `list_commitments` | commitments | List the user's commitments, soonest deadline first. Use for 'what did I promise', accountability check-ins, or before planning. |
+| `list_commitments` | commitments | List the user's commitments, soonest deadline first. Use for 'what did I promise', 'my <thing> deadline', or accountability check-ins. |
 | `search_memories` | memory | Search stored memories by keyword, or list recent ones. Use before answering questions about the user's preferences, background, or working style. |
 | `get_daily_plan` | plan | Show the plan for a day with each item's status. Use for 'what's on my plate today' or evening reviews. |
 | `list_work_sessions` | plan | List logged work sessions and total minutes over the last N days. |
@@ -45,11 +45,11 @@ Keel has **43 tools**. In the default `TOOL_PROFILE=lean`, each request carries 
 | `update_project` | goals | Change a project's name, description, purpose, status, priority or deadline. |
 | `propose_commitment` | commitments | Record something the user said they'll do, e.g. 'I'll finish this tomorrow' or 'I need to complete this by Friday'. Recognize commitment language proactively. If the phrasing is unambiguous, set confirmed=true; otherwise leave it false and ask the user to confirm next, then call confirm_commitment. |
 | `confirm_commitment` | commitments | Move a 'proposed' commitment to 'open' after the user confirms it. Call after the user says yes to a commitment you proposed. |
-| `update_commitment` | commitments | Change a commitment's text, deadline, importance, or drop it. Pushing the deadline later is recorded as a postponement. |
+| `update_commitment` | commitments | Change a commitment's text, deadline, importance, or drop it. Use for 'move my <thing> deadline': deadlines belong to commitments (tasks have due dates, see update_task). Pushing the deadline later is recorded as a postponement. |
 | `complete_commitment` | commitments | Mark a commitment as fulfilled. Only call when the user says they did it. |
 | `save_memory` | memory | Save one durable, genuinely useful fact about the user: a preference, personal context, or other fact worth remembering across conversations. Do not save trivia or one-off details. Save proactively when the user reveals something like this in conversation, without waiting to be asked. |
 | `update_memory` | memory | Edit an existing memory's content, kind, or importance. |
-| `create_daily_plan` | plan | Build the plan for a day. Code picks and orders tasks by urgency/priority and guarantees the plan fits the available time (with a buffer) and has at most 3 major priorities; anything left out comes back in 'deferred' with a reason. Use for 'plan my day'. If you don't know how much time the user has, ask once first. Calling it again re-plans without losing finished items. |
+| `create_daily_plan` | plan | Build the plan for a day. Code picks and orders tasks by urgency/priority and guarantees the plan fits the available time (with a buffer) and has at most 3 major priorities; anything left out comes back in 'deferred' with a reason. Use for 'plan my day'; call it directly, it reads the open tasks itself, so don't list tasks first. If you don't know how much time the user has, ask once first. Calling it again re-plans without losing finished items. |
 | `update_plan_item` | plan | Mark a plan item done, skipped or back to planned. When skipping, pass the user's reason. (complete_task already checks items off.) |
 | `log_work_session` | plan | Record time the user actually spent working ('I did 45 minutes on the FYP intro'). Link the task and/or project when known. |
 | `create_reminder` | reminders | Schedule a one-off reminder message for a specific future time ('remind me tomorrow at 9 to email Dr. Khan'). It is delivered through the user's notification channel. |

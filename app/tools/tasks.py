@@ -214,7 +214,7 @@ def register(registry: ToolRegistry) -> None:
             name="list_tasks",
             description=(
                 "List the user's tasks, soonest deadline first. Use to answer 'what should I work on', "
-                "'what's due', or before planning. Overdue tasks are flagged; postponement_count shows how often "
+                "or 'what's due'. Overdue tasks are flagged; postponement_count shows how often "
                 "a task has slipped."
             ),
             permission=Permission.READ,

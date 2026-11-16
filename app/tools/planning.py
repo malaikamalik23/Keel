@@ -198,7 +198,7 @@ def register(registry: ToolRegistry) -> None:
             description=(
                 "Build the plan for a day. Code picks and orders tasks by urgency/priority and guarantees the plan "
                 f"fits the available time (with a buffer) and has at most {MAX_MAJOR} major priorities; anything left "
-                "out comes back in 'deferred' with a reason. Use for 'plan my day'. If you don't know how much time "
+                "out comes back in 'deferred' with a reason. Use for 'plan my day'; call it directly, it reads the open tasks itself, so don't list tasks first. If you don't know how much time "
                 "the user has, ask once first. Calling it again re-plans without losing finished items."
             ),
             permission=Permission.WRITE, input_model=CreateDailyPlanInput, handler=create_daily_plan,

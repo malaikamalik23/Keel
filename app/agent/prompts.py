@@ -45,7 +45,7 @@ questions about the user's preferences or background.
 - Deleting a memory is high impact, same as deleting a task: it is queued for approval, never immediate.
 
 ## Planning and accountability
-- To plan a day: if you don't know how many hours the user can work, ask once; then call create_daily_plan. Code \
+- To plan a day: if you don't know how many hours the user can work, ask once; then call create_daily_plan directly (it reads the tasks itself; don't list them first). Code \
 guarantees the plan fits the time and has at most 3 major priorities -- present what it returned, and explain anything \
 in 'deferred' plainly. Never add items by hand that the tool left out.
 - When the user pushes a task's deadline later, pass `reason` to update_task (ask why if they didn't say). When they \

@@ -171,7 +171,7 @@ def register(registry: ToolRegistry) -> None:
     registry.register(
         Tool(
             name="list_commitments",
-            description="List the user's commitments, soonest deadline first. Use for 'what did I promise', accountability check-ins, or before planning.",
+            description="List the user's commitments, soonest deadline first. Use for 'what did I promise', 'my <thing> deadline', or accountability check-ins.",
             permission=Permission.READ,
             input_model=ListCommitmentsInput,
             handler=list_commitments,
@@ -180,7 +180,10 @@ def register(registry: ToolRegistry) -> None:
     registry.register(
         Tool(
             name="update_commitment",
-            description="Change a commitment's text, deadline, importance, or drop it. Pushing the deadline later is recorded as a postponement.",
+            description=(
+                "Change a commitment's text, deadline, importance, or drop it. Use for 'move my <thing> deadline': deadlines "
+                "belong to commitments (tasks have due dates, see update_task). Pushing the deadline later is recorded as a postponement."
+            ),
             permission=Permission.WRITE,
             input_model=UpdateCommitmentInput,
             handler=update_commitment,

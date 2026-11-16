@@ -130,6 +130,10 @@ old memory handling or the pinning switched off, they fail. A test that can't fa
 - **The fetcher is not a firewall.** DNS pinning closes rebinding for `web_fetch`, which is the only component that fetches
   URLs the model chooses. Other integrations (GitHub, Brave, Telegram, your calendar URL) go to fixed hosts you configured.
   For defence in depth on a server, still block private ranges with an egress firewall or network policy.
+- **Link choice is a small leak.** In a tainted conversation `web_fetch` may open, without approval, any URL that a
+  page or search result showed it. A page listing ten links can therefore learn one digit from *which* link an
+  injected model opens, and repeat that. The model can't put your data *in* a URL (that needs approval), so this is slow
+  and limited by `MAX_AGENT_STEPS`, but it is not zero. `WEB_ALLOWED_DOMAINS` closes it.
 - **Approved ≠ safe.** The gate puts a human in the loop; it can't judge the action for you. Read what you approve,
   especially approval requests that appear right after reading external content.
 - **Memory poisoning needs your approval, but a tricked user is still a risk.** In a tainted session `save_memory` is

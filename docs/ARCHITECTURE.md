@@ -159,8 +159,8 @@ daily budget. Nudges draw from their own pool so they can never crowd out the ch
 ## 8. Research tools and the injection defences
 
 `web_fetch`, `web_search`, `github_*`, `notes_search`, `read_note` and `read_calendar` all return text written by third parties, so
-they are `returns_untrusted`: output is sanitised, fenced in `<untrusted_content>`, and taints the session (WRITE tools then need approval).
-`web_fetch` additionally has an SSRF-hardened fetcher and an exfiltration `taint_gate`. The full threat model, the 12 enforced controls, how
+they are `returns_untrusted`: output is sanitised, fenced in `<untrusted_content>`, and taints the conversation (WRITE tools then need approval until a new chat).
+`web_fetch` additionally has an SSRF-hardened fetcher and an exfiltration `taint_gate`. The full threat model, the 13 enforced controls, how
 they are tested (the red-team suite, mutation-checked) and the known limitations are in **[SECURITY.md](../SECURITY.md)**.
 
 ## 9. Quality gates
@@ -187,10 +187,13 @@ docs/             ARCHITECTURE.md · TOOLS.md (generated) · DEMO.md
 
 - **Single user, single process.** One API key, in-process scheduler and rate limiter. Multi-user would need accounts, per-user data
   isolation, and the scheduler moved to a worker.
-- **Coarse, sticky taint** (see SECURITY.md). A finer-grained scheme (track which values came from where) would reduce approval prompts.
+- **Coarse, sticky taint**: it lasts for the rest of the conversation (see SECURITY.md). A finer-grained scheme (track which values came from where) would reduce approval prompts.
 - **Keyword memory relevance.** Fine at this scale; embeddings are the upgrade if memories grow into the thousands.
 - **Notes search is SQLite-only** (FTS5). A Postgres deployment would need `tsvector` instead.
 - **Calendar is read-only and doesn't yet reduce planning capacity automatically**; `read_calendar` returns `busy_minutes` and the agent is
   told to subtract them.
 - **Browser coverage is narrow**: two Chromium end-to-end tests (main flow, crash recovery) plus jsdom render tests; no Firefox/Safari runs.
-- **DNS rebinding** window in the fetcher (mitigate with an egress firewall).
+- **The fetcher is not a firewall.** `web_fetch` pins DNS (the address that was checked is the address connected to), which closes
+  DNS rebinding, but on a server you should still block private ranges with an egress firewall or network policy.
+- **Links can leak a little.** In a tainted conversation `web_fetch` may open any URL a page showed it, so *which* link an injected
+  model opens can signal a few bits to that page's author (see SECURITY.md).

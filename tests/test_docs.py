@@ -27,3 +27,16 @@ def test_dashboard_declares_a_favicon_so_browsers_do_not_log_a_404():
     html = (ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
     assert 'rel="icon"' in html and "/favicon.svg" in html
     assert (ROOT / "frontend" / "public" / "favicon.svg").is_file()
+
+
+def test_architecture_doc_agrees_with_security_doc():
+    """ARCHITECTURE.md once kept listing a DNS-rebinding window after pinning had closed it. Keep the two in step."""
+    import re
+
+    security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+    arch = (ROOT / "docs" / "ARCHITECTURE.md").read_text(encoding="utf-8")
+    enforced = security.split("## What is enforced")[1].split("## How this is tested")[0]
+    controls = len(re.findall(r"^\d+\. \*\*", enforced, flags=re.MULTILINE))
+    assert controls >= 13
+    assert f"the {controls} enforced controls" in arch
+    assert "rebinding** window" not in arch and "DNS pinning" in security

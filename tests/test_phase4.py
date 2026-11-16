@@ -436,3 +436,33 @@ def test_context_pack_shows_recent_proactive_message_but_not_stale_or_reminders(
         db.query(Notification).update({"sent_at": utcnow() - timedelta(minutes=5), "kind": "reminder"})
         db.commit()
         assert "proactive" not in build_context_pack(db, date.today(), "")
+
+
+def test_reminder_time_schema_accepts_what_models_send():
+    """Groq validates tool arguments against the advertised JSON Schema before the app sees them. A "date-time" format
+    made it reject '2026-11-10T09:00' (no seconds, no offset), which is exactly what the field description asks for."""
+    from evals.common import full_registry
+
+    def formats(node):
+        if isinstance(node, dict):
+            yield from ([node["format"]] if "format" in node else [])
+            for v in node.values():
+                yield from formats(v)
+        elif isinstance(node, list):
+            for v in node:
+                yield from formats(v)
+
+    for spec in full_registry().specs():
+        assert "date-time" not in set(formats(spec["input_schema"])), spec["name"]
+    remind_at = next(s for s in full_registry().specs() if s["name"] == "create_reminder")["input_schema"]["properties"]["remind_at"]
+    assert remind_at["type"] == "string" and "2026-11-08T09:00" in remind_at["description"]
+
+    c, _ = make()
+    with c.session_factory() as db:
+        ctx = ToolContext(db=db, tz=TZ)
+        for value in ["2099-01-01T09:00", "2099-01-01T09:00:00", "2099-01-01T09:00:00+05:00", "2099-01-01T04:00:00Z"]:
+            out = c.executor.run(ctx, "create_reminder", {"text": f"at {value}", "remind_at": value})
+            assert out.status == "ok", (value, out.result)
+            assert out.result["reminder"]["remind_at"] == "2099-01-01T09:00+05:00", value
+        bad = c.executor.run(ctx, "create_reminder", {"text": "x", "remind_at": "tomorrow 9am"})
+        assert bad.status == "error"  # still validated, just not by the provider

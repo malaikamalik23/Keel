@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, WithJsonSchema
 from sqlalchemy import select
 
 from app.db.models import Reminder, utcnow
@@ -21,7 +21,9 @@ def _reminder_dict(r: Reminder, ctx: ToolContext) -> dict:
 
 class CreateReminderInput(BaseModel):
     text: str = Field(min_length=1, max_length=300, description="What to remind the user about, phrased as the message they will read.")
-    remind_at: datetime = Field(description="When to send it, as an ISO-8601 local date-time in the user's timezone, e.g. 2026-11-08T09:00. Resolve 'tomorrow morning' against the current time.")
+    # Advertised as a plain string, not JSON Schema "date-time": that format demands seconds and a UTC offset, and
+    # providers that validate tool calls server-side (Groq) rejected the local '2026-11-08T09:00' this description asks for.
+    remind_at: Annotated[datetime, WithJsonSchema({"type": "string"})] = Field(description="When to send it, as an ISO-8601 local date-time in the user's timezone, e.g. 2026-11-08T09:00. Resolve 'tomorrow morning' against the current time.")
     linked_type: Literal["task", "commitment", "project", "goal"] | None = None
     linked_id: int | None = None
 

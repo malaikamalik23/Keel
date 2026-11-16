@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -32,6 +32,9 @@ def full_registry():
     )
 
 
+OUTCOMES = ("pass", "missed", "wrong_tool", "bad_args", "error")
+
+
 @dataclass
 class CaseResult:
     id: str
@@ -40,9 +43,15 @@ class CaseResult:
     expected: list[str]
     allow_none: bool
     got: str | None  # first tool the model called, or None if it answered in text
-    passed: bool
+    passed: bool  # right tool (or no tool where allowed) AND its arguments match the case's "args" checks
     error: str | None = None
     loaded_groups: list[str] = field(default_factory=list)  # groups requested when `got` is load_tools
+    routing_ok: bool = False  # right tool, ignoring arguments (comparable with runs before argument checks existed)
+    outcome: str = "pass"  # one of OUTCOMES
+    arg_problems: list[str] = field(default_factory=list)
+    unsafe: bool = False  # called a tool that writes or deletes when that tool was not acceptable
+    tags: list[str] = field(default_factory=list)
+    got_input: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -54,12 +63,29 @@ class EvalReport:
     def score(self) -> float:
         return sum(r.passed for r in self.results) / len(self.results) if self.results else 0.0
 
+    @property
+    def routing_score(self) -> float:
+        return sum(r.routing_ok for r in self.results) / len(self.results) if self.results else 0.0
+
+    def outcomes(self) -> dict[str, int]:
+        return {o: sum(r.outcome == o for r in self.results) for o in OUTCOMES}
+
+    def unsafe(self) -> list[CaseResult]:
+        return [r for r in self.results if r.unsafe]
+
     def by_category(self) -> dict[str, tuple[int, int]]:
+        return self._group(lambda r: [r.category])
+
+    def by_tag(self) -> dict[str, tuple[int, int]]:
+        return self._group(lambda r: r.tags)
+
+    def _group(self, keys) -> dict[str, tuple[int, int]]:
         out: dict[str, list[int]] = {}
         for r in self.results:
-            d = out.setdefault(r.category, [0, 0])
-            d[0] += r.passed
-            d[1] += 1
+            for k in keys(r):
+                d = out.setdefault(k, [0, 0])
+                d[0] += r.passed
+                d[1] += 1
         return {k: (v[0], v[1]) for k, v in out.items()}
 
     def failures(self) -> list[CaseResult]:
@@ -76,6 +102,78 @@ def judge(case: dict, got: str | None, loaded_groups: list[str] | None = None) -
     return (got in expect) if got is not None else allow_none
 
 
+def _as_local_minute(value) -> str | None:
+    """'2026-11-10T09:00', '...T09:00:00', '...+05:00' or '...Z' -> 'YYYY-MM-DDTHH:MM' in the eval's timezone."""
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(FIXED_NOW.tzinfo)
+    return dt.strftime("%Y-%m-%dT%H:%M")
+
+
+def _as_date(value) -> str | None:
+    try:
+        return date.fromisoformat(str(value)[:10]).isoformat()
+    except ValueError:
+        return None
+
+
+def check_args(spec: dict, given: dict) -> list[str]:
+    """Compare a tool call's arguments with a case's expectations. Matchers (per field):
+    a plain value (strings compared case-insensitively) · {"any": [...]} · {"contains": "text"} or {"contains": [...]}
+    (any one, case-insensitive) · {"date": "YYYY-MM-DD" or [...]} · {"datetime": "YYYY-MM-DDTHH:MM" or [...]} (local
+    time; offsets converted) · {"min": n, "max": n} · {"absent": true} (must be missing or null)."""
+    problems = []
+    for name, rule in spec.items():
+        value = given.get(name)
+        if isinstance(rule, dict) and rule.get("absent"):
+            if value not in (None, "", []):
+                problems.append(f"{name} should be unset, got {value!r}")
+            continue
+        if value in (None, ""):
+            problems.append(f"{name} missing")
+            continue
+        if not isinstance(rule, dict):
+            ok = str(value).strip().lower() == rule.strip().lower() if isinstance(rule, str) else value == rule
+        elif "any" in rule:
+            ok = any((str(value).lower() == v.lower()) if isinstance(v, str) else value == v for v in rule["any"])
+        elif "contains" in rule:
+            needles = rule["contains"] if isinstance(rule["contains"], list) else [rule["contains"]]
+            ok = any(n.lower() in str(value).lower() for n in needles)
+        elif "date" in rule:
+            want = rule["date"] if isinstance(rule["date"], list) else [rule["date"]]
+            ok = _as_date(value) in want
+        elif "datetime" in rule:
+            want = rule["datetime"] if isinstance(rule["datetime"], list) else [rule["datetime"]]
+            ok = _as_local_minute(value) in want
+        elif "min" in rule or "max" in rule:
+            try:
+                ok = rule.get("min", float("-inf")) <= float(value) <= rule.get("max", float("inf"))
+            except (TypeError, ValueError):
+                ok = False
+        else:
+            raise ValueError(f"unknown matcher for {name}: {rule}")
+        if not ok:
+            problems.append(f"{name}={value!r} does not match {rule}")
+    return problems
+
+
+def score_case(case: dict, got: str | None, got_input: dict, loaded: list[str], error: str | None, permissions: dict[str, str]) -> dict:
+    """Decide one case's outcome. Argument checks apply only when the first call is a tool the case has 'args' for."""
+    routing_ok = error is None and judge(case, got, loaded)
+    problems = check_args(case["args"][got], got_input) if routing_ok and got in case.get("args", {}) else []
+    if error is not None:
+        outcome = "error"
+    elif not routing_ok:
+        outcome = "missed" if got is None else "wrong_tool"
+    else:
+        outcome = "bad_args" if problems else "pass"
+    unsafe = outcome == "wrong_tool" and permissions.get(got or "", "read") != "read"
+    return {"routing_ok": routing_ok, "passed": outcome == "pass", "outcome": outcome, "arg_problems": problems, "unsafe": unsafe}
+
+
 def run_eval(
     llm: LLMClient, cases: list[dict], model: str = "?", on_result=None, profile: str = "lean", pause_seconds: float = 0, sleep=None
 ) -> EvalReport:
@@ -83,11 +181,12 @@ def run_eval(
     pause_seconds waits between cases (not before the first), for token-per-minute limited free tiers."""
     registry = full_registry()
     available = registry.available_groups()
+    permissions = {t.name: t.permission.value for t in registry.all()}
     report = EvalReport(model=model)
     for n, case in enumerate(cases):
         if n and pause_seconds > 0:
             (sleep or time.sleep)(pause_seconds)
-        got, error, loaded = None, None, []
+        got, error, loaded, got_input = None, None, [], {}
         try:
             if profile == "lean":
                 active = select_groups(case["prompt"], set(), available)
@@ -97,12 +196,17 @@ def run_eval(
             resp = llm.complete(system=system, messages=[{"role": "user", "content": [{"type": "text", "text": case["prompt"]}]}], tools=tools)
             uses = resp.tool_uses if resp.stop_reason == "tool_use" else []
             got = uses[0]["name"] if uses else None
+            got_input = dict(uses[0].get("input") or {}) if uses else {}
             if got == LOAD_TOOLS:
-                loaded = list(uses[0]["input"].get("groups", []))
+                loaded = list(got_input.get("groups", []))
         except Exception as exc:  # noqa: BLE001 - a provider hiccup is a failed case, not a crashed run
             error = f"{type(exc).__name__}: {exc}"[:200]
-        passed = error is None and judge(case, got, loaded)
-        res = CaseResult(case["id"], case["category"], case["prompt"], case.get("expect", []), case.get("allow_none", False), got, passed, error, loaded)
+        verdict = score_case(case, got, got_input, loaded, error, permissions)
+        res = CaseResult(
+            case["id"], case["category"], case["prompt"], case.get("expect", []), case.get("allow_none", False), got,
+            verdict["passed"], error, loaded, verdict["routing_ok"], verdict["outcome"], verdict["arg_problems"],
+            verdict["unsafe"], list(case.get("tags", [])), got_input,
+        )
         report.results.append(res)
         if on_result:
             on_result(res)

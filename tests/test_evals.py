@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from evals.common import full_registry, judge, load_cases, run_eval
+from evals.common import check_args, full_registry, judge, load_cases, run_eval, score_case
 from evals.run_routing import main
 from tests.fakes import text, tool_call
 
@@ -18,12 +18,30 @@ class RoutingStub:
         case = self.by_prompt[messages[0]["content"][0]["text"]]
         if case["id"] in self.wrong:
             return tool_call("delete_memory", {"memory_id": 1})
-        return tool_call(case["expect"][0], {}) if case["expect"] else text("ok")
+        if not case["expect"]:
+            return text("ok")
+        tool = case["expect"][0]
+        return tool_call(tool, satisfying(case.get("args", {}).get(tool, {})))
+
+
+def satisfying(spec: dict) -> dict:
+    """Arguments that meet a case's argument checks (what a perfect model would send)."""
+    out = {}
+    for name, rule in spec.items():
+        if not isinstance(rule, dict):
+            out[name] = rule
+        elif rule.get("absent"):
+            continue
+        else:
+            key = next(k for k in ("any", "contains", "date", "datetime", "min", "max") if k in rule)
+            value = rule[key]
+            out[name] = value[0] if isinstance(value, list) else value
+    return out
 
 
 def test_dataset_is_well_formed_and_every_expected_tool_exists():
     cases, tools = load_cases(), {t.name for t in full_registry().all()}
-    assert len(cases) >= 40
+    assert len(cases) >= 150
     assert len({c["id"] for c in cases}) == len(cases) and len({c["prompt"] for c in cases}) == len(cases)
     for c in cases:
         assert c["prompt"].strip() and c["category"] and isinstance(c["expect"], list)
@@ -110,3 +128,77 @@ def test_pause_between_cases_is_applied_between_but_not_before_the_first(monkeyp
     from evals.run_routing import main
     assert main(["--limit", "2", "--sleep", "5", "--no-save"], llm=RoutingStub(cases)) == 0
     assert waits == [20, 20, 5]
+
+
+MATCHERS = {"any", "contains", "date", "datetime", "min", "max", "absent"}
+TAGS = {"regression", "deadline-nl", "ambiguous", "multi-step", "safety", "urdu", "ask-first"}
+
+
+def test_argument_checks_name_real_fields_of_an_acceptable_tool_and_use_known_matchers():
+    from datetime import date, datetime
+
+    tools = {t.name: t for t in full_registry().all()}
+    for c in load_cases():
+        assert set(c.get("tags", [])) <= TAGS, (c["id"], set(c["tags"]) - TAGS)
+        for tool, spec in c.get("args", {}).items():
+            assert tool in c["expect"], f"{c['id']}: args for {tool}, which is not an acceptable tool"
+            fields = tools[tool].input_model.model_json_schema()["properties"]
+            for name, rule in spec.items():
+                assert name in fields, f"{c['id']}: {tool} has no argument {name!r}"
+                if isinstance(rule, dict):
+                    kinds = {"range" if k in ("min", "max") else k for k in rule}  # min/max together are one range matcher
+                    assert set(rule) <= MATCHERS and len(kinds) == 1, (c["id"], rule)
+                    for d in [rule["date"]] if isinstance(rule.get("date"), str) else rule.get("date", []):
+                        date.fromisoformat(d)
+                    for dt in [rule["datetime"]] if isinstance(rule.get("datetime"), str) else rule.get("datetime", []):
+                        datetime.fromisoformat(dt)
+
+
+def test_dataset_covers_the_hard_cases_the_review_asked_for():
+    cases = load_cases()
+    tags = [t for c in cases for t in c.get("tags", [])]
+    assert tags.count("deadline-nl") >= 25 and tags.count("multi-step") >= 6 and tags.count("ambiguous") >= 5
+    assert tags.count("safety") >= 4 and tags.count("urdu") >= 6
+    assert sum("args" in c for c in cases) >= 50
+    # every case that has failed in a real run stays in the set as a regression case
+    regression = {c["id"] for c in cases if "regression" in c.get("tags", [])}
+    assert {"remind-create", "plan-create", "plan-get", "commit-move", "gh-repos", "commit-complete"} <= regression
+
+
+def test_check_args_matchers():
+    spec = {"remind_at": {"datetime": "2026-11-10T09:00"}, "text": {"contains": ["khan", "hod"]}, "minutes": {"min": 60, "max": 60},
+            "priority": "High", "status": {"any": ["open", "todo"]}, "due": {"date": ["2026-11-13", "2026-11-20"]}, "owner": {"absent": True}}
+    good = {"remind_at": "2026-11-10T09:00:00", "text": "Email Dr. KHAN", "minutes": 60, "priority": "high", "status": "todo", "due": "2026-11-20"}
+    assert check_args(spec, good) == []
+    assert check_args(spec, {**good, "remind_at": "2026-11-10T04:00:00Z"}) == []  # same instant, given in UTC
+    assert check_args(spec, {**good, "remind_at": "2026-11-10T09:00+05:00"}) == []
+    bad = check_args(spec, {**good, "remind_at": "2026-11-11T09:00", "text": "call mom", "minutes": 45, "owner": "me", "due": "nope"})
+    assert len(bad) == 5 and any("remind_at" in b for b in bad) and any("owner should be unset" in b for b in bad)
+    assert check_args({"minutes": 90}, {}) == ["minutes missing"]
+
+
+def test_outcomes_separate_missed_wrong_bad_args_and_flag_unsafe_writes():
+    perms = {"create_reminder": "write", "list_reminders": "read", "delete_task": "high_impact", "list_tasks": "read"}
+    case = {"expect": ["create_reminder"], "args": {"create_reminder": {"remind_at": {"datetime": "2026-11-10T09:00"}}}}
+    ok = score_case(case, "create_reminder", {"remind_at": "2026-11-10T09:00"}, [], None, perms)
+    assert ok["outcome"] == "pass" and ok["passed"] and ok["routing_ok"]
+    wrong_time = score_case(case, "create_reminder", {"remind_at": "2026-11-10T21:00"}, [], None, perms)
+    assert wrong_time["outcome"] == "bad_args" and wrong_time["routing_ok"] and not wrong_time["passed"]
+    assert score_case(case, None, {}, [], None, perms)["outcome"] == "missed"
+    read_detour = score_case(case, "list_reminders", {}, [], None, perms)
+    assert read_detour["outcome"] == "wrong_tool" and not read_detour["unsafe"]  # wrong, but harmless
+    asked_advice = {"expect": ["list_tasks"], "allow_none": True}
+    deleted = score_case(asked_advice, "delete_task", {"task_id": 1}, [], None, perms)
+    assert deleted["outcome"] == "wrong_tool" and deleted["unsafe"]
+    assert score_case(case, None, {}, [], "RuntimeError: 503", perms)["outcome"] == "error"
+
+
+def test_report_counts_outcomes_tags_and_unsafe_calls(capsys):
+    cases = load_cases()
+    report = run_eval(RoutingStub(cases, wrong={"task-delete-unsure", "chat-hi"}), cases, "stub")
+    assert report.outcomes()["wrong_tool"] == 2 and {r.id for r in report.unsafe()} == {"task-delete-unsure", "chat-hi"}
+    assert report.routing_score == report.score == pytest.approx(1 - 2 / len(cases))
+    assert report.by_tag()["safety"][0] == report.by_tag()["safety"][1] - 1
+    assert main(["--tag", "regression", "--no-save"], llm=RoutingStub(cases)) == 0
+    out = capsys.readouterr().out
+    assert "Routing:" in out and "Unsafe wrong calls" in out and "By tag:" in out and "regression" in out

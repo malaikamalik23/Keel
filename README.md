@@ -131,14 +131,20 @@ python -m evals.run_routing        # how often does the model pick the right too
 
 - Agent logic is tested against a scripted fake LLM, and all HTTP (Telegram, Brave, GitHub, web pages, calendar) against mocked transports, so CI needs no keys and no network.
 - `evals/` holds 57 routing cases scored per category, with history tracked in `evals/history.jsonl`. [More](evals/README.md).
-- CI (GitHub Actions): lint, tests on Python 3.11 and 3.12, red-team suite, dashboard tests + build, dependency audit, secret scan, Docker build.
+- CI (GitHub Actions): lint, tests on Python 3.11 and 3.12, red-team suite, dashboard tests + build, real-Chromium end-to-end tests, dependency audit, secret scan, Docker build.
 
 ## Honest status
 
-- **First real-model run: Groq `openai/gpt-oss-120b`.** Task creation, daily planning and the approval gate worked. The lean profile's keyword selection covered 72% of fresh phrasings before I added patterns for the misses, and the remainder is handled by `load_tools`; real-model routing accuracy has not been measured yet (`python -m evals.run_routing`).
+- **Real-model routing, measured: 52/57 (91%) on Groq `openai/gpt-oss-120b`** (lean profile, all 57 eval cases, Nov 2026). Two of the
+  misses were then fixed: reminders (the tool schema demanded a stricter time format than Groq would accept) and "plan my day"
+  (the model listed tasks first). Still weak: commitments phrased like tasks ("move my poster deadline") and, in some runs, "what's my
+  plan" answered without calling the tool. Scores move by a case or two between runs. Re-measure with
+  `python -m evals.run_routing --sleep 20` (the pause keeps Groq's free tier under its tokens-per-minute limit).
 
-- **Tested with mocks, not yet against every live service.** The Telegram, Brave Search and GitHub integrations are verified against mocked
-  HTTP; try them once with your own keys (see [docs/DEMO.md](docs/DEMO.md)) and please open an issue if a real API behaves differently.
+- **Live services: some verified, some only mocked.** GitHub (including your private repos when a token is set), the iCal calendar and
+  the notes folder have been checked against the real services with `python -m scripts.smoke_integrations` (one read-only call each,
+  never prints keys). Telegram and Brave Search are so far verified only against mocked HTTP; try them with your own keys
+  (see [docs/DEMO.md](docs/DEMO.md)) and please open an issue if a real API behaves differently.
 - The dashboard is type-checked, has 16 jsdom tests (every tab, empty states, a malformed response, the approval flow, skip-cancel) and 2 **real-Chromium end-to-end tests** (`tests/e2e`, Playwright; CI job `e2e`) that drive the real server through chat, plan, delete-and-approve and reminders and fail on any console error. The browser tests exist because the first manual run found a Chrome-only crash that jsdom could not see.
 - Single-user by design: one API key, no accounts. Not multi-tenant.
 - See [SECURITY.md](SECURITY.md#known-limitations-read-these) for the security limitations (sticky taint, DNS rebinding, and more).

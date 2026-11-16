@@ -309,6 +309,8 @@ def test_github_client_parses_and_sends_token_only_in_header():
     def handler(req):
         seen.append((req.url.path, req.headers.get("authorization"), req.method))
         p = req.url.path
+        if p == "/user":
+            return httpx.Response(200, json={"login": "me"})
         if p.endswith("/repos"):
             return httpx.Response(200, json=[{"full_name": "me/Keel", "description": "agent", "language": "Python", "stargazers_count": 3, "pushed_at": "2026-11-01", "fork": False}])
         if p.endswith("/readme"):
@@ -478,3 +480,38 @@ def test_documents_api_and_indexing_endpoint(notes):
         assert client.post("/api/documents/index").json()["unchanged"] == 2
     no_notes = TestClient(create_app(make_settings(), ScriptedLLM([])))
     assert no_notes.post("/api/documents/index").status_code == 409
+
+
+def test_github_lists_your_private_repos_with_a_token_and_only_public_ones_for_others():
+    calls = []
+
+    def handler(req):
+        calls.append((req.url.path, dict(req.url.params)))
+        if req.url.path == "/user":
+            return httpx.Response(200, json={"login": "Me"})
+        if req.url.path == "/user/repos":
+            return httpx.Response(200, json=[{"full_name": "me/Keel", "private": True}, {"full_name": "me/site", "private": False}])
+        return httpx.Response(200, json=[{"full_name": "octo/hello", "private": False}])
+
+    c = gh(handler, token="ghp_SECRET")
+    mine = c.list_repos("me")  # owner match is case-insensitive
+    assert [(r["name"], r["private"]) for r in mine] == [("me/Keel", True), ("me/site", False)]
+    assert ("/user/repos", {"per_page": "20", "sort": "pushed", "affiliation": "owner"}) in calls
+    assert c.list_repos("octo")[0]["name"] == "octo/hello" and calls[-1][0] == "/users/octo/repos"
+    assert [p for p, _ in calls].count("/user") == 1  # the token's login is looked up once
+    assert len(c.list_repos("me", limit=1)) == 1
+
+    calls.clear()  # without a token: never asks who "you" are, public list only
+    gh(handler).list_repos("me")
+    assert [p for p, _ in calls] == ["/users/me/repos"]
+
+
+def test_github_falls_back_to_public_repos_if_the_token_owner_cannot_be_looked_up():
+    def handler(req):
+        if req.url.path == "/user":
+            return httpx.Response(403)
+        return httpx.Response(200, json=[{"full_name": "me/site"}])
+
+    assert gh(handler, token="ghp_SECRET").list_repos("me") == [
+        {"name": "me/site", "description": "", "language": None, "stars": None, "pushed_at": None, "fork": None, "private": False}
+    ]

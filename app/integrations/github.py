@@ -32,6 +32,7 @@ class GitHubClient:
     def __init__(self, token: str | None = None, client: httpx.Client | None = None):
         self._token = token
         self._client = client or httpx.Client(timeout=10)
+        self._login: str | None = None  # the token's own account, looked up once
 
     def _get(self, path: str, params: dict | None = None, accept: str = "application/vnd.github+json") -> httpx.Response:
         headers = {"Accept": accept, "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "Keel-agent"}
@@ -51,13 +52,29 @@ class GitHubClient:
             raise GitHubError(f"GitHub error (HTTP {resp.status_code}).")
         return resp
 
+    def _token_login(self) -> str | None:
+        if self._token and self._login is None:
+            try:
+                self._login = str(self._get("/user").json().get("login") or "")
+            except (GitHubError, ValueError, AttributeError):
+                self._login = ""  # can't tell who the token belongs to: fall back to the public listing
+        return self._login or None
+
     def list_repos(self, owner: str, limit: int = 20) -> list[dict]:
         owner = validate_owner(owner)
-        rows: Any = self._get(f"/users/{owner}/repos", {"per_page": min(limit, 50), "sort": "pushed"}).json()
+        params = {"per_page": min(limit, 50), "sort": "pushed"}
+        login = self._token_login()
+        if login and login.lower() == owner.lower():
+            # /users/{owner}/repos only ever lists public repos, even with a token. For the token's own account,
+            # /user/repos also returns the private ones the token can read.
+            rows: Any = self._get("/user/repos", {**params, "affiliation": "owner"}).json()
+        else:
+            rows = self._get(f"/users/{owner}/repos", params).json()
         return [
             {"name": r["full_name"], "description": (r.get("description") or "")[:200], "language": r.get("language"),
-             "stars": r.get("stargazers_count"), "pushed_at": r.get("pushed_at"), "fork": r.get("fork")}
-            for r in rows
+             "stars": r.get("stargazers_count"), "pushed_at": r.get("pushed_at"), "fork": r.get("fork"),
+             "private": bool(r.get("private"))}
+            for r in rows[:limit]
         ]
 
     def get_readme(self, repo: str, max_chars: int = 8000) -> str:

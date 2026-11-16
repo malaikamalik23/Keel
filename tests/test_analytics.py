@@ -1,13 +1,12 @@
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-from fastapi.testclient import TestClient
 
 from app.api.main import create_app
 from app.db.models import Commitment, Plan, PlanItem, Task, TaskEvent, WorkSession
 from app.services.analytics import analytics
 from tests.conftest import make_settings
-from tests.fakes import ScriptedLLM
+from tests.fakes import ScriptedLLM, local_client
 
 TZ = ZoneInfo("UTC")
 TODAY = date(2026, 11, 11)  # Wednesday; this week's Monday is Nov 9
@@ -86,7 +85,7 @@ def test_timezone_boundaries_use_the_users_day(make_container):
 
 
 def test_analytics_endpoint():
-    client = TestClient(create_app(make_settings(), ScriptedLLM([])))
+    client = local_client(create_app(make_settings(), ScriptedLLM([])))
     body = client.get("/api/analytics?weeks=4").json()
     assert len(body["weeks"]) == 4 and set(body) >= {"streak", "commitments", "estimates", "postponement", "completions_by_weekday"}
     assert client.get("/api/analytics?weeks=1").status_code == 422

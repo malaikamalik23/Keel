@@ -3,7 +3,6 @@ from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
-from fastapi.testclient import TestClient
 
 from app.api.main import create_app
 from app.config import Settings
@@ -16,7 +15,7 @@ from app.scheduler.checkins import checkins_due
 from app.services.notifications import in_quiet_hours, parse_hhmm
 from app.tools.base import ToolContext
 from tests.conftest import make_settings
-from tests.fakes import ScriptedLLM, text, tool_call
+from tests.fakes import ScriptedLLM, text, tool_call, local_client
 
 TZ = ZoneInfo("Asia/Karachi")  # UTC+5, no DST: makes local/UTC mix-ups visible
 
@@ -398,7 +397,7 @@ def test_read_calendar_tool_is_only_registered_when_configured_and_output_is_fen
 # ---------- API ----------
 def test_reminder_and_notification_endpoints_and_manual_tick():
     notifier = LogNotifier()
-    client = TestClient(create_app(make_settings(agent_timezone="Asia/Karachi"), ScriptedLLM([
+    client = local_client(create_app(make_settings(agent_timezone="Asia/Karachi"), ScriptedLLM([
         tool_call("create_reminder", {"text": "Pay fees", "remind_at": "2099-05-05T10:00"}), text("Set."),
     ]), notifier))
     client.post("/api/chat", json={"message": "remind me to pay fees"})
@@ -415,10 +414,10 @@ def test_reminder_and_notification_endpoints_and_manual_tick():
 
 
 def test_scheduler_only_starts_when_enabled():
-    with TestClient(create_app(make_settings(), ScriptedLLM([]))) as client:
+    with local_client(create_app(make_settings(), ScriptedLLM([]))) as client:
         assert client.get("/health").status_code == 200
     app = create_app(make_settings(scheduler_enabled=True, scheduler_tick_seconds=3600), ScriptedLLM([]))
-    with TestClient(app):
+    with local_client(app):
         assert app.state.container.scheduler._aps is not None
     assert app.state.container.scheduler._aps is None  # stopped cleanly on shutdown
 

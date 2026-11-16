@@ -1,12 +1,11 @@
-from fastapi.testclient import TestClient
 
 from app.api.main import create_app
 from tests.conftest import make_settings
-from tests.fakes import ScriptedLLM, text, tool_call
+from tests.fakes import ScriptedLLM, text, tool_call, local_client
 
 
 def client_with(responses):
-    return TestClient(create_app(make_settings(), ScriptedLLM(responses)))
+    return local_client(create_app(make_settings(), ScriptedLLM(responses)))
 
 
 def test_health():
@@ -54,7 +53,7 @@ def test_unknown_conversation_is_404_and_missing_key_is_502():
     client = client_with([])
     assert client.post("/api/chat", json={"message": "hi", "conversation_id": 99}).status_code == 404
     from app.llm.factory import UnconfiguredLLM
-    no_key = TestClient(create_app(make_settings(), UnconfiguredLLM()))
+    no_key = local_client(create_app(make_settings(), UnconfiguredLLM()))
     r = no_key.post("/api/chat", json={"message": "hi"})
     assert r.status_code == 502 and "ANTHROPIC_API_KEY" in r.json()["detail"]
 
@@ -118,7 +117,7 @@ def test_commitment_edit_over_http_tracks_postponement_and_completion():
 
 def test_new_rest_routes_require_api_key_when_configured():
     from app.api.main import create_app
-    client = TestClient(create_app(make_settings(api_key="secret"), ScriptedLLM([])))
+    client = local_client(create_app(make_settings(api_key="secret"), ScriptedLLM([])))
     assert client.patch("/api/memories/1", json={"content": "x"}).status_code == 401
     assert client.delete("/api/memories/1").status_code == 401
     assert client.patch("/api/commitments/1", json={"status": "dropped"}).status_code == 401
@@ -127,7 +126,7 @@ def test_new_rest_routes_require_api_key_when_configured():
 def test_built_dashboard_is_served_without_shadowing_the_api(tmp_path):
     (tmp_path / "index.html").write_text("<html>dashboard</html>")
     from app.api.main import create_app
-    client = TestClient(create_app(make_settings(frontend_dist=str(tmp_path)), ScriptedLLM([])))
+    client = local_client(create_app(make_settings(frontend_dist=str(tmp_path)), ScriptedLLM([])))
     assert "dashboard" in client.get("/").text
     assert client.get("/health").json() == {"status": "ok"}
     assert client.get("/api/tasks").json() == []
@@ -136,7 +135,7 @@ def test_built_dashboard_is_served_without_shadowing_the_api(tmp_path):
 
 def test_no_dashboard_mounted_when_dist_missing(tmp_path):
     from app.api.main import create_app
-    client = TestClient(create_app(make_settings(frontend_dist=str(tmp_path / "nope")), ScriptedLLM([])))
+    client = local_client(create_app(make_settings(frontend_dist=str(tmp_path / "nope")), ScriptedLLM([])))
     assert client.get("/").status_code == 404
 
 

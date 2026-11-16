@@ -50,7 +50,7 @@ pip install -r requirements-dev.txt
 cp .env.example .env                                      # Windows: copy .env.example .env
 #   then edit .env: set ANTHROPIC_API_KEY (or GROQ_API_KEY) and AGENT_TIMEZONE
 
-pytest -q                                                 # ~410 tests, no key or network needed
+pytest -q                                                 # ~425 tests, no key or network needed
 
 (cd frontend && npm ci && npm run build)                  # build the dashboard once
 uvicorn app.api.main:create_app --factory                 # dashboard + API at http://127.0.0.1:8000
@@ -96,7 +96,7 @@ The ones you'll touch first:
 |---|---|
 | `ANTHROPIC_API_KEY` / `GROQ_API_KEY`, `AGENT_MODEL` | The LLM. Groq models must support tool calling (`openai/gpt-oss-120b` works on Groq's free tier; set `HISTORY_MESSAGE_LIMIT=12` there). |
 | `AGENT_TIMEZONE` | "Today", check-in times and quiet hours use it. |
-| `API_KEY` | **Set this before exposing the API anywhere.** |
+| `API_KEY` | **Set this before exposing the API anywhere.** Without it, only requests from the same machine are answered. |
 | `SCHEDULER_ENABLED=true` | Turns on check-ins, reminders and nudges (run one process only). |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Deliver messages to, and chat from, your phone. |
 | `NOTES_DIR` | A folder of notes/papers for `notes_search`. |

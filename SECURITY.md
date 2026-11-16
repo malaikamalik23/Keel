@@ -15,7 +15,9 @@ credit you if you want.
 
 Keel is built for **one user on their own machine or server**. It is not multi-tenant: there is a single shared
 `API_KEY`, no per-user accounts and no per-user data isolation. Don't expose it to the internet without a TLS reverse
-proxy in front (the app itself speaks plain HTTP) and a strong `API_KEY`.
+proxy in front (the app itself speaks plain HTTP) and a strong `API_KEY`. Without `API_KEY` the API answers only
+requests made directly from the same machine: a server started with `--host 0.0.0.0`, or reached through a reverse
+proxy (detected by its `X-Forwarded-For` / `X-Real-IP` / `Forwarded` header), refuses every `/api` request until a key is set.
 
 ## Threat model
 
@@ -40,7 +42,10 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
 1. **Permission tiers.** Every tool is READ, WRITE or HIGH_IMPACT. Deletes are HIGH_IMPACT: the model can only *queue*
    them; only you (dashboard, CLI or REST) can approve. There is no tool that approves, rejects or edits the queue. A queued action is re-checked at approval time: if its target changed in the meantime (for example SQLite reused the id of a deleted task, or you edited the memory it would overwrite), it is refused instead of acting on the wrong item. Approval is an atomic compare-and-set, so two approvals arriving at once (dashboard and CLI, a double click) run the action **exactly once**, and an approve that loses to a reject does nothing. Unanswered requests expire after `PENDING_ACTION_TTL_HOURS` (24 by default).
 2. **Taint tracking.** When any tool returns external text, the session is *tainted*. While it is, every WRITE tool also
-   needs your approval. Taint lasts as long as that content stays in the model's replayed history window.
+   needs your approval. Taint lasts as long as that content stays in the model's replayed history window, **or** in the
+   conversation's running summary: when old messages that held external content are summarised, the conversation is
+   marked tainted for good and the summary is shown to the model fenced as untrusted data, so a page's instructions
+   can't outlive the page by being folded into the summary.
 3. **Untrusted fencing.** External text is wrapped in `<untrusted_content>` tags. The closing tag is neutralised
    (case/whitespace-insensitive) so content cannot break out, and the system prompt says the contents are data.
 4. **Invisible-text stripping.** Unicode format/private-use/control characters (including the "tag" block used for
@@ -92,6 +97,9 @@ Further suites cover the cases that are about *time* rather than one turn:
   session the next day must not see it. Also: hidden characters never reach storage, what you approve is what's stored,
   an approved edit is refused if the memory changed meanwhile, a stored memory can't fake a system-prompt section, and
   a model that obeys a poisoned memory still can't delete anything.
+- `tests/injection/test_summary_taint.py`: a poisoned page leaves the history window and is folded into the
+  summary (with a summarizer that obeys it, the worst case); the next write is still held for approval and the summary
+  reaches the model fenced. A summary of only your own words taints nothing. Before the fix the write ran unapproved.
 - `tests/test_pending_concurrency.py`: two approvals at once, approve vs reject in both orders, and 8 real threads
   approving the same action against a file database. Exactly one run, every time.
 - `tests/test_dns_pinning.py`: a resolver that answers public first and `127.0.0.1` / `10.x` / `169.254.169.254` /
@@ -106,7 +114,8 @@ old memory handling or the pinning switched off, they fail. A test that can't fa
 ## Known limitations (read these)
 
 - **Taint is coarse and sticky.** Any untrusted content in the replay window makes *all* writes need approval, even
-  ones you asked for in plain words. Correct but sometimes annoying; it clears when the content ages out of the window.
+  ones you asked for in plain words. Correct but sometimes annoying. It clears when the content ages out of the window,
+  except once that content has been summarised: then the conversation stays tainted. Start a new chat after research.
 - **The fetcher is not a firewall.** DNS pinning closes rebinding for `web_fetch`, which is the only component that fetches
   URLs the model chooses. Other integrations (GitHub, Brave, Telegram, your calendar URL) go to fixed hosts you configured.
   For defence in depth on a server, still block private ranges with an egress firewall or network policy.

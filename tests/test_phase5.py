@@ -4,7 +4,6 @@ from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
-from fastapi.testclient import TestClient
 
 from app.agent.loop import Agent
 from app.api.main import create_app
@@ -18,7 +17,7 @@ from app.tools import build_default_registry
 from app.tools.base import ToolContext
 from app.tools.executor import ToolExecutor
 from tests.conftest import make_settings
-from tests.fakes import ScriptedLLM, text, tool_call
+from tests.fakes import ScriptedLLM, text, tool_call, local_client
 
 DNS = {
     "example.com": ["93.184.216.34"], "docs.example.com": ["93.184.216.35"], "evil.test": ["10.0.0.5"],
@@ -474,11 +473,11 @@ def test_notes_tool_output_is_fenced_and_missing_folder_is_a_clear_error(notes, 
 
 def test_documents_api_and_indexing_endpoint(notes):
     root, _ = notes
-    client = TestClient(create_app(make_settings(notes_dir=str(root)), ScriptedLLM([])))
+    client = local_client(create_app(make_settings(notes_dir=str(root)), ScriptedLLM([])))
     with client:  # lifespan indexes at startup
         assert [d["path"] for d in client.get("/api/documents").json()] == ["ideas.md", "papers/urdu.txt"]
         assert client.post("/api/documents/index").json()["unchanged"] == 2
-    no_notes = TestClient(create_app(make_settings(), ScriptedLLM([])))
+    no_notes = local_client(create_app(make_settings(), ScriptedLLM([])))
     assert no_notes.post("/api/documents/index").status_code == 409
 
 

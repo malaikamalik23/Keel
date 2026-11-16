@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hmac
+import ipaddress
 from collections.abc import Iterator
 from datetime import date, datetime
 from typing import Literal
@@ -41,12 +42,33 @@ def get_container(request: Request) -> Container:
     return request.app.state.container
 
 
+_PROXY_HEADERS = ("x-forwarded-for", "x-real-ip", "forwarded")
+
+
+def _direct_local(request: Request) -> bool:
+    """True for a request from a loopback address that did not come through a proxy (proxies connect from localhost)."""
+    host = request.client.host if request.client else ""
+    try:
+        loopback = ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+    return loopback and not any(h in request.headers for h in _PROXY_HEADERS)
+
+
 def require_api_key(
-    c: Container = Depends(get_container), x_api_key: str | None = Header(default=None, alias="X-API-Key")
+    request: Request, c: Container = Depends(get_container), x_api_key: str | None = Header(default=None, alias="X-API-Key")
 ) -> None:
-    """Guards every /api/* route. A no-op when `api_key` is unset (localhost-only default)."""
+    """Guards every /api/* route.
+
+    With API_KEY set, every request must carry it. Without one, the API answers only requests made directly from this
+    machine: a server started with --host 0.0.0.0, or put behind a reverse proxy, refuses everyone until a key is set,
+    instead of quietly exposing your data.
+    """
     configured = c.settings.api_key
     if configured is None:
+        if not _direct_local(request):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="No API_KEY is set, so the API only accepts requests from this machine. Set API_KEY to allow remote access.")
         return
     if x_api_key is None or not hmac.compare_digest(x_api_key, configured):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing or invalid X-API-Key header.")

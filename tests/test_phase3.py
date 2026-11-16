@@ -2,7 +2,6 @@ from datetime import date, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
-from fastapi.testclient import TestClient
 
 from app.api.main import create_app
 from app.db.models import Goal, Task, TaskEvent, utcnow
@@ -10,7 +9,7 @@ from app.services import accountability
 from app.services.planner import MAX_MAJOR, build_plan, priority_score, rank_tasks, usable_capacity
 from app.tools.base import ToolContext
 from tests.conftest import make_settings
-from tests.fakes import ScriptedLLM, text, tool_call
+from tests.fakes import ScriptedLLM, text, tool_call, local_client
 
 TZ = ZoneInfo("UTC")
 
@@ -214,7 +213,7 @@ def test_phase3_http_endpoints_and_context_snapshot():
         tool_call("create_daily_plan", {"capacity_minutes": 240}, id="b"), text("Planned."),
         text("seen"),
     ])
-    client = TestClient(create_app(make_settings(), llm))
+    client = local_client(create_app(make_settings(), llm))
     client.post("/api/chat", json={"message": "add task"})
     client.post("/api/chat", json={"message": "plan my day, 4 hours"})
     plan = client.get("/api/plan").json()
@@ -234,7 +233,7 @@ def test_dashboard_actions_complete_task_and_check_off_plan_items():
         tool_call("create_task", {"title": "B", "estimated_minutes": 30}, id="b"), text("ok"),
         tool_call("create_daily_plan", {}, id="c"), text("planned"),
     ])
-    client = TestClient(create_app(make_settings(), llm))
+    client = local_client(create_app(make_settings(), llm))
     for m in ("a", "b", "plan"):
         client.post("/api/chat", json={"message": m})
     items = client.get("/api/plan").json()["items"]

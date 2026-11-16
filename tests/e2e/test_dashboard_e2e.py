@@ -54,7 +54,9 @@ def test_full_user_flow_in_a_real_browser_without_any_console_errors(browser, se
     page.get_by_role("button", name="Chat").click()
     say(page, "Delete the FYP introduction task", "Queued: waiting for your approval.")
     page.get_by_text("needs your approval").wait_for()
-    assert re.search(r"Approvals\s*1", page.get_by_role("button", name=re.compile("^Approvals")).inner_text())
+    # The badge count comes from a separate request fired after the reply, so wait for it rather than reading it once
+    # (reading immediately raced on CI). It still fails if the badge never shows 1.
+    page.get_by_role("button", name=re.compile(r"^Approvals\s*1$")).wait_for()
     page.get_by_role("button", name=re.compile("^Approvals")).click()
     page.get_by_role("button", name="Approve").click()
     page.get_by_text("Nothing pending").wait_for()

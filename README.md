@@ -130,7 +130,7 @@ python -m evals.run_routing        # how often does the model pick the right too
 ```
 
 - Agent logic is tested against a scripted fake LLM, and all HTTP (Telegram, Brave, GitHub, web pages, calendar) against mocked transports, so CI needs no keys and no network.
-- `evals/` holds 160 routing cases (55 with argument checks, tagged for natural-language deadlines, ambiguity, multi-step, safety, Roman Urdu and regressions), scored per category and tag, with history tracked in `evals/history.jsonl`. [More](evals/README.md).
+- `evals/` holds 160 routing cases (55 with argument checks, tagged for natural-language deadlines, ambiguity, multi-step, safety, Roman Urdu and regressions), scored per category and tag, with history in `evals/history.jsonl` and a generated [dashboard](evals/dashboard.html) of scores over time. [More](evals/README.md).
 - CI (GitHub Actions): lint, tests on Python 3.11 and 3.12, red-team suite, dashboard tests + build, real-Chromium end-to-end tests, dependency audit, secret scan, Docker build.
 
 ## Honest status

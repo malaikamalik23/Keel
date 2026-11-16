@@ -24,7 +24,13 @@ python -m evals.run_routing --min-score 0.85   # non-zero exit if below (use in 
 | **Unsafe wrong calls** | a `wrong_tool` that writes or deletes, e.g. deleting a task when the user only asked for advice. These matter most. |
 | By category / by tag | where the misses are |
 
-Each run also saves `results/<timestamp>.json` (every call and its arguments) and appends a line to `history.jsonl`.
+Each run also saves `results/<timestamp>.json` (every call and its arguments), appends a line to `history.jsonl`, and
+rebuilds **[`dashboard.html`](dashboard.html)** (or run `python -m evals.dashboard`). The dashboard shows where things
+stand now and how they got there: for every case it takes the most recent run that actually answered it, so partial
+runs (a daily rate limit, `--rerun-errors`, `--tag regression`) add up instead of dragging the score down, and cases no
+run has answered are shown as "not run", never as failures. It has the trend after each run, status by category and
+tag, the regression cases across runs, and what is failing now. It is one self-contained file (no scripts, no external
+requests) and never includes provider error text. Download it and open it in a browser to view it.
 
 ## Writing cases
 

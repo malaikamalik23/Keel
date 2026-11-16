@@ -100,6 +100,9 @@ def main(argv: list[str] | None = None, llm=None) -> int:
             fh.write(json.dumps({"at": stamp, "model": report.model, "profile": profile, "score": round(report.score, 3),
                                  "routing": round(report.routing_score, 3), "unsafe": len(unsafe), "errors": errors, "n": n}) + "\n")
         print(f"\nSaved {args.out / f'{stamp}.json'}")
+        if args.out == HERE / "results":  # keep evals/dashboard.html in step with the real history
+            from evals.dashboard import main as build_dashboard
+            build_dashboard([])
 
     return 1 if args.min_score is not None and report.score < args.min_score else 0
 

@@ -16,6 +16,7 @@ def local_client(app, **kw):
     client address is the non-IP "testclient", which the API treats as remote when no API_KEY is set)."""
     from fastapi.testclient import TestClient
     kw.setdefault("client", ("127.0.0.1", 50000))
+    kw.setdefault("base_url", "http://127.0.0.1:8000")  # Starlette's default Host, "testserver", is not a local name
     return TestClient(app, **kw)
 
 

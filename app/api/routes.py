@@ -43,6 +43,36 @@ def get_container(request: Request) -> Container:
 
 
 _PROXY_HEADERS = ("x-forwarded-for", "x-real-ip", "forwarded")
+_LOCAL_NAMES = {"localhost", "127.0.0.1", "::1"}
+_SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
+def _hostname(value: str) -> str:
+    """'localhost:8000' -> 'localhost', '[::1]:8000' -> '::1', 'http://x:5173' -> 'x'. Lower-cased."""
+    value = value.strip().lower().split("://", 1)[-1].split("/", 1)[0]
+    if value.startswith("["):
+        return value[1:].split("]", 1)[0]
+    return value.rsplit(":", 1)[0] if value.count(":") == 1 else value
+
+
+def _browser_problem(request: Request) -> str | None:
+    """Why a keyless request may have been sent by a website open in your browser, or None if it looks local.
+
+    - DNS rebinding: a hostile domain re-pointed at 127.0.0.1 makes the browser treat this API as that domain's own
+      site, able to read every response. The Host header still carries the hostile name, so only local names pass.
+    - CSRF: any website may send a "simple" POST to 127.0.0.1 without asking (no-cors). Browsers label it with
+      Sec-Fetch-Site and Origin, so state-changing requests from another site are refused. Tools like curl and the CLI
+      send neither header and are unaffected.
+    """
+    if _hostname(request.headers.get("host", "")) not in _LOCAL_NAMES:
+        return "unexpected Host header"
+    if request.method not in _SAFE_METHODS:
+        if request.headers.get("sec-fetch-site", "same-origin") not in {"same-origin", "none"}:
+            return "cross-site request"
+        origin = request.headers.get("origin")
+        if origin is not None and _hostname(origin) not in _LOCAL_NAMES:
+            return "cross-site request"
+    return None
 
 
 def _direct_local(request: Request) -> bool:
@@ -60,15 +90,21 @@ def require_api_key(
 ) -> None:
     """Guards every /api/* route.
 
-    With API_KEY set, every request must carry it. Without one, the API answers only requests made directly from this
-    machine: a server started with --host 0.0.0.0, or put behind a reverse proxy, refuses everyone until a key is set,
-    instead of quietly exposing your data.
+    With API_KEY set, every request must carry it (a website can't add that header: it doesn't know the key). Without
+    one, the API answers only requests made directly from this machine, to a local host name, and not sent cross-site
+    by a website open in your browser: a server started with --host 0.0.0.0, put behind a reverse proxy, or reached
+    by DNS rebinding or CSRF refuses them until a key is set, instead of quietly exposing your data.
     """
     configured = c.settings.api_key
     if configured is None:
         if not _direct_local(request):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                                 detail="No API_KEY is set, so the API only accepts requests from this machine. Set API_KEY to allow remote access.")
+        problem = _browser_problem(request)
+        if problem:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail=f"Refused ({problem}): without API_KEY, only the dashboard at http://127.0.0.1 or "
+                                       "http://localhost and local tools may use the API. Set API_KEY to use another host name.")
         return
     if x_api_key is None or not hmac.compare_digest(x_api_key, configured):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing or invalid X-API-Key header.")

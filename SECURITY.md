@@ -18,6 +18,10 @@ Keel is built for **one user on their own machine or server**. It is not multi-t
 proxy in front (the app itself speaks plain HTTP) and a strong `API_KEY`. Without `API_KEY` the API answers only
 requests made directly from the same machine: a server started with `--host 0.0.0.0`, or reached through a reverse
 proxy (detected by its `X-Forwarded-For` / `X-Real-IP` / `Forwarded` header), refuses every `/api` request until a key is set.
+The same keyless mode also refuses requests that a **website open in your browser** could send: any `Host` other than
+`localhost` / `127.0.0.1` / `[::1]` (DNS rebinding, where a hostile domain is re-pointed at your machine so the browser
+lets it read the API), and state-changing requests marked cross-site by `Sec-Fetch-Site` or `Origin` (CSRF, e.g. a page
+silently approving a pending delete). With `API_KEY` set, the key is the protection: a website cannot send it.
 
 ## Threat model
 
@@ -68,7 +72,8 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
    (the Telegram bot token lives in the URL, API keys in headers). Tokens are never logged or returned to the model.
 9. **Plain-text output.** The dashboard renders model output as text (no HTML/Markdown), and Telegram messages are sent
    without `parse_mode`, so a Markdown image/link in a reply is not an exfiltration channel.
-10. **API hardening.** Optional `X-API-Key` (constant-time compare), a per-client rate limit on LLM-calling endpoints,
+10. **API hardening.** `X-API-Key` (constant-time compare) or, without one, local-only access with Host and
+    cross-site checks (see Scope), a per-client rate limit on LLM-calling endpoints,
     security headers (CSP `default-src 'self'`, `frame-ancestors 'none'`, `nosniff`), `Cache-Control: no-store` on API
     responses. Docker: non-root, read-only root filesystem, all capabilities dropped, published on `127.0.0.1` only.
 11. **Memory hygiene.** Memories are pasted into every later system prompt, where the session is no longer tainted, so
@@ -102,6 +107,10 @@ Further suites cover the cases that are about *time* rather than one turn:
   reaches the model fenced. The same holds when the agent's own reply repeats the page and summaries are off or the
   summarizer call fails. A summary of only your own words taints nothing, and a new chat is clean. Before these fixes,
   each of those writes ran unapproved.
+- `tests/test_api_auth.py`: without a key, LAN/public/IPv6 peers, proxied requests, hostile `Host` names (DNS
+  rebinding) and cross-site POSTs (CSRF on the approve/reject endpoints) get 403 and nothing changes; the dashboard,
+  the Vite dev proxy, curl and the CLI still work. The CSRF case was also run from a real Chromium page on another
+  origin: before the fix it deleted the task, after it the API answers 403.
 - `tests/test_pending_concurrency.py`: two approvals at once, approve vs reject in both orders, and 8 real threads
   approving the same action against a file database. Exactly one run, every time.
 - `tests/test_dns_pinning.py`: a resolver that answers public first and `127.0.0.1` / `10.x` / `169.254.169.254` /

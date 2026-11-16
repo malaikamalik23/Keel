@@ -180,6 +180,10 @@ The conversation read something from outside (a web page, a note, a GitHub issue
 change in *that conversation* waits for your approval, because Keel can no longer tell your wishes from text on the
 page. Start a new chat (the **New** button in Chat, or `/new` in the CLI) for a clean one. See [SECURITY.md](../SECURITY.md).
 
+**Opening a link from a page asks for approval.**
+After Keel has read something external, it opens only URLs you typed and search results without asking. A link it
+found inside a page waits under **Approvals**, or paste the URL into the chat yourself.
+
 **A delete did nothing.**
 Deletes always wait under **Approvals** (CLI: `/pending`, then `/confirm <id>`). Unanswered requests expire after
 24 hours.

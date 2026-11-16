@@ -22,9 +22,10 @@ def _fetch_summary(ctx: ToolContext, p: WebFetchInput) -> str:
 
 
 def _may_fetch_while_tainted(ctx: ToolContext, p: WebFetchInput) -> bool:
-    """Once untrusted text is in context, only URLs already shown to the model (typed by the user, or present inside
-    a fenced result such as search results) are fetched freely. A URL the model assembled itself -- the way private
-    data would be smuggled out in a query string -- needs the user's approval."""
+    """Once untrusted text is in context, only URLs the user typed and the result URLs of a web_search are fetched
+    freely. Anything else needs the user's approval: a URL the model assembled itself (the way private data would be
+    smuggled out in a query string), and a link found inside a page or other external text (choosing among an
+    attacker's links is a way to signal to them)."""
     return normalize_url(p.url) in ctx.seen_urls
 
 

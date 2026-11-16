@@ -10,6 +10,7 @@ Restore by stopping Keel and copying a backup over the database file (see SECURI
 from __future__ import annotations
 
 import argparse
+import os
 import sqlite3
 import sys
 from datetime import UTC, datetime
@@ -27,11 +28,14 @@ def sqlite_path(database_url: str) -> Path:
 def backup(db_path: Path, out_dir: Path, keep: int = 14, now: datetime | None = None) -> Path:
     if not db_path.exists():
         raise SystemExit(f"No database at {db_path}.")
-    out_dir.mkdir(parents=True, exist_ok=True)
+    if not out_dir.exists():
+        out_dir.mkdir(parents=True, mode=0o700)  # a new backup folder is private to you (no effect on Windows)
     stamp = (now or datetime.now(UTC)).strftime("%Y%m%d-%H%M%S")
     target = out_dir / f"{db_path.stem}-{stamp}.db"
     src = sqlite3.connect(f"file:{db_path.as_posix()}?mode=ro", uri=True)  # read-only: a backup must never change the source
     try:
+        # A backup holds everything the database does: create it readable by its owner only, before any data is written.
+        os.close(os.open(target, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
         dst = sqlite3.connect(target)
         try:
             src.backup(dst)

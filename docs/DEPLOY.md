@@ -160,6 +160,7 @@ The database is one SQLite file in the `keel-data` volume and is **not encrypted
 - use the provider's disk encryption or LUKS, so a discarded or snapshotted disk is unreadable;
 - remember that provider snapshots and your backup copies are copies of your data too;
 - keep `.env` at mode 600. It holds your LLM key, Telegram token and `API_KEY`.
+- backups are written readable by their owner only (mode 600); keep the folder you copy them to at mode 700, as above.
 
 Keel keeps your history until you delete it. To erase everything: `docker compose down -v`, then delete your backups.
 

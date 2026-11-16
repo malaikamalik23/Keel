@@ -55,9 +55,11 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
 4. **Invisible-text stripping.** Unicode format/private-use/control characters (including the "tag" block used for
    ASCII smuggling, zero-width characters and bidi overrides) are removed from all external text. Text hidden from humans in
    HTML (`display:none`, `hidden`, `aria-hidden`, `<script>`, comments…) never reaches the model.
-5. **Exfiltration gate.** In a tainted session `web_fetch` may only fetch URLs the *user typed* or that appeared inside
-   fenced results. A URL the model assembled itself (the way data gets smuggled out in a query string) is queued for
-   approval. URLs the model wrote, and the text of queued/error results, never count as "seen", so a retry can't slip through.
+5. **Exfiltration gate.** In a tainted conversation `web_fetch` runs without approval only for URLs the *user typed*
+   and the result URLs of a `web_search`. Everything else is queued for approval: a URL the model assembled itself (the
+   way data gets smuggled out in a query string), and a link found *inside* external text (a fetched page, a search
+   snippet, a README, an issue, a note, a calendar event), because choosing among an attacker's links is a way to
+   signal to them. URLs the model wrote, and the text of queued/error results, never count, so a retry can't slip through.
 6. **SSRF protection.** `web_fetch` allows only http(s) on ports 80/443, no credentials in URLs, and only hosts that
    resolve to **public** addresses (loopback, private, link-local, cloud-metadata, multicast, reserved and IPv4-mapped
    IPv6 are refused; decimal/octal IP tricks are caught because the resolved address is checked). Redirects are followed manually,
@@ -111,6 +113,9 @@ Further suites cover the cases that are about *time* rather than one turn:
   rebinding) and cross-site POSTs (CSRF on the approve/reject endpoints) get 403 and nothing changes; the dashboard,
   the Vite dev proxy, curl and the CLI still work. The CSRF case was also run from a real Chromium page on another
   origin: before the fix it deleted the task, after it the API answers 403.
+- `tests/injection/test_link_choice.py`: links listed by a fetched page, or found in a search snippet, README, issue,
+  note or calendar event, are held for approval in the same turn and in later turns, and no request reaches the
+  attacker's host; search results and URLs you type still open freely.
 - `tests/test_pending_concurrency.py`: two approvals at once, approve vs reject in both orders, and 8 real threads
   approving the same action against a file database. Exactly one run, every time.
 - `tests/test_dns_pinning.py`: a resolver that answers public first and `127.0.0.1` / `10.x` / `169.254.169.254` /
@@ -130,10 +135,11 @@ old memory handling or the pinning switched off, they fail. A test that can't fa
 - **The fetcher is not a firewall.** DNS pinning closes rebinding for `web_fetch`, which is the only component that fetches
   URLs the model chooses. Other integrations (GitHub, Brave, Telegram, your calendar URL) go to fixed hosts you configured.
   For defence in depth on a server, still block private ranges with an egress firewall or network policy.
-- **Link choice is a small leak.** In a tainted conversation `web_fetch` may open, without approval, any URL that a
-  page or search result showed it. A page listing ten links can therefore learn one digit from *which* link an
-  injected model opens, and repeat that. The model can't put your data *in* a URL (that needs approval), so this is slow
-  and limited by `MAX_AGENT_STEPS`, but it is not zero. `WEB_ALLOWED_DOMAINS` closes it.
+- **Following a link inside a page needs your approval** once a conversation is tainted. That is the price of closing
+  the link-choice leak (a page listing ten links could otherwise learn a digit from *which* one an injected model
+  opens). Search results and URLs you type are unaffected. What remains: an injected model can still choose *which
+  search result* to open and what to search for. An attacker would need several of their own pages ranked for a query
+  to read anything from that, and the query goes to your search provider, not to them. `WEB_ALLOWED_DOMAINS` closes it.
 - **Approved ≠ safe.** The gate puts a human in the loop; it can't judge the action for you. Read what you approve,
   especially approval requests that appear right after reading external content.
 - **Memory poisoning needs your approval, but a tricked user is still a risk.** In a tainted session `save_memory` is
@@ -170,7 +176,7 @@ messages and tool results of each request) and the services you configured.
 To erase everything, stop Keel and delete the database file (and its backups). Secrets live only in `.env`.
 
 **Backups.** `python -m scripts.backup` writes a consistent copy to `data/backups/` (SQLite's online backup API, safe
-while Keel is running; the copy is integrity-checked) and keeps the newest 14 (`--keep`, `--dir`). Run it from a daily
+while Keel is running; the copy is integrity-checked) and keeps the newest 14 (`--keep`, `--dir`). Backup files are created readable by their owner only (mode 600). Run it from a daily
 scheduled task. Backups contain everything above, so store them as carefully as the database. To restore, stop Keel and
 copy a backup over the database file.
 

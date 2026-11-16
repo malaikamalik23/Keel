@@ -195,5 +195,5 @@ docs/             ARCHITECTURE.md · TOOLS.md (generated) · DEMO.md
 - **Browser coverage is narrow**: two Chromium end-to-end tests (main flow, crash recovery) plus jsdom render tests; no Firefox/Safari runs.
 - **The fetcher is not a firewall.** `web_fetch` pins DNS (the address that was checked is the address connected to), which closes
   DNS rebinding, but on a server you should still block private ranges with an egress firewall or network policy.
-- **Links can leak a little.** In a tainted conversation `web_fetch` may open any URL a page showed it, so *which* link an injected
-  model opens can signal a few bits to that page's author (see SECURITY.md).
+- **Following a link inside a page needs approval** once a conversation is tainted (only typed URLs and search results open freely).
+  This closes the link-choice leak at the cost of an extra click when reading onward from a page (see SECURITY.md).

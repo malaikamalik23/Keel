@@ -27,7 +27,7 @@ class ToolContext:
     tz: ZoneInfo
     conversation_id: int | None = None
     tainted: bool = False  # set once untrusted external content has entered this turn
-    seen_urls: set[str] = field(default_factory=set)  # URLs already present in the context (see taint_gate)
+    seen_urls: set[str] = field(default_factory=set)  # URLs the user typed or a search returned (see taint_gate)
     active_groups: set[str] = field(default_factory=set)  # tool groups advertised to the model this turn (lean profile)
 
     def now(self) -> datetime:

@@ -16,7 +16,7 @@ from app.config import Settings
 from app.db.models import Conversation, Message
 from app.errors import NotFoundError
 from app.llm.base import LLMClient
-from app.security.untrusted import contains_untrusted, extract_urls, urls_in_untrusted_result
+from app.security.untrusted import contains_untrusted, extract_urls, offered_urls
 from app.tools.base import ToolContext
 from app.tools.executor import ToolExecutor
 from app.tools.groups import not_loaded, recent_groups, select_groups
@@ -111,7 +111,7 @@ class Agent:
                 )
                 if outcome.pending_action_id is not None:
                     result.pending_action_ids.append(outcome.pending_action_id)
-                ctx.seen_urls |= urls_in_untrusted_result(outcome.result)  # links the model has now been shown
+                ctx.seen_urls |= offered_urls(outcome.result)  # search results the model may now open
                 tool_results.append(
                     {
                         "type": "tool_result",

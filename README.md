@@ -32,7 +32,7 @@ trusted once it has read external text** and enforces the rest in code:
 - Deletes are **queued for your approval**; the model has no tool to approve anything.
 - Reading external content **taints the conversation**: further writes in it also need approval (a new chat starts clean).
 - External text is **fenced and stripped of invisible characters and hidden HTML**.
-- A URL the model *assembled itself* (how data is smuggled out) is **gated**; the fetcher refuses private networks, validates every redirect.
+- A URL the model *assembled itself* (how data is smuggled out), or a link it found inside a page, is **gated**; the fetcher refuses private networks, validates every redirect.
 - Every action is **audited**.
 
 This is verified by a red-team suite that drives a *fully compromised* model through 7 external channels × 7 attack

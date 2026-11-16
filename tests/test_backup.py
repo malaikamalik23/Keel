@@ -1,3 +1,4 @@
+import os
 import sqlite3
 from datetime import UTC, datetime, timedelta
 
@@ -53,3 +54,17 @@ def test_only_file_databases_are_accepted(tmp_path):
             sqlite_path(url)
     with pytest.raises(SystemExit, match="No database"):
         backup(tmp_path / "missing.db", tmp_path / "backups")
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
+def test_backups_are_private_to_their_owner(tmp_path):
+    """A backup is a full copy of your data: no group or world access, whatever the umask."""
+    db = tmp_path / "agent.db"
+    _db(db).close()
+    old_umask = os.umask(0o022)
+    try:
+        target = backup(db, tmp_path / "new" / "backups")
+    finally:
+        os.umask(old_umask)
+    assert target.stat().st_mode & 0o777 == 0o600
+    assert target.parent.stat().st_mode & 0o777 == 0o700

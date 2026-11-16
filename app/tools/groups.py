@@ -70,21 +70,29 @@ def _rx(*alts: str) -> re.Pattern[str]:
 # Deliberately generous: a false positive costs ~1k tokens, a false negative costs one extra load_tools call.
 KEYWORDS: dict[str, re.Pattern[str]] = {
     "plan": _rx(r"\bplan(s|ning|ned)?\b", r"\bschedul\w*", r"\bagenda\b", r"\btimetable\b", r"\bworked\b", r"\bworking on\b", r"\bspent\b",
-                r"\blog(ged)?\b", r"\bsessions?\b", r"\b\d+ ?(mins?|minutes|hrs?|hours?) (on|of|for)\b", r"\bskip\b", r"\bfocus(ed)? (time|session)\b", r"\bwhat should i (do|work on)\b"),
+                r"\blog(ged)?\b", r"\bsessions?\b", r"\b\d+ ?(mins?|minutes|hrs?|hours?) (on|of|for)\b", r"\bskip\b", r"\bfocus(ed)? (time|session)\b", r"\bwhat should i (do|work on)\b",
+                r"\bhow much (time )?(did|have) i (work|stud)\w*", r"\bghant[ae]\w*", r"\bparh(a|i|ai)\b", r"\bkaam kiya\b"),  # Roman Urdu: hours, studied, worked
     "accountability": _rx(r"\bavoid\w*", r"\bslip\w*", r"\bpostpon\w*", r"\bprocrastinat\w*", r"\bput(ting)? (it )?off\b", r"\breview\b",
                           r"\bhow (am i|did i|was my|is my)\b", r"\bmy week\b", r"\bbehind\b", r"\bhistory\b", r"\bwhy (does|do|is|did)\b",
-                          r"\bprogress\b", r"\bstuck\b", r"\bon track\b", r"\bkeep (on )?(delaying|pushing)\b", r"\boverwhelm\w*"),
+                          r"\bprogress\b", r"\bstuck\b", r"\bon track\b", r"\bkeep (on )?(delaying|pushing)\b", r"\boverwhelm\w*",
+                          r"\bconsisten\w*", r"\blately\b", r"\bhow much (time )?(did|have) i (work|stud)\w*",
+                          r"\bkaisa raha\b", r"\bkaisi rahi\b", r"\bhaft[ae]\b"),  # Roman Urdu: how did it go, week
     "commitments": _rx(r"\bpromis\w*", r"\bcommitment\w*", r"\bi'?ll\b", r"\bi will\b", r"\bi'?m going to\b", r"\bgoing to (finish|do|submit|send|complete)\b",
                        r"\bby (mon|tues|wednes|thurs|fri|satur|sun)day\b", r"\bdeadline\b", r"\bi owe\b", r"\bi committed\b"),
     "goals": _rx(r"\bgoals?\b", r"\bambition\w*", r"\bmilestone\w*", r"\bprojects?\b", r"\bwant to (learn|get good|become|master|build|improve|be)\b",
-                 r"\bget good at\b", r"\blong[- ]term\b", r"\broadmap\b", r"\bcurriculum\b", r"\bdecompose\b", r"\bbreak (it|this|that|my \w+) (down|into)\b"),
+                 r"\bget good at\b", r"\blong[- ]term\b", r"\broadmap\b", r"\bcurriculum\b", r"\bdecompose\b", r"\bbreak (it|this|that|my \w+) (down|into)\b",
+                 r"\bseekh\w*", r"\bsikh\w*"),  # Roman Urdu: learn
     "memory": _rx(r"\bremember\b", r"\bforget\b", r"\bmemor(y|ies)\b", r"\bprefer\w*", r"\bi (like|love|hate|usually|always|never)\b", r"\babout me\b",
-                  r"\bhow i (like|study|work|learn)\b", r"\bi (study|work|focus|learn|sleep|concentrate)( best| better| well)?\b", r"\bkeep in mind\b", r"\bfrom now on\b", r"\bdo you know\b"),
-    "reminders": _rx(r"\bremind\w*", r"\balarm\b", r"\bnotify me\b", r"\bping me\b", r"\bnudge me\b", r"\bwake me\b", r"\balert me\b", r"\bdon'?t let me forget\b"),
+                  r"\bhow i (like|study|work|learn)\b", r"\bi (study|work|focus|learn|sleep|concentrate)( best| better| well)?\b", r"\bkeep in mind\b", r"\bfrom now on\b", r"\bdo you know\b",
+                  r"\bfyi\b", r"\bmy (supervisor|advisor|mentor|teacher|manager|boss|roommate|sister|brother|mother|father) is\b", r"\b(tips|advice) (for|on)\b",
+                  r"\byaad rakh\w*"),  # Roman Urdu: remember
+    "reminders": _rx(r"\bremind\w*", r"\balarm\b", r"\bnotify me\b", r"\bping me\b", r"\bnudge me\b", r"\bwake me\b", r"\balert me\b", r"\bdon'?t let me forget\b",
+                     r"\byaad dila\w*"),  # Roman Urdu: remind me
     "calendar": _rx(r"\bcalendar\b", r"\bmeetings?\b", r"\bappointments?\b", r"\bfree time\b", r"\bbusy\b", r"\bavailabilit\w*", r"\bam i free\b", r"\bany(thing| plans)? on (mon|tues|wednes|thurs|fri|satur|sun)day\b", r"\bnext (week|few days)\b", r"\bwhat'?s on (my )?(day|week|schedule)\b"),
     "web": _rx(r"\bsearch\b", r"\bgoogle\b", r"\blook(ing)? up\b", r"\bonline\b", r"\bweb\b", r"\binternet\b", r"\blatest\b", r"\bnews\b", r"\bpapers?\b",
                r"\barticles?\b", r"\barxiv\b", r"https?://", r"\bwww\.", r"\bresearch\b", r"\bsurvey\b", r"\bwikipedia\b", r"\bsources?\b", r"\btechniques?\b", r"\bliterature\b", r"\bwhat'?s new\b", r"\bstate of the art\b", r"\bsota\b"),
-    "github": _rx(r"\bgithub\b", r"\brepos?\b", r"\brepositor\w*", r"\bissues?\b", r"\bpull requests?\b", r"\bprs?\b", r"\breadme\b", r"\bcommits?\b", r"\bpushed?\b"),
+    "github": _rx(r"\bgithub\b", r"\brepos?\b", r"\brepositor\w*", r"\bissues?\b", r"\bpull requests?\b", r"\bprs?\b", r"\breadme\b", r"\bcommits?\b", r"\bpushed?\b",
+                  r"\b(in|on|of|from|at) [A-Za-z0-9][\w-]*/[A-Za-z0-9][\w.-]*"),  # "in torvalds/linux": an owner/repo name
     "notes": _rx(r"\bnotes?\b", r"\bwrote\b", r"\bwritten\b", r"\bmy (files?|documents?|papers|drafts?|docs)\b", r"\bpdf\b", r"\bwhat did i write\b", r"\bjournal\b", r"\bobsidian\b", r"\bfolder\b", r"\bi (said|mentioned|noted|saved)\b"),
 }
 

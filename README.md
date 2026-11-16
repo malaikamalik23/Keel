@@ -138,9 +138,9 @@ python -m evals.run_routing        # how often does the model pick the right too
 - **Real-model routing on Groq `openai/gpt-oss-120b`** (lean profile, Nov 2026):
   - On the original 57 cases: 52/57 (91%). Two of the misses were then fixed: reminders (the tool schema demanded a stricter time
     format than Groq would accept) and "plan my day" (the model listed tasks first).
-  - On the expanded 160-case set: **134 of the 142 cases that ran passed (94%), with 0 unsafe calls and 0 wrong arguments**
-    (GitHub 8/8, notes 7/7). The other 18 (most small talk, work logging, multi-step) have not run yet: the free tier's daily
-    token limit was reached twice. Until they are, this is a partial result.
+  - On the expanded 160-case set: **135 of the 143 cases that ran passed (94%), with 0 unsafe calls and 0 wrong arguments**
+    (GitHub 8/8, notes 7/7). The other 17 (most small talk, work logging, multi-step) have not run yet: the free tier's daily
+    token limit kept being reached. Until they are, this is a partial result.
   - Still weak: commitments phrased like tasks ("move my poster deadline", "I finished the poster I promised" go to tasks first).
     Scores move by a case or two between runs.
   - Re-measure with `python -m evals.run_routing --sleep 20` (the pause keeps Groq's free tier under its tokens-per-minute limit);

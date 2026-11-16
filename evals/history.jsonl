@@ -1,3 +1,4 @@
 {"at": "20261115-225959", "model": "openai/gpt-oss-120b", "profile": "lean", "score": 1.0, "n": 15}
 {"at": "20261116-143636", "model": "openai/gpt-oss-120b", "profile": "lean", "score": 0.725, "routing": 0.725, "unsafe": 0, "n": 160, "errors": 36, "note": "Groq daily token limit hit at case 124; 116/124 answered cases passed"}
 {"at": "20261116-182142", "model": "openai/gpt-oss-120b", "profile": "lean", "score": 0.5, "routing": 0.5, "unsafe": 0, "errors": 18, "n": 36, "note": "re-run of the 36 errored cases from 20261116-143636; daily limit hit again after 18; 18/18 answered passed (combined 134/142)"}
+{"at": "20261116-184225", "model": "openai/gpt-oss-120b", "profile": "lean", "score": 0.056, "routing": 0.056, "unsafe": 0, "errors": 17, "n": 18, "note": "re-run of the 18 errored cases from 20261116-182142; daily limit hit after 1; 1/1 answered passed (combined 135/143)"}

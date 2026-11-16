@@ -103,7 +103,7 @@ def test_every_external_data_tool_is_fenced_and_gated(make_container, tmp_path):
     assert reg["web_fetch"].taint_gate is not None
 
 
-def test_taint_is_sticky_within_the_context_window_and_clears_when_it_leaves(make_container, tmp_path):
+def test_taint_lasts_for_the_whole_conversation_even_after_the_content_leaves_the_window(make_container, tmp_path):
     world = build_world(make_container, tmp_path, PAYLOADS["plain_override"])
     c = world.container
 
@@ -118,12 +118,16 @@ def test_taint_is_sticky_within_the_context_window_and_clears_when_it_leaves(mak
         res = world.agent(llm2).chat(db, "add a task: buy milk", conversation_id=1)
         assert res.tool_calls[0].status == "pending_confirmation"  # conservative by design
 
-    # Once the poisoned messages have aged out of the window, normal writes work again.
+    # Even once the poisoned messages have aged out of the window, the conversation stays tainted: the agent's own
+    # replies may still repeat what the page said (see test_summary_taint.py). A new conversation is clean.
     from app.agent.loop import Agent
-    small = Agent(ScriptedLLM([tool_call("create_task", {"title": "Buy milk"}, id="n"), text("Added.")]), world.executor,
+    small = Agent(ScriptedLLM([tool_call("create_task", {"title": "Buy milk"}, id="n"), text("Queued."),
+                               tool_call("create_task", {"title": "Buy milk"}, id="m"), text("Added.")]), world.executor,
                   make_settings(history_message_limit=3, summarize_dropped_history=False))
     with c.session_factory() as db:
         res = small.chat(db, "add a task: buy milk", conversation_id=1)
+        assert res.tool_calls[0].status == "pending_confirmation"
+        res = small.chat(db, "add a task: buy milk")
         assert res.tool_calls[0].status == "ok"
 
 

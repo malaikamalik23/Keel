@@ -30,7 +30,7 @@ An agent that reads the web and can edit your data is a prompt-injection target.
 trusted once it has read external text** and enforces the rest in code:
 
 - Deletes are **queued for your approval**; the model has no tool to approve anything.
-- Reading external content **taints the session**: further writes also need approval.
+- Reading external content **taints the conversation**: further writes in it also need approval (a new chat starts clean).
 - External text is **fenced and stripped of invisible characters and hidden HTML**.
 - A URL the model *assembled itself* (how data is smuggled out) is **gated**; the fetcher refuses private networks, validates every redirect.
 - Every action is **audited**.

@@ -37,9 +37,9 @@ class Conversation(Base):
     # summarize the newly-dropped slice instead of redoing the whole history.
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     summarized_through_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # True once any external (fenced) content has been folded into `summary`. It never goes back to False: the summary
-    # keeps whatever it learned, so the conversation stays tainted and the summary is shown to the model fenced.
-    summary_tainted: Mapped[bool] = mapped_column(default=False, server_default="0")
+    # True once the conversation has read any external (fenced) content. It never goes back to False: the page may leave
+    # the replayed window, but the summary or the agent's own replies can still carry what it said. A new chat is clean.
+    tainted: Mapped[bool] = mapped_column(default=False, server_default="0")
 
     messages: Mapped[list[Message]] = relationship(
         back_populates="conversation", cascade="all, delete-orphan", order_by="Message.id"

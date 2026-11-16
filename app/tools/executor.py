@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 from pydantic import BaseModel, ValidationError
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.db.models import PendingAction, utcnow
@@ -92,8 +92,10 @@ class ToolExecutor:
                     tool.permission.value,
                 )
 
-        # Mark confirmed in the same transaction as the action itself, so it can never run twice.
-        pa.status, pa.resolved_at = "confirmed", utcnow()
+        # Claim it atomically, in the same transaction as the action itself, so it can never run twice: two approvals
+        # arriving together (dashboard + Telegram, a double click) both saw "pending" above, but only one UPDATE can
+        # move it out of "pending". The loser is refused; SQLite's write lock makes the second wait for the first.
+        self._claim(ctx, pa, "confirmed")
         outcome = self._execute(ctx, tool, params, actor="user", pending_action_id=pa.id)
         if outcome.status != "ok":  # _execute rolled back, including the status change above
             pa = ctx.db.get(PendingAction, pending_id)
@@ -115,7 +117,7 @@ class ToolExecutor:
 
     def reject(self, ctx: ToolContext, pending_id: int) -> PendingAction:
         pa = self._get_pending(ctx, pending_id)
-        pa.status, pa.resolved_at = "rejected", utcnow()
+        self._claim(ctx, pa, "rejected")
         record_audit(
             ctx.db, actor="user", tool_name=pa.tool_name, permission="n/a", params=pa.tool_input,
             status="rejected", conversation_id=pa.conversation_id, pending_action_id=pa.id,
@@ -162,6 +164,20 @@ class ToolExecutor:
         if pa.status != "pending":
             raise ConflictError(f"Pending action {pending_id} is already {pa.status}.")
         return pa
+
+    def _claim(self, ctx: ToolContext, pa: PendingAction, status: str) -> None:
+        """Move a pending action out of 'pending' with a compare-and-set, or raise if someone else already did."""
+        claimed = ctx.db.execute(
+            update(PendingAction)
+            .where(PendingAction.id == pa.id, PendingAction.status == "pending")
+            .values(status=status, resolved_at=utcnow())
+            .execution_options(synchronize_session=False)
+        )
+        if claimed.rowcount != 1:
+            ctx.db.rollback()
+            current = ctx.db.get(PendingAction, pa.id, populate_existing=True)
+            raise ConflictError(f"Pending action {pa.id} is already {current.status if current else 'gone'}.")
+        pa.status, pa.resolved_at = status, utcnow()
 
     def _queue(self, ctx: ToolContext, tool: Tool, params: BaseModel) -> ToolOutcome:
         dump = params.model_dump(mode="json")

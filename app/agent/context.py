@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import Commitment, Memory, Notification, Plan, Task, utcnow
+from app.security.untrusted import sanitize_text
 
 MAX_TASKS = 5
 MAX_COMMITMENTS = 5
@@ -33,7 +34,9 @@ def _keywords(message: str) -> set[str]:
 
 
 def _clip(text: str, n: int = 140) -> str:
-    text = " ".join(text.split())
+    # One line, no invisible characters: stored text (memories, titles) must not be able to fake a new section of the
+    # system prompt or hide instructions from the user who can see the same data in the dashboard.
+    text = " ".join(sanitize_text(text).split())
     return text if len(text) <= n else text[: n - 1] + "…"
 
 

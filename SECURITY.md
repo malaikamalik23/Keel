@@ -38,7 +38,7 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
 ## What is enforced (in code)
 
 1. **Permission tiers.** Every tool is READ, WRITE or HIGH_IMPACT. Deletes are HIGH_IMPACT: the model can only *queue*
-   them; only you (dashboard, CLI or REST) can approve. There is no tool that approves, rejects or edits the queue. A queued action is re-checked at approval time: if its target changed in the meantime (for example SQLite reused the id of a deleted task), it is refused instead of acting on the wrong item.
+   them; only you (dashboard, CLI or REST) can approve. There is no tool that approves, rejects or edits the queue. A queued action is re-checked at approval time: if its target changed in the meantime (for example SQLite reused the id of a deleted task, or you edited the memory it would overwrite), it is refused instead of acting on the wrong item. Approval is an atomic compare-and-set, so two approvals arriving at once (dashboard and CLI, a double click) run the action **exactly once**, and an approve that loses to a reject does nothing. Unanswered requests expire after `PENDING_ACTION_TTL_HOURS` (24 by default).
 2. **Taint tracking.** When any tool returns external text, the session is *tainted*. While it is, every WRITE tool also
    needs your approval. Taint lasts as long as that content stays in the model's replayed history window.
 3. **Untrusted fencing.** External text is wrapped in `<untrusted_content>` tags. The closing tag is neutralised
@@ -53,7 +53,10 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
    resolve to **public** addresses (loopback, private, link-local, cloud-metadata, multicast, reserved and IPv4-mapped
    IPv6 are refused; decimal/octal IP tricks are caught because the resolved address is checked). Redirects are followed manually,
    max 3, and **each hop is re-validated**. Responses are capped at 1 MB and limited to text types.
-   `WEB_ALLOWED_DOMAINS` can restrict it to a short list.
+   `WEB_ALLOWED_DOMAINS` can restrict it to a short list. **DNS pinning:** the host is resolved and checked inside the
+   connect step and the socket goes to that exact address, so there is no second lookup a hostile DNS server could
+   answer with `127.0.0.1` (DNS rebinding). TLS still verifies the certificate against the hostname. Proxy settings
+   from the environment are ignored, since a proxy would do its own lookup.
 7. **Notes confinement.** Only files physically inside `NOTES_DIR` are indexed (symlinks that point outside are skipped).
    `read_note` serves text from the index, never from disk, so there is no path to traverse.
 8. **Secrets stay out of messages.** Errors from Telegram, Brave and GitHub clients never include URLs or headers
@@ -63,8 +66,13 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
 10. **API hardening.** Optional `X-API-Key` (constant-time compare), a per-client rate limit on LLM-calling endpoints,
     security headers (CSP `default-src 'self'`, `frame-ancestors 'none'`, `nosniff`), `Cache-Control: no-store` on API
     responses. Docker: non-root, read-only root filesystem, all capabilities dropped, published on `127.0.0.1` only.
-11. **Audit log.** Every tool call (allowed, queued, rejected, failed, expired) is recorded with actor and parameters.
-12. **Telegram.** Only the single configured chat id is ever answered; everything else is ignored silently. Approving
+11. **Memory hygiene.** Memories are pasted into every later system prompt, where the session is no longer tainted, so
+    they are guarded where they are written and where they are shown: invisible characters are stripped before storing,
+    the approval request shows exactly the text that will be stored (and, for an edit, the text it replaces), and the
+    context pack shows each stored item as one flattened, clipped line inside a section labelled as user data, so it
+    can't forge a heading of the system prompt or close a fence.
+12. **Audit log.** Every tool call (allowed, queued, rejected, failed, expired) is recorded with actor and parameters.
+13. **Telegram.** Only the single configured chat id is ever answered; everything else is ignored silently. Approving
     actions is deliberately **not** possible from Telegram.
 
 Tool *advertising* is not part of this model: in the default lean profile each request lists only some tools, but the executor applies every rule above to any tool the model tries to call, advertised or not (there is a test for that).
@@ -78,21 +86,36 @@ model that tries 17 harmful calls: deletes, writes, memory poisoning, exfiltrati
 cloud metadata. It asserts that nothing executed, the database is byte-for-byte unchanged, no forbidden request was
 made, and the audit log shows only queued or refused attempts.
 
+Further suites cover the cases that are about *time* rather than one turn:
+
+- `tests/injection/test_memory_poisoning.py`: every external channel tries to plant or edit a memory; a fresh, clean
+  session the next day must not see it. Also: hidden characters never reach storage, what you approve is what's stored,
+  an approved edit is refused if the memory changed meanwhile, a stored memory can't fake a system-prompt section, and
+  a model that obeys a poisoned memory still can't delete anything.
+- `tests/test_pending_concurrency.py`: two approvals at once, approve vs reject in both orders, and 8 real threads
+  approving the same action against a file database. Exactly one run, every time.
+- `tests/test_dns_pinning.py`: a resolver that answers public first and `127.0.0.1` / `10.x` / `169.254.169.254` /
+  `::1` second is refused before any socket opens; the connection goes to the checked IP; HTTPS keeps the hostname for
+  certificate checks; and a guard fails if an httpx upgrade silently removes the pinning.
+
 The suite was **mutation-checked**: each defence (taint escalation, HIGH_IMPACT tier, exfiltration gate, fence
 neutralisation, invisible-character stripping, hidden-HTML removal, SSRF check, untrusted flag) was deliberately
-broken, and the suite failed every time. A test that can't fail proves nothing; these can.
+broken, and the suite failed every time. The newer suites were checked the same way: with the old approval code, the
+old memory handling or the pinning switched off, they fail. A test that can't fail proves nothing; these can.
 
 ## Known limitations (read these)
 
 - **Taint is coarse and sticky.** Any untrusted content in the replay window makes *all* writes need approval, even
   ones you asked for in plain words. Correct but sometimes annoying; it clears when the content ages out of the window.
-- **DNS rebinding.** The fetcher validates the resolved address, then httpx resolves again. A hostile DNS server could
-  answer differently the second time. For a hard guarantee, run Keel behind an egress firewall/network policy that blocks
-  private ranges (and consider `WEB_ALLOWED_DOMAINS`).
+- **The fetcher is not a firewall.** DNS pinning closes rebinding for `web_fetch`, which is the only component that fetches
+  URLs the model chooses. Other integrations (GitHub, Brave, Telegram, your calendar URL) go to fixed hosts you configured.
+  For defence in depth on a server, still block private ranges with an egress firewall or network policy.
 - **Approved ≠ safe.** The gate puts a human in the loop; it can't judge the action for you. Read what you approve,
   especially approval requests that appear right after reading external content.
 - **Memory poisoning needs your approval, but a tricked user is still a risk.** In a tainted session `save_memory` is
-  queued; if you approve a malicious memory, it persists and is shown to the model in future context.
+  queued; if you approve a malicious memory, it persists and is shown to the model in future context. There it can only
+  mislead the model: deletes still need approval, but ordinary writes (editing or completing a task) would run, because
+  a clean session is not tainted. Read memory approvals carefully; you can see and delete every memory in the dashboard.
 - **Visible-text injection still reaches the model** (that is the point of reading a page). The defences limit what it
   can *do* with that text; they don't make the model immune to being misled in its *answers*. Verify important claims.
 - **Information disclosure through the model's reply.** The model can still quote what it has read (including your
@@ -100,4 +123,35 @@ broken, and the suite failed every time. A test that can't fail proves nothing; 
 - **Single shared API key, no TLS, no per-user auth.** See scope.
 - **Prompts and tool descriptions are sent to your LLM provider**, along with tool results and your data that the agent
   reads. Choose a provider you trust with that data.
+- **The database is not encrypted at rest.** See "Your data" below for why and what to do instead.
 - **Not independently audited.** Treat this as careful hobby-grade engineering with a strong test suite, not a certified product.
+
+## Your data: retention, backups, encryption
+
+**What is stored, and for how long.** Everything lives in one SQLite file (`data/agent.db` by default) on your machine,
+and Keel keeps it **until you delete it**. That is deliberate: the accountability features ("what have I been
+avoiding?", postponement reasons, promises kept) are only honest if the history is complete, and an agent that quietly
+deletes your data is worse than one that keeps it. Nothing is sent anywhere except to the LLM provider you chose (the
+messages and tool results of each request) and the services you configured.
+
+| Data | Kept | How to remove it |
+|---|---|---|
+| Tasks, goals, projects, commitments, plans, work sessions, reminders | until you delete them | dashboard / chat (deletes need approval) |
+| Memories | until you delete them | dashboard Memory tab |
+| Conversations | until you delete the file; only the recent window is sent to the model, older turns are summarised | delete the database |
+| Audit log, task events (postponement history) | until you delete the file | these are the evidence trail; delete the database to reset |
+| Notes index | rebuilt from `NOTES_DIR` | remove the file from the folder and re-index |
+| Pending approvals | expire after `PENDING_ACTION_TTL_HOURS` (default 24) | approve or reject |
+
+To erase everything, stop Keel and delete the database file (and its backups). Secrets live only in `.env`.
+
+**Backups.** `python -m scripts.backup` writes a consistent copy to `data/backups/` (SQLite's online backup API, safe
+while Keel is running; the copy is integrity-checked) and keeps the newest 14 (`--keep`, `--dir`). Run it from a daily
+scheduled task. Backups contain everything above, so store them as carefully as the database. To restore, stop Keel and
+copy a backup over the database file.
+
+**Encryption at rest: not built in, on purpose.** Encrypting the SQLite file (e.g. SQLCipher) means a native dependency
+that breaks `pip install` on many machines, and a key that has to live somewhere: in `.env` next to the database it
+protects, which adds little, or typed in on every start, which breaks the scheduler and Docker. Full-disk encryption
+already protects the file against the realistic threat (a lost or stolen laptop) with none of those costs, so use it:
+BitLocker (Windows), FileVault (macOS) or LUKS (Linux), and keep backups on an encrypted drive too.

@@ -10,10 +10,11 @@ own network. Every hop is therefore validated *before* any request is made:
   resolver sees the real address);
 - redirects are followed manually (max 3) and each target is re-validated;
 - response size is capped, content types are restricted to text-like ones, and timeouts are short;
-- optional allow/deny lists of domains.
-
-Known limitation: DNS can change between our check and httpx's own lookup (DNS rebinding). For a hard guarantee,
-also run the container with egress firewall rules; see SECURITY.md.
+- optional allow/deny lists of domains;
+- DNS pinning: the connection goes to the exact address that was checked. The real client resolves the host once,
+  inside the connect step, rejects it unless every address is public, and connects to that IP (TLS still verifies
+  the certificate against the hostname). There is no second lookup for a hostile DNS server to answer differently
+  (DNS rebinding). Environment proxies are ignored, since a proxy would do its own lookup and could reach your LAN.
 """
 from __future__ import annotations
 
@@ -24,6 +25,7 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit
 
+import httpcore
 import httpx
 
 MAX_URL_LENGTH = 2000
@@ -88,6 +90,13 @@ def validate_url(
     if allowed and not _host_matches(host, allowed):
         raise UnsafeURLError("That domain is not on the allowed list.")
 
+    public_addresses(host, resolver)
+    return parts.geturl()
+
+
+def public_addresses(host: str, resolver: Callable[[str], list[str]] = default_resolver) -> list[str]:
+    """The host's addresses, or UnsafeURLError unless every one of them is public."""
+    host = host.strip("[]").rstrip(".").lower()
     try:
         ipaddress.ip_address(host)
         addresses = [host]
@@ -95,7 +104,31 @@ def validate_url(
         addresses = resolver(host)
     if not addresses or not all(is_public_ip(a) for a in addresses):
         raise UnsafeURLError("That address is not on the public internet (private, loopback or reserved network).")
-    return parts.geturl()
+    return addresses
+
+
+class PinnedBackend(httpcore.SyncBackend):
+    """Resolve and check the host at connect time, then connect to that exact address (closes DNS rebinding)."""
+
+    def __init__(self, resolver: Callable[[str], list[str]] = default_resolver):
+        self.resolver = resolver
+
+    def connect_tcp(self, host, port, timeout=None, local_address=None, socket_options=None):
+        ip = public_addresses(host, self.resolver)[0]
+        return super().connect_tcp(ip, port, timeout=timeout, local_address=local_address, socket_options=socket_options)
+
+
+def pinned_client(resolver: Callable[[str], list[str]] = default_resolver, timeout: float = 10.0) -> httpx.Client:
+    transport = httpx.HTTPTransport()
+    pool = getattr(transport, "_pool", None)
+    if not isinstance(pool, httpcore.ConnectionPool) or not hasattr(pool, "_network_backend"):
+        # httpx has no public hook for this; fail loudly (a test covers it) rather than silently lose the pinning.
+        raise RuntimeError("Unsupported httpx version: cannot pin DNS for the web fetcher.")
+    pool._network_backend = PinnedBackend(resolver)
+    return httpx.Client(
+        transport=transport, timeout=timeout, follow_redirects=False, trust_env=False,
+        headers={"User-Agent": "Keel/0.1 (personal agent; read-only)"},
+    )
 
 
 # ----------------------------------------------------------------------------- HTML -> text
@@ -185,7 +218,7 @@ class SafeFetcher:
     ):
         self.allowed, self.blocked, self.resolver = list(allowed_domains), list(blocked_domains), resolver
         self.max_bytes, self.max_redirects = max_bytes, max_redirects
-        self.client = client or httpx.Client(timeout=timeout, follow_redirects=False, headers={"User-Agent": "Keel/0.1 (personal agent; read-only)"})
+        self.client = client or pinned_client(resolver, timeout)
 
     def _check(self, url: str) -> str:
         return validate_url(url, allowed_domains=self.allowed, blocked_domains=self.blocked, resolver=self.resolver)

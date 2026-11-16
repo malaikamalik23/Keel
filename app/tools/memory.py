@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.db.models import Memory
+from app.security.untrusted import sanitize_text
 from app.tools.base import Permission, Tool, ToolContext, ToolError, ToolRegistry
 
 
@@ -35,8 +36,16 @@ class SaveMemoryInput(BaseModel):
     importance: Literal["low", "medium", "high"] = "medium"
 
 
+def _clean(text: str) -> str:
+    """Memories are pasted into every later system prompt, so they must never carry invisible characters (a known way to
+    hide instructions from the human who approved or reads them)."""
+    return sanitize_text(text).strip()
+
+
 def save_memory(ctx: ToolContext, p: SaveMemoryInput) -> dict:
-    content = p.content.strip()
+    content = _clean(p.content)
+    if not content:
+        raise ToolError("The memory is empty once invisible characters are removed.")
     existing = ctx.db.scalars(select(Memory).where(Memory.content == content)).first()
     if existing:
         return {"memory": _memory_dict(existing), "note": "Already stored (duplicate skipped)."}
@@ -77,7 +86,9 @@ def update_memory(ctx: ToolContext, p: UpdateMemoryInput) -> dict:
     if not changes:
         raise ToolError("No fields to update were provided.")
     for field, value in changes.items():
-        setattr(m, field, value.strip() if field == "content" and value else value)
+        setattr(m, field, _clean(value) if field == "content" and value else value)
+    if not m.content:
+        raise ToolError("The memory is empty once invisible characters are removed.")
     ctx.db.flush()
     return {"memory": _memory_dict(m)}
 
@@ -93,6 +104,19 @@ def delete_memory(ctx: ToolContext, p: DeleteMemoryInput) -> dict:
     ctx.db.delete(m)
     ctx.db.flush()
     return {"deleted_memory_id": p.memory_id, "content": content}
+
+
+def _summarize_save(ctx: ToolContext, p: SaveMemoryInput) -> str:
+    # Shown to the human who approves it: exactly the text that will be stored, nothing hidden.
+    return f'Save a {p.kind} memory: "{_clean(p.content)}"'
+
+
+def _summarize_update(ctx: ToolContext, p: UpdateMemoryInput) -> str:
+    m = _get_memory(ctx, p.memory_id)
+    changes = p.model_dump(exclude_unset=True, exclude={"memory_id"})
+    if "content" in changes and changes["content"]:
+        changes["content"] = _clean(changes["content"])
+    return f'Change memory #{m.id} ("{m.content}"): ' + ", ".join(f"{k} -> {v!r}" for k, v in changes.items())
 
 
 def _summarize_delete(ctx: ToolContext, p: DeleteMemoryInput) -> str:
@@ -112,6 +136,7 @@ def register(registry: ToolRegistry) -> None:
             permission=Permission.WRITE,
             input_model=SaveMemoryInput,
             handler=save_memory,
+            summarize=_summarize_save,
         )
     )
     registry.register(
@@ -130,6 +155,7 @@ def register(registry: ToolRegistry) -> None:
             permission=Permission.WRITE,
             input_model=UpdateMemoryInput,
             handler=update_memory,
+            summarize=_summarize_update,
         )
     )
     registry.register(

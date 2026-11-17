@@ -86,10 +86,11 @@ def _rejected_tool_call(exc: Exception) -> str | None:
 
 
 class GroqClient:
-    def __init__(self, api_key: str, model: str, max_tokens: int = 1500):
+    def __init__(self, api_key: str, model: str, max_tokens: int = 1500, temperature: float | None = None):
         self._client = groq.Groq(api_key=api_key, max_retries=4)  # honours Retry-After on 429s (free tier is token-per-minute limited)
         self._model = model
         self._max_tokens = max_tokens
+        self._temperature = temperature
 
     def complete(self, *, system: str, messages: list[dict], tools: list[dict]) -> LLMResponse:
         kwargs: dict = {
@@ -97,6 +98,8 @@ class GroqClient:
             "max_completion_tokens": self._max_tokens,
             "messages": _messages_to_groq(system, messages),
         }
+        if self._temperature is not None:
+            kwargs["temperature"] = self._temperature
         if tools:
             kwargs["tools"] = _tools_to_groq(tools)
         try:

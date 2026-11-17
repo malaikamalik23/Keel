@@ -189,3 +189,48 @@ def test_a_second_rejection_and_other_errors_are_not_retried_forever():
         with pytest.raises(LLMError):
             gc.complete(system="s", messages=[], tools=[])
         assert len(fake.calls) == 1
+
+
+def test_temperature_is_sent_when_set_and_left_to_the_provider_when_not():
+    gc, fake = _client_with([_ok_tool_call(), _ok_tool_call()])
+    gc._temperature = 0.2
+    gc.complete(system="s", messages=[], tools=[])
+    assert fake.calls[0]["temperature"] == 0.2
+    gc._temperature = None
+    gc.complete(system="s", messages=[], tools=[])
+    assert "temperature" not in fake.calls[1]
+
+
+def test_the_retry_after_a_rejected_tool_call_keeps_the_same_temperature():
+    gc, fake = _client_with([_groq_error(400, REJECTED), _ok_tool_call()])
+    gc._temperature = 0.2
+    gc.complete(system="s", messages=[], tools=[])
+    assert [c["temperature"] for c in fake.calls] == [0.2, 0.2]
+
+
+def test_temperature_setting_reaches_both_providers_and_is_validated():
+    from app.config import Settings
+    from app.llm.anthropic_client import AnthropicClient
+    from app.llm.factory import build_llm
+
+    groq_llm = build_llm(Settings(_env_file=None, groq_api_key="gsk_test", llm_temperature=0.0))
+    assert isinstance(groq_llm, GroqClient) and groq_llm._temperature == 0.0
+    claude = build_llm(Settings(_env_file=None, anthropic_api_key="sk-test"))
+    assert isinstance(claude, AnthropicClient) and claude._temperature == 0.2  # the default
+    assert Settings(_env_file=None, llm_temperature="").llm_temperature is None  # LLM_TEMPERATURE= -> provider default
+    with pytest.raises(Exception):  # noqa: B017 - pydantic's ValidationError
+        Settings(_env_file=None, llm_temperature=1.5)
+
+
+def test_anthropic_client_sends_temperature_only_when_set():
+    from types import SimpleNamespace
+
+    from app.llm.anthropic_client import AnthropicClient
+
+    calls = []
+    reply = SimpleNamespace(content=[SimpleNamespace(type="text", text="hi")], stop_reason="end_turn", usage=None)
+    for temperature in (0.2, None):
+        client = AnthropicClient("sk-test", "m", temperature=temperature)
+        client._client = SimpleNamespace(messages=SimpleNamespace(create=lambda **kw: calls.append(kw) or reply))
+        client.complete(system="s", messages=[], tools=[])
+    assert calls[0]["temperature"] == 0.2 and "temperature" not in calls[1]

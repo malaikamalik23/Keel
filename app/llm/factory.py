@@ -25,10 +25,10 @@ def build_llm(settings: Settings) -> LLMClient:
             raise LLMError("LLM_PROVIDER=anthropic but ANTHROPIC_API_KEY is not set.")
         from app.llm.anthropic_client import AnthropicClient
 
-        return AnthropicClient(settings.anthropic_api_key, settings.agent_model, settings.max_output_tokens)
+        return AnthropicClient(settings.anthropic_api_key, settings.agent_model, settings.max_output_tokens, settings.llm_temperature)
 
     if not settings.groq_api_key:
         raise LLMError("LLM_PROVIDER=groq but GROQ_API_KEY is not set.")
     from app.llm.groq_client import GroqClient
 
-    return GroqClient(settings.groq_api_key, settings.agent_model, settings.max_output_tokens)
+    return GroqClient(settings.groq_api_key, settings.agent_model, settings.max_output_tokens, settings.llm_temperature)

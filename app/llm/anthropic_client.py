@@ -7,10 +7,11 @@ from app.llm.base import LLMResponse
 
 
 class AnthropicClient:
-    def __init__(self, api_key: str, model: str, max_tokens: int = 1500):
+    def __init__(self, api_key: str, model: str, max_tokens: int = 1500, temperature: float | None = None):
         self._client = anthropic.Anthropic(api_key=api_key)
         self._model = model
         self._max_tokens = max_tokens
+        self._temperature = temperature
 
     def complete(self, *, system: str, messages: list[dict], tools: list[dict]) -> LLMResponse:
         kwargs: dict = {
@@ -21,6 +22,8 @@ class AnthropicClient:
         }
         if tools:
             kwargs["tools"] = tools
+        if self._temperature is not None:
+            kwargs["temperature"] = self._temperature
         try:
             resp = self._client.messages.create(**kwargs)
         except anthropic.APIError as exc:

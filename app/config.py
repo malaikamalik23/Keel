@@ -1,6 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,6 +21,14 @@ class Settings(BaseSettings):
     max_agent_steps: int = 8  # max LLM calls per user message (guards against loops)
     history_message_limit: int = 40  # messages replayed to the LLM each turn
     max_output_tokens: int = 1500
+    # How much randomness the model may use when choosing a tool and its arguments. Low = the same message gets the same
+    # decision run after run. None (LLM_TEMPERATURE= empty) leaves it to the provider's default, which is usually ~1.
+    llm_temperature: float | None = Field(0.2, ge=0, le=1)
+
+    @field_validator("llm_temperature", mode="before")
+    @classmethod
+    def _empty_means_provider_default(cls, v):
+        return None if isinstance(v, str) and not v.strip() else v
     confirm_writes: bool = False  # require confirmation for WRITE tools as well
 
     # Messages older than the replayed window are folded into Conversation.summary instead of being

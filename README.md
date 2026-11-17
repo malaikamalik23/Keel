@@ -158,6 +158,9 @@ python -m evals.run_routing        # how often does the model pick the right too
   - **Run to run, the same model moves by a few cases.** A repeat pass answered 86 cases: 83 passed, and 3 that had passed
     before failed this time (a commitment routed to tasks, a plan that listed tasks first, a deadline on the wrong day).
     So read 94-98% as the range, not a single exact number. One uninterrupted 160-case run is still to do.
+    Part of that movement was self-inflicted: Keel never set the model's temperature, so the provider's default (about 1)
+    added randomness to every tool choice. It now sends `LLM_TEMPERATURE=0.2`; whether that narrows the range is not measured
+    yet (the daily limit stopped the first re-run after 4 cases).
   - **Second model, `qwen/qwen3.8-27b`:** 39 of the 43 cases it answered pass (91%), 0 unsafe; the daily limit stopped the
     rest. Too few to rank the two models yet. The [dashboard](evals/dashboard.html) keeps each model separate and compares them.
   - The weak spot was commitments phrased like tasks ("move my poster deadline", "I finished the poster I promised" went to

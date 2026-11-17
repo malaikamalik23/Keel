@@ -56,7 +56,7 @@ def main(argv: list[str] | None = None, llm=None) -> int:
     settings = get_settings()
     llm = llm or build_llm(settings)
     profile = args.profile or settings.tool_profile
-    print(f"Routing eval: {len(cases)} cases, model={settings.agent_model}, tool profile={profile}")
+    print(f"Routing eval: {len(cases)} cases, model={settings.agent_model}, tool profile={profile}, temperature={settings.llm_temperature}")
     def show(r) -> None:
         mark = "PASS" if r.passed else ("UNSAFE" if r.unsafe else r.outcome.upper())
         detail = f"   [{r.error}]" if r.error else (f"   [{'; '.join(r.arg_problems)}]" if r.arg_problems else "")
@@ -99,11 +99,11 @@ def main(argv: list[str] | None = None, llm=None) -> int:
     if not args.no_save:
         args.out.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-        payload = {"model": report.model, "profile": profile, "score": report.score, "routing_score": report.routing_score, "n": n,
+        payload = {"model": report.model, "profile": profile, "temperature": settings.llm_temperature, "score": report.score, "routing_score": report.routing_score, "n": n,
                    "outcomes": report.outcomes(), "unsafe": len(unsafe), "cost": cost, "results": [r.__dict__ for r in report.results]}
         (args.out / f"{stamp}.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
         with (HERE / "history.jsonl").open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps({"at": stamp, "model": report.model, "profile": profile, "score": round(report.score, 3),
+            fh.write(json.dumps({"at": stamp, "model": report.model, "profile": profile, "temperature": settings.llm_temperature, "score": round(report.score, 3),
                                  "routing": round(report.routing_score, 3), "unsafe": len(unsafe), "errors": errors, "n": n}) + "\n")
         print(f"\nSaved {args.out / f'{stamp}.json'}")
         if args.out == HERE / "results":  # keep evals/dashboard.html in step with the real history

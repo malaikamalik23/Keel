@@ -14,7 +14,7 @@ machine, with your data in one SQLite file.
 
 | | |
 |---|---|
-| **Chat** | Talk to it in the terminal, the web dashboard, or Telegram (reminders can also come by email). It calls tools to read and change your data. |
+| **Chat** | Talk to it in the web dashboard or the terminal. It calls tools to read and change your data. Reminders and check-ins arrive by email. |
 | **Goals → milestones → tasks** | "I want to get good at web pentesting" becomes a goal, ordered milestones, and concrete first tasks. |
 | **Commitments** | Notices "I'll finish the GRE set by Friday", asks you to confirm, tracks it, counts postponements. |
 | **Realistic daily plans** | A deterministic planner: never exceeds your available time (15% buffer), at most 3 major priorities, and tells you what it left out and why. |
@@ -76,7 +76,7 @@ The schema is created and migrated automatically on startup (Alembic, `data/agen
 ### Docker
 
 ```bash
-cp .env.example .env     # set an LLM key and API_KEY (compose refuses to start without API_KEY)
+cp .env.example .env     # set an LLM key, and API_KEY: Docker needs one (compose refuses to start without it)
 docker compose up --build        # http://127.0.0.1:8000
 ```
 
@@ -109,10 +109,9 @@ The ones you'll touch first:
 |---|---|
 | `ANTHROPIC_API_KEY` / `GROQ_API_KEY`, `AGENT_MODEL` | The LLM. Groq models must support tool calling (`openai/gpt-oss-120b` works on Groq's free tier; set `HISTORY_MESSAGE_LIMIT=12` there). |
 | `AGENT_TIMEZONE` | "Today", check-in times and quiet hours use it. |
-| `API_KEY` | **Set this before exposing the API anywhere.** Without it, only the dashboard and tools on the same machine are answered (not other machines, and not websites open in your browser). |
+| `API_KEY` | **Not needed on your own laptop.** Leave it unset and only this computer can use Keel (not other devices, and not websites open in your browser). Set it for Docker, or before reaching Keel from another device; the dashboard then asks for it once per tab. |
 | `SCHEDULER_ENABLED=true` | Turns on check-ins, reminders and nudges (run one process only). |
-| `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Deliver messages to, and chat from, your phone. |
-| `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `EMAIL_TO` | Or receive reminders and check-ins by email ([setup](docs/INSTALL.md#reminders-and-check-ins-by-email)). |
+| `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `EMAIL_TO` | Receive reminders and check-ins by email ([setup](docs/INSTALL.md#reminders-and-check-ins-by-email)). |
 | `NOTES_DIR` | A folder of notes/papers for `notes_search`. |
 | `BRAVE_API_KEY` | Enables `web_search`. |
 | `WEB_ALLOWED_DOMAINS` | Restrict the web fetcher to a short allow-list. |
@@ -121,11 +120,11 @@ The ones you'll touch first:
 ## How it works
 
 ```
-Dashboard (React) · CLI · Telegram ──▶ FastAPI ──▶ Agent loop ──▶ ToolExecutor ──▶ tools ──▶ SQLite
+Dashboard (React) · CLI ──▶ FastAPI ──▶ Agent loop ──▶ ToolExecutor ──▶ tools ──▶ SQLite
                                                        │             │  validate → permission policy
                                                   LLM (Anthropic /   │  → taint gate → run → audit
                                                   Groq, swappable)   └─ queues HIGH_IMPACT for you
-Scheduler ──▶ detectors (SQL) ──▶ notification budget ──▶ LLM only words the message ──▶ Telegram/log
+Scheduler ──▶ detectors (SQL) ──▶ notification budget ──▶ LLM only words the message ──▶ email/log
 ```
 
 - **One agent, native tool calling**, bounded loop (`MAX_AGENT_STEPS`), atomic history (a `tool_use` is never saved without its result).
@@ -141,10 +140,10 @@ pytest -q                          # everything
 pytest tests/injection -q          # the prompt-injection red-team suite
 python -m scripts.security_demo    # 12 attacks, explained, each shown blocked
 ruff check .                       # lint
-python -m evals.run_routing        # how often does the model pick the right tool? (needs an API key)
+python -m evals.run_routing        # how often does the model pick the right tool? (needs your Groq or Anthropic key)
 ```
 
-- Agent logic is tested against a scripted fake LLM, and all HTTP (Telegram, Brave, GitHub, web pages, calendar) against mocked transports, so CI needs no keys and no network.
+- Agent logic is tested against a scripted fake LLM, and all network calls (email, Brave, GitHub, web pages, calendar) against mocks, so CI needs no keys and no network.
 - `evals/` holds 160 routing cases (55 with argument checks, tagged for natural-language deadlines, ambiguity, multi-step, safety, Roman Urdu and regressions), scored per category and tag, with history in `evals/history.jsonl` and a generated [dashboard](evals/dashboard.html) of scores over time, plus latency and token use per run. [More](evals/README.md).
 - CI (GitHub Actions): lint, tests on Python 3.11 and 3.12, red-team suite, dashboard tests + build, real-Chromium end-to-end tests, dependency audit, secret scan, static analysis (Bandit and Semgrep's python, security-audit and secrets rules), Docker build plus the deployment guide's backup and restore.
 
@@ -171,10 +170,10 @@ python -m evals.run_routing        # how often does the model pick the right too
 - **Live services: some verified, some only mocked.** GitHub (including your private repos when a token is set), the iCal calendar and
   the notes folder have been checked against the real services with `python -m scripts.smoke_integrations` (one read-only call each,
   never prints keys). Email delivery has been checked against real Gmail (STARTTLS, App Password, a test message received with
-  `--send-test-email`). Telegram and Brave Search are so far verified only against mocked HTTP; try them with your own keys
+  `--send-test-email`), and a reminder set in chat arrived by email on time. Brave Search is so far verified only against mocked HTTP; try it with your own key
   (see [docs/DEMO.md](docs/DEMO.md)) and please open an issue if a real API behaves differently.
 - The dashboard is type-checked, has 16 jsdom tests (every tab, empty states, a malformed response, the approval flow, skip-cancel) and 2 **real-Chromium end-to-end tests** (`tests/e2e`, Playwright; CI job `e2e`) that drive the real server through chat, plan, delete-and-approve and reminders and fail on any console error. The browser tests exist because the first manual run found a Chrome-only crash that jsdom could not see.
-- Single-user by design: one API key, no accounts. Not multi-tenant.
+- Single-user by design: no accounts, one optional dashboard key. Not multi-tenant.
 - See [SECURITY.md](SECURITY.md#known-limitations-read-these) for the security limitations (sticky taint, approved-memory risks, and more) and for what is stored and how to back it up (`python -m scripts.backup`).
 
 ## Project layout
@@ -186,7 +185,7 @@ app/
   security/     permission policy, audit log, untrusted-content fencing and sanitising
   services/     planner, accountability, analytics, notifications, notes indexer (shared by tools and API)
   scheduler/    tick loop, detectors, check-ins
-  integrations/ Telegram, calendar (iCal), safe HTTP fetcher, Brave search, GitHub
+  integrations/ email, calendar (iCal), safe HTTP fetcher, Brave search, GitHub
   llm/          provider-neutral interface + Anthropic and Groq adapters
   api/ db/      FastAPI app, SQLAlchemy models, Alembic session
 frontend/       React + Vite + TypeScript dashboard

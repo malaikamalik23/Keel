@@ -4,6 +4,16 @@ export interface Goal { id: number; title: string; description: string | null; h
 export interface Project { id: number; name: string; description: string | null; purpose: string | null; status: string; priority: string; deadline: string | null; goal_id: number | null; }
 export interface Commitment { id: number; text: string; deadline: string | null; importance: string; status: string; postponement_count: number; completed_at: string | null; }
 export interface Memory { id: number; kind: string; category: string; topic: string | null; content: string; importance: string; source: string; created_at: string; updated_at: string; confirmed_at: string | null; last_used_at: string | null; needs_review: boolean; }
+export interface BriefTask { id: number; title: string; priority: string; due?: string; minutes?: number; }
+export interface Briefing {
+  date: string; weekday: string; next_action: string | BriefTask | null;
+  plan: { exists: boolean; items_left: number; items_total: number };
+  due_today: BriefTask[]; overdue: BriefTask[]; coming_up: BriefTask[];
+  commitments_due_soon: { text: string; deadline: string; overdue: boolean }[];
+  follow_ups_due: { title: string; waiting_on: string; since: string }[];
+  waiting_count: number; blocked_count: number; slipping: { title: string; postponed: number }[];
+  calendar: { title: string; time: string; minutes: number }[] | null; text: string;
+}
 export interface MemoryReview { stale: Memory[]; conflicts: Memory[][]; }
 export interface PendingAction { id: number; tool_name: string; summary: string; status: string; created_at: string; }
 export interface AuditEntry { id: number; created_at: string; actor: string; tool_name: string; permission: string; status: string; detail: string | null; }

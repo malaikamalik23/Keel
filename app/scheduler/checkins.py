@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings
 from app.db.models import Checkin, Commitment, Task, WorkSession
 from app.services import accountability
+from app.services.briefing import briefing_text, build_briefing
 from app.services.notifications import parse_hhmm
 from app.services.timeutil import window_utc
 
@@ -45,14 +46,8 @@ def build_facts(db: Session, kind: str, today: date, tz: ZoneInfo) -> dict:
     facts: dict = {"kind": kind, "date": today.isoformat(), "plan": plan}
 
     if kind == "morning":
-        facts["due_today"] = [t.title for t in open_tasks if t.due_date == today][:5]
-        facts["overdue"] = [t.title for t in open_tasks if t.due_date and t.due_date < today][:5]
-        facts["commitments_soon"] = [
-            {"text": c.text, "deadline": c.deadline.isoformat()}
-            for c in db.scalars(select(Commitment).where(Commitment.status == "open"))
-            if c.deadline and c.deadline <= today + timedelta(days=2)
-        ][:5]
-        facts["slipping"] = [{"title": t.title, "postponed": t.postponement_count} for t in open_tasks if t.postponement_count >= 2][:3]
+        # The daily briefing (own data only; calendar titles are added by code after the model has written its part).
+        facts["briefing"] = build_briefing(db, today)
     elif kind == "evening":
         lo, hi = window_utc(today, today, tz)
         sessions = list(db.scalars(select(WorkSession).where(WorkSession.started_at >= lo, WorkSession.started_at < hi)))
@@ -63,6 +58,15 @@ def build_facts(db: Session, kind: str, today: date, tz: ZoneInfo) -> dict:
         facts["minutes_worked"] = sum(s.minutes for s in sessions)
     else:  # weekly
         facts["report"] = accountability.accountability_report(db, today, tz, window_days=7)
+        next_week = today + timedelta(days=7)
+        facts["next_week"] = {
+            "tasks_due": [{"title": t.title, "due": t.due_date.isoformat()} for t in sorted(open_tasks, key=lambda t: t.due_date or date.max)
+                          if t.due_date and today < t.due_date <= next_week][:8],
+            "promises_due": [{"text": c.text, "deadline": c.deadline.isoformat()}
+                             for c in db.scalars(select(Commitment).where(Commitment.status == "open"))
+                             if c.deadline and today < c.deadline <= next_week][:5],
+        }
+        facts["waiting_on"] = [{"title": t.title, "waiting_on": t.waiting_on} for t in open_tasks if t.waiting_on][:5]
     return facts
 
 
@@ -70,17 +74,7 @@ def fallback_text(facts: dict) -> str:
     """What gets sent if the LLM is unavailable. Plain, factual, useful."""
     kind = facts["kind"]
     if kind == "morning":
-        plan = facts["plan"]
-        lines = ["Good morning."]
-        if plan.get("exists") and plan["items"]:
-            lines.append("Today's plan: " + "; ".join(f"{i['title']} ({i['minutes']} min)" for i in plan["items"][:3]) + ".")
-        else:
-            lines.append("No plan for today yet — tell me how much time you have and I'll build one.")
-        if facts["overdue"]:
-            lines.append("Overdue: " + ", ".join(facts["overdue"][:3]) + ".")
-        if facts["commitments_soon"]:
-            lines.append("Coming up: " + ", ".join(c["text"] for c in facts["commitments_soon"][:3]) + ".")
-        return " ".join(lines)
+        return briefing_text(facts["briefing"])
     if kind == "evening":
         done, left = facts["planned_done"], facts["planned_not_done"]
         msg = f"Evening review: {len(done)} planned item(s) done"
@@ -94,4 +88,10 @@ def fallback_text(facts: dict) -> str:
         msg += f" Most postponed: {r['most_postponed'][0]['title']} ({r['most_postponed'][0]['postponement_count']}×)."
     if r["neglected_goals"]:
         msg += f" No progress on: {r['neglected_goals'][0]['title']}."
+    nxt = facts.get("next_week", {})
+    due = [t["title"] for t in nxt.get("tasks_due", [])] + [p["text"] for p in nxt.get("promises_due", [])]
+    if due:
+        msg += " Due next week: " + ", ".join(due[:4]) + "."
+    if facts.get("waiting_on"):
+        msg += " Still waiting on: " + ", ".join(f"{w['waiting_on']} ({w['title']})" for w in facts["waiting_on"][:3]) + "."
     return msg + " What should next week's top priority be?"

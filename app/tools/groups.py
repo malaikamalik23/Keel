@@ -30,7 +30,7 @@ LOAD_TOOLS = "load_tools"
 
 GROUP_INFO: dict[str, str] = {
     "tasks": "tasks: create, list, update, complete, delete (always loaded)",
-    "plan": "plan: build/show today's plan, skip plan items, log time worked",
+    "plan": "plan: today's briefing, build/show today's plan, skip plan items, log time worked",
     "accountability": "accountability: what slipped or was avoided, weekly review, history of a task",
     "commitments": "commitments: promises with deadlines (propose, confirm, list, update, complete)",
     "goals": "goals: goals, milestones and projects",
@@ -44,7 +44,7 @@ GROUP_INFO: dict[str, str] = {
 
 TOOL_GROUP: dict[str, str] = {
     **dict.fromkeys(["get_current_datetime", "create_task", "list_tasks", "update_task", "complete_task", "delete_task"], "tasks"),
-    **dict.fromkeys(["create_daily_plan", "get_daily_plan", "update_plan_item", "log_work_session", "list_work_sessions"], "plan"),
+    **dict.fromkeys(["get_briefing", "create_daily_plan", "get_daily_plan", "update_plan_item", "log_work_session", "list_work_sessions"], "plan"),
     **dict.fromkeys(["accountability_report", "task_history"], "accountability"),
     **dict.fromkeys(["propose_commitment", "confirm_commitment", "list_commitments", "update_commitment", "complete_commitment"], "commitments"),
     **dict.fromkeys(["create_goal", "list_goals", "update_goal", "add_milestones", "milestone_to_tasks", "create_project", "list_projects", "update_project"], "goals"),
@@ -69,7 +69,7 @@ def _rx(*alts: str) -> re.Pattern[str]:
 
 # Deliberately generous: a false positive costs ~1k tokens, a false negative costs one extra load_tools call.
 KEYWORDS: dict[str, re.Pattern[str]] = {
-    "plan": _rx(r"\bplan(s|ning|ned)?\b", r"\bschedul\w*", r"\bagenda\b", r"\btimetable\b", r"\bworked\b", r"\bworking on\b", r"\bspent\b",
+    "plan": _rx(r"\bplan(s|ning|ned)?\b", r"\bbrief(ing)?\b", r"\bmy day\b", r"\b(important|on) today\b", r"\bschedul\w*", r"\bagenda\b", r"\btimetable\b", r"\bworked\b", r"\bworking on\b", r"\bspent\b",
                 r"\blog(ged)?\b", r"\bsessions?\b", r"\b\d+ ?(mins?|minutes|hrs?|hours?) (on|of|for)\b", r"\bskip\b", r"\bfocus(ed)? (time|session)\b", r"\bwhat should i (do|work on)\b",
                 r"\bhow much (time )?(did|have) i (work|stud)\w*", r"\bghant[ae]\w*", r"\bparh(a|i|ai)\b", r"\bkaam kiya\b"),  # Roman Urdu: hours, studied, worked
     "accountability": _rx(r"\bavoid\w*", r"\bslip\w*", r"\bpostpon\w*", r"\bprocrastinat\w*", r"\bput(ting)? (it )?off\b", r"\breview\b",

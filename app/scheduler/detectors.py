@@ -6,7 +6,7 @@ Each detector returns Nudges with a stable `dedupe_key`, so the same problem is 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -48,6 +48,17 @@ def detect_nudges(db: Session, now_local: datetime, tz: ZoneInfo) -> list[Nudge]
             "normal", f"follow-up:{t.id}:{today}",
             {"what": "follow_up", "title": t.title, "waiting_on": t.waiting_on, "follow_up_date": t.follow_up_date.isoformat()},
             f"Still waiting on {t.waiting_on} for “{t.title}”. Time to follow up?",
+        ))
+
+    # Heads-up: promises and high-priority tasks due tomorrow, so there is still a day to do them (one message a day).
+    tomorrow = today + timedelta(days=1)
+    due_tomorrow = [c.text for c in db.scalars(select(Commitment).where(Commitment.status == "open", Commitment.deadline == tomorrow))]
+    due_tomorrow += [t.title for t in db.scalars(select(Task).where(Task.status.in_(OPEN), Task.due_date == tomorrow, Task.priority == "high"))
+                     if not t.waiting_on]
+    if due_tomorrow:
+        out.append(Nudge(
+            "normal", f"due-tomorrow:{today}", {"what": "due_tomorrow", "items": due_tomorrow[:5]},
+            "Due tomorrow: " + ", ".join(due_tomorrow[:3]) + ". Is there a piece you can do today?",
         ))
 
     # Overdue tasks the user could act on (ones waiting on someone get the follow-up above instead).

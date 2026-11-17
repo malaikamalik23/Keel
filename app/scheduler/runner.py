@@ -22,6 +22,7 @@ from app.integrations.notifier import Notifier, TelegramNotifier
 from app.integrations.telegram_bot import TelegramInbox
 from app.scheduler.checkins import build_facts, checkins_due, fallback_text
 from app.scheduler.detectors import detect_nudges
+from app.services.briefing import calendar_events, calendar_lines
 from app.services.notifications import NotificationService
 from app.services.timeutil import local_to_naive_utc
 
@@ -36,8 +37,9 @@ def latest_conversation_id(db: Session) -> int | None:
 
 class Scheduler:
     def __init__(self, *, settings: Settings, session_factory: sessionmaker[Session], agent: Agent,
-                 notifications: NotificationService, notifier: Notifier):
+                 notifications: NotificationService, notifier: Notifier, calendar_source=None):
         self.settings = settings
+        self.calendar_source = calendar_source  # () -> iCal text, or None when no calendar is configured
         self.session_factory = session_factory
         self.agent = agent
         self.notifications = notifications
@@ -86,9 +88,15 @@ class Scheduler:
         today = now_local.date()
         for kind in checkins_due(db, now_local, self.settings):
             facts = build_facts(db, kind, today, self.tz)
+            # Calendar titles come from other people: the model never sees them; code adds them, links removed.
+            calendar = calendar_lines(calendar_events(self.calendar_source, today, self.tz)) if kind == "morning" else ""
+
+            def word(k=kind, f=facts, cal=calendar) -> str:
+                text = self.agent.compose_message(k, f, fallback_text(f))
+                return f"{text}\n\n{cal}" if cal else text
+
             res = self.notifications.send(
-                db, kind=kind, priority="normal", dedupe_key=f"checkin:{kind}:{today}", now_local=now_local,
-                text=lambda k=kind, f=facts: self.agent.compose_message(k, f, fallback_text(f)),
+                db, kind=kind, priority="normal", dedupe_key=f"checkin:{kind}:{today}", now_local=now_local, text=word,
             )
             if res.sent and res.text:
                 db.add(Checkin(kind=kind, checkin_date=today, summary=res.text))

@@ -34,6 +34,7 @@ from app.db.models import (
 from app.errors import ConflictError, NotFoundError
 from app.services import accountability as accountability_svc
 from app.services import analytics as analytics_svc
+from app.services.briefing import briefing_text, build_briefing, calendar_events
 from app.tools.base import ToolContext
 from app.tools.memory import needs_review as memory_needs_review
 from app.tools.planning import get_plan, plan_dict
@@ -324,6 +325,16 @@ def task_events(task_id: int, db: Session = Depends(get_db)):
 def plan(plan_date: date | None = Query(None, alias="date"), db: Session = Depends(get_db), c: Container = Depends(get_container)):
     day = plan_date or datetime.now(ZoneInfo(c.settings.agent_timezone)).date()
     return plan_dict(get_plan(db, day), day)
+
+
+@router.get("/briefing")
+def briefing(db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    """Today at a glance, plus today's calendar (titles cleaned, links removed). The dashboard shows it as plain text."""
+    tz = ZoneInfo(c.settings.agent_timezone)
+    today = datetime.now(tz).date()
+    facts = build_briefing(db, today)
+    events = calendar_events(c.calendar_source, today, tz)
+    return {**facts, "calendar": events, "text": briefing_text(facts, events)}
 
 
 @router.get("/accountability")

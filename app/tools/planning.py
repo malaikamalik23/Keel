@@ -200,8 +200,30 @@ def task_history(ctx: ToolContext, p: TaskHistoryInput) -> dict:
     return {"task_id": task.id, "title": task.title, "postponement_count": task.postponement_count, "events": accountability.task_history(ctx.db, task.id)}
 
 
+# ---------- get_briefing ----------
+class GetBriefingInput(BaseModel):
+    pass
+
+
+def get_briefing(ctx: ToolContext, p: GetBriefingInput) -> dict:
+    """The day at a glance from the user's own data. Calendar events are not included (their titles come from other
+    people): use read_calendar for those."""
+    from app.services.briefing import build_briefing
+
+    return build_briefing(ctx.db, ctx.today())
+
+
 def register(registry: ToolRegistry) -> None:
     for tool in (
+        Tool(
+            name="get_briefing",
+            description=(
+                "The user's day at a glance: the best next task, what is due today or overdue, promises due soon, what "
+                "is coming up, follow-ups due, and how many tasks are waiting or blocked. Use for 'brief me', 'what does "
+                "my day look like', 'what's important today'. Does not include calendar events (use read_calendar)."
+            ),
+            permission=Permission.READ, input_model=GetBriefingInput, handler=get_briefing,
+        ),
         Tool(
             name="create_daily_plan",
             description=(

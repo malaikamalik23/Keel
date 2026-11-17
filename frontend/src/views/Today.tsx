@@ -1,6 +1,6 @@
 import { api } from "../api";
 import { useAction, useLoad } from "../hooks";
-import type { Accountability, Commitment, Plan, Task } from "../types";
+import type { Accountability, Briefing, Commitment, Plan, Task } from "../types";
 import { Badge, Card, Empty, ErrorNote, Loading, fmtDate, isOverdue } from "../ui";
 
 export default function Today() {
@@ -8,7 +8,8 @@ export default function Today() {
   const tasks = useLoad<Task[]>("/api/tasks?status=open");
   const commitments = useLoad<Commitment[]>("/api/commitments?status=open");
   const acct = useLoad<Accountability>("/api/accountability?window_days=7");
-  const refresh = async () => { await Promise.all([plan.reload(), tasks.reload(), commitments.reload(), acct.reload()]); };
+  const brief = useLoad<Briefing>("/api/briefing");
+  const refresh = async () => { await Promise.all([plan.reload(), tasks.reload(), commitments.reload(), acct.reload(), brief.reload()]); };
   const { run, error } = useAction(refresh);
 
   const skip = (id: number) => {
@@ -27,9 +28,27 @@ export default function Today() {
     ...a.neglected_goals.map((g) => `No progress on goal “${g.title}” for ${g.days_since_activity} days`),
   ] : [];
 
+  const b = brief.data;
+  const next = b?.next_action ? (typeof b.next_action === "string" ? b.next_action : b.next_action.title) : null;
+
   return (
     <div className="grid">
       <ErrorNote error={error} />
+      <Card title="Briefing">
+        <Loading loading={brief.loading} error={brief.error} />
+        {b && (
+          <>
+            <p>{next ? <>Start with <strong>{next}</strong>.</> : "Nothing that can be started right now."}</p>
+            {b.follow_ups_due.length > 0 && <p className="small">Time to follow up: {b.follow_ups_due.map((f) => `${f.waiting_on} (${f.title})`).join(", ")}</p>}
+            {b.commitments_due_soon.length > 0 && <p className="small">Promises due soon: {b.commitments_due_soon.map((c) => `${c.text} (${fmtDate(c.deadline)})`).join(", ")}</p>}
+            {b.coming_up.length > 0 && <p className="small">Coming up: {b.coming_up.map((t) => `${t.title} (${fmtDate(t.due ?? null)})`).join(", ")}</p>}
+            {(b.waiting_count > 0 || b.blocked_count > 0) && <p className="muted small">{b.waiting_count} waiting on someone, {b.blocked_count} waiting for another task.</p>}
+            {b.calendar && b.calendar.length > 0 && (
+              <ul className="list">{b.calendar.map((e, i) => <li key={i}><span>{e.title}</span> <Badge>{e.time}</Badge></li>)}</ul>
+            )}
+          </>
+        )}
+      </Card>
       <Card title="Today's plan" right={p?.exists ? <Badge>{p.planned_minutes} / {p.usable_minutes} min</Badge> : undefined}>
         <Loading loading={plan.loading} error={plan.error} />
         {p && !p.exists && <Empty>No plan yet. Ask the agent in Chat: “Plan my day, I have 4 hours.”</Empty>}

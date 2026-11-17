@@ -1,6 +1,7 @@
 """Wires the app together. Used by both the API and the CLI so they behave identically."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from sqlalchemy import Engine
@@ -35,6 +36,7 @@ class Container:
     notifier: Notifier
     notifications: NotificationService
     scheduler: Scheduler
+    calendar_source: Callable[[], str] | None = None  # () -> iCal text, for the briefing; None when not configured
 
     def index_notes(self) -> dict:
         """Incrementally (re)index NOTES_DIR. Cheap when nothing changed."""
@@ -55,8 +57,9 @@ def build_container(
     engine = make_engine(settings.database_url)
     init_db(engine)
     calendar_url = settings.calendar_ics_url
+    calendar_source = (lambda: fetch_ics(calendar_url)) if calendar_url else None
     registry = build_default_registry(
-        calendar_source=(lambda: fetch_ics(calendar_url)) if calendar_url else None,
+        calendar_source=calendar_source,
         fetcher=SafeFetcher(allowed_domains=csv_list(settings.web_allowed_domains), blocked_domains=csv_list(settings.web_blocked_domains))
         if settings.web_fetch_enabled else None,
         search=BraveSearch(settings.brave_api_key) if settings.brave_api_key else None,
@@ -74,6 +77,9 @@ def build_container(
     notifier = notifier or build_notifier(settings)
     notifications = NotificationService(notifier, settings)
     scheduler = Scheduler(
-        settings=settings, session_factory=session_factory, agent=agent, notifications=notifications, notifier=notifier
+        settings=settings, session_factory=session_factory, agent=agent, notifications=notifications, notifier=notifier,
+        calendar_source=calendar_source,
     )
-    return Container(settings, engine, session_factory, registry, executor, agent, notifier, notifications, scheduler)
+    container = Container(settings, engine, session_factory, registry, executor, agent, notifier, notifications, scheduler)
+    container.calendar_source = calendar_source
+    return container

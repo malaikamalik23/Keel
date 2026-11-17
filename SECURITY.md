@@ -73,7 +73,9 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
 8. **Secrets stay out of messages.** Errors from Telegram, Brave and GitHub clients never include URLs or headers
    (the Telegram bot token lives in the URL, API keys in headers). Tokens are never logged or returned to the model.
 9. **Plain-text output.** The dashboard renders model output as text (no HTML/Markdown), and Telegram messages are sent
-   without `parse_mode`, so a Markdown image/link in a reply is not an exfiltration channel.
+   without `parse_mode`, so a Markdown image/link in a reply is not an exfiltration channel. Calendar event titles are written by whoever sent
+   the invite, so the morning briefing never hands them to the model: code appends them after the model's text, as plain
+   lines with links removed, and the `get_briefing` tool leaves them out.
 10. **API hardening.** `X-API-Key` (constant-time compare) or, without one, local-only access with Host and
     cross-site checks (see Scope), a per-client rate limit on LLM-calling endpoints,
     security headers (CSP `default-src 'self'`, `frame-ancestors 'none'`, `nosniff`), `Cache-Control: no-store` on API

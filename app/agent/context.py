@@ -41,6 +41,12 @@ def _task_line(t: Task, today: date) -> str:
         parts.append(f"due {t.due_date.isoformat()}" + (" (OVERDUE)" if t.due_date < today else ""))
     if t.postponement_count:
         parts.append(f"postponed {t.postponement_count}x")
+    if t.recurrence:
+        parts.append(f"repeats {t.recurrence}")
+    if t.waiting_on:
+        parts.append(f"waiting on {_clip(t.waiting_on, 60)}" + (f", follow up {t.follow_up_date.isoformat()}" if t.follow_up_date else ""))
+    if t.blocked_by_id:
+        parts.append(f"after task #{t.blocked_by_id}")
     return "- " + ", ".join(parts)
 
 

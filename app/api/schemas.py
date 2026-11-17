@@ -37,6 +37,11 @@ class TaskOut(BaseModel):
     postponement_count: int
     created_at: datetime
     completed_at: datetime | None
+    project_id: int | None = None
+    recurrence: str | None = None
+    blocked_by_id: int | None = None
+    waiting_on: str | None = None
+    follow_up_date: date | None = None
 
 
 class MilestoneOut(BaseModel):

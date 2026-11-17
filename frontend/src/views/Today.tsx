@@ -19,6 +19,7 @@ export default function Today() {
   };
   const p = plan.data;
   const a = acct.data;
+  const openIds = new Set((tasks.data ?? []).map((t) => t.id)); // a blocker that is done no longer blocks
   const alerts = a ? [
     ...a.tasks.overdue_titles.map((t) => `Overdue task: ${t}`),
     ...a.overdue_commitments.map((c) => `Overdue commitment: ${c.text} (was due ${fmtDate(c.deadline)})`),
@@ -62,7 +63,7 @@ export default function Today() {
         <ul className="list">
           {tasks.data?.map((t) => (
             <li key={t.id}>
-              <span>{t.title} {t.due_date && <Badge tone={isOverdue(t.due_date) ? "bad" : ""}>{fmtDate(t.due_date)}</Badge>} {t.priority === "high" && <Badge tone="warn">high</Badge>} {t.postponement_count > 0 && <Badge tone="warn">postponed {t.postponement_count}×</Badge>}</span>
+              <span>{t.title} {t.due_date && <Badge tone={isOverdue(t.due_date) ? "bad" : ""}>{fmtDate(t.due_date)}</Badge>} {t.priority === "high" && <Badge tone="warn">high</Badge>} {t.postponement_count > 0 && <Badge tone="warn">postponed {t.postponement_count}×</Badge>} {t.recurrence && <Badge>repeats {t.recurrence}</Badge>} {t.waiting_on && <Badge>waiting on {t.waiting_on}{t.follow_up_date ? `, follow up ${fmtDate(t.follow_up_date)}` : ""}</Badge>} {t.blocked_by_id && openIds.has(t.blocked_by_id) && <Badge>after #{t.blocked_by_id}</Badge>}</span>
               <button onClick={() => run(() => api.post(`/api/tasks/${t.id}/complete`))}>Done</button>
             </li>
           ))}

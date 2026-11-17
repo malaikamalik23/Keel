@@ -9,7 +9,7 @@ Keel has **44 tools**. In the default `TOOL_PROFILE=lean`, each request carries 
 | Tool | Group | What it's for |
 |---|---|---|
 | `get_current_datetime` | tasks | Get the user's current local date, time and weekday. The current date and time are already in the system prompt, so you rarely need this: don't call it before answering 'what's due today', 'this week' or 'move it to Friday'. Use it only if you need the exact time again later in a long conversation. |
-| `list_tasks` | tasks | List the user's tasks, soonest due date first. Use to answer 'what should I work on', or 'what's due'. Overdue tasks are flagged; postponement_count shows how often a task has slipped. For things the user promised or said they would do (commitments), use list_commitments instead. |
+| `list_tasks` | tasks | List the user's tasks, soonest due date first. Use to answer 'what should I work on', or 'what's due'. Overdue tasks are flagged; postponement_count shows how often a task has slipped. only='waiting' answers 'what am I waiting on'. For things the user promised or said they would do (commitments), use list_commitments instead. |
 | `list_goals` | goals | List the user's goals with their milestones. Use to answer 'what am I working towards' or before decomposing a new ambition. |
 | `list_projects` | goals | List the user's projects. Use before planning or when the user asks about a specific piece of work. |
 | `list_commitments` | commitments | List the user's commitments, soonest deadline first. Use for 'what did I promise (this week)', 'my <thing> deadline', before updating or completing a commitment whose id you don't know, and for accountability check-ins. |
@@ -35,8 +35,8 @@ Keel has **44 tools**. In the default `TOOL_PROFILE=lean`, each request carries 
 
 | Tool | Group | What it's for |
 |---|---|---|
-| `create_task` | tasks | Create a task. Use when the user wants to add something to their to-do list or commits to doing something concrete. Prefer one clear next action per task. |
-| `update_task` | tasks | Change a task's title, description, status, priority, due date or estimate. Moving a due date later is recorded as a postponement. 'Move my <thing> deadline' or anything the user promised is a commitment: use update_commitment (list_commitments first if you need its id). |
+| `create_task` | tasks | Create a task. Use when the user wants to add something to their to-do list or commits to doing something concrete. Prefer one clear next action per task. Routines: repeats. Waiting on someone: waiting_on (+ follow_up_date). |
+| `update_task` | tasks | Change a task's fields (title, status, priority, due date, estimate, repeats, waiting_on...). Moving a due date later is recorded as a postponement. 'Move my <thing> deadline' or anything the user promised is a commitment: use update_commitment (list_commitments first if you need its id). |
 | `complete_task` | tasks | Mark a task as done. Only call when the user says they finished it. If they say they did something they promised or committed to ('I finished the poster I promised'), use complete_commitment instead. |
 | `create_goal` | goals | Create a goal (career, education, research, skills or personal). Use when the user states an ambition, not a one-off task, e.g. 'I want to become good at penetration testing.' |
 | `update_goal` | goals | Change a goal's title, description, status, priority or target date. |

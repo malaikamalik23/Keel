@@ -80,6 +80,13 @@ class Task(Base):
     milestone_id: Mapped[int | None] = mapped_column(
         ForeignKey("milestones.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # Repeats: daily | weekdays | weekly | monthly. Completing it creates the next one (see app/services/task_state.py).
+    recurrence: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # Can't start until this other task is finished.
+    blocked_by_id: Mapped[int | None] = mapped_column(ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
+    # Waiting for someone else (a reply, a signature, feedback); follow_up_date is when to chase them.
+    waiting_on: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    follow_up_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
 
 
 class Goal(Base):

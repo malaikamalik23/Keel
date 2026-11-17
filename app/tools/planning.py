@@ -11,6 +11,7 @@ from app.db.models import Plan, PlanItem, Project, Task, WorkSession, utcnow
 from app.services import accountability
 from app.services.planner import MAX_MAJOR, build_plan, rank_tasks, usable_capacity
 from app.services.task_events import record_task_event
+from app.services.task_state import actionable, open_blocker
 from app.services.timeutil import window_utc
 from app.tools.base import Permission, Tool, ToolContext, ToolError, ToolRegistry
 
@@ -78,9 +79,12 @@ def create_daily_plan(ctx: ToolContext, p: CreateDailyPlanInput) -> dict:
         if closed:
             raise ToolError(f"Task '{closed[0]}' is not open, so it can't be planned.")
         ordered = [found[i] for i in p.task_ids if i not in kept_task_ids]
+        not_ready = [t for t in ordered if not actionable(ctx.db, t)]  # the user chose them: plan them, but say so
     else:
+        # Only what can be worked on now: not waiting on someone, not waiting for an unfinished task.
         open_tasks = [t for t in ctx.db.scalars(select(Task).where(Task.status.in_(OPEN))) if t.id not in kept_task_ids]
-        ordered = rank_tasks(open_tasks, day)
+        not_ready = []
+        ordered = rank_tasks([t for t in open_tasks if actionable(ctx.db, t)], day)
 
     result = build_plan(ordered, p.capacity_minutes, already_used_minutes=used, already_major=majors)
     pos = len(kept)
@@ -91,6 +95,11 @@ def create_daily_plan(ctx: ToolContext, p: CreateDailyPlanInput) -> dict:
     out = plan_dict(plan, day)
     out["deferred"] = result.deferred[:10]
     out["limits"] = {"max_major_priorities": MAX_MAJOR}
+    if not_ready:
+        out["warnings"] = [
+            f"'{t.title}' is waiting on {t.waiting_on}." if t.waiting_on else f"'{t.title}' can't start until '{open_blocker(ctx.db, t).title}' is done."
+            for t in not_ready
+        ]
     return out
 
 

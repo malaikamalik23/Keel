@@ -17,6 +17,7 @@ machine, with your data in one SQLite file.
 | **Chat** | Talk to it in the web dashboard or the terminal. It calls tools to read and change your data. Reminders and check-ins arrive by email. |
 | **Goals → milestones → tasks** | "I want to get good at web pentesting" becomes a goal, ordered milestones, and concrete first tasks. |
 | **Commitments** | Notices "I'll finish the GRE set by Friday", asks you to confirm, tracks it, counts postponements. |
+| **Routines and waiting** | Tasks can repeat (daily, weekdays, weekly, monthly; finishing one creates the next), wait for another task to be done first, or wait on someone else with a follow-up date. Waiting and blocked tasks stay off the plan, and you get a nudge on the day to chase the reply. |
 | **Realistic daily plans** | A deterministic planner: never exceeds your available time (15% buffer), at most 3 major priorities, and tells you what it left out and why. |
 | **Accountability from facts** | "What have I been avoiding?" is answered from the event history: postponements with your reasons, old tasks never touched, neglected goals, time per project. No invented patterns. |
 | **Memory you control** | A profile (university, supervisor, career goal...), preferences, background and the decisions you made, sorted into personal, academic, professional and project. One answer per profile topic: a contradicting fact makes it ask you which is right. Old memories come up for review. Every memory shows where it came from, and is visible, editable and deletable. |
@@ -144,7 +145,7 @@ python -m evals.run_routing        # how often does the model pick the right too
 ```
 
 - Agent logic is tested against a scripted fake LLM, and all network calls (email, Brave, GitHub, web pages, calendar) against mocks, so CI needs no keys and no network.
-- `evals/` holds 163 routing cases (57 with argument checks, tagged for natural-language deadlines, ambiguity, multi-step, safety, Roman Urdu and regressions), scored per category and tag, with history in `evals/history.jsonl` and a generated [dashboard](evals/dashboard.html) of scores over time, plus latency and token use per run. [More](evals/README.md).
+- `evals/` holds 166 routing cases (59 with argument checks, tagged for natural-language deadlines, ambiguity, multi-step, safety, Roman Urdu and regressions), scored per category and tag, with history in `evals/history.jsonl` and a generated [dashboard](evals/dashboard.html) of scores over time, plus latency and token use per run. [More](evals/README.md).
 - CI (GitHub Actions): lint, tests on Python 3.11 and 3.12, red-team suite, dashboard tests + build, real-Chromium end-to-end tests, dependency audit, secret scan, static analysis (Bandit and Semgrep's python, security-audit and secrets rules), Docker build plus the deployment guide's backup and restore.
 
 ## Honest status
@@ -152,7 +153,7 @@ python -m evals.run_routing        # how often does the model pick the right too
 - **Real-model routing on Groq `openai/gpt-oss-120b`** (lean profile, Nov 2026):
   - On the original 57 cases: 52/57 (91%). Two of the misses were then fixed: reminders (the tool schema demanded a stricter time
     format than Groq would accept) and "plan my day" (the model listed tasks first).
-  - On the expanded 160-case set (now 163; the 3 new memory cases have not run yet): **157 of 160 pass in their most recent run (98%), with 0 unsafe calls** (one right tool with
+  - On the expanded 160-case set (now 166; the 6 newest cases, for memory and tasks, have not run yet): **157 of 160 pass in their most recent run (98%), with 0 unsafe calls** (one right tool with
     a wrong date). This combines several partial runs, because the free tier's daily token limit cuts every run short, and
     takes the *latest* answer per case.
   - **Run to run, the same model moves by a few cases.** A repeat pass answered 86 cases: 83 passed, and 3 that had passed

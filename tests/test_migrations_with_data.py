@@ -42,6 +42,8 @@ def _seed(path):
         (2, 'assistant', '[{"type":"text","text":"done"}]', '2026-11-11')""")
     con.execute("""INSERT INTO memories (kind, content, importance, conversation_id, created_at, updated_at) VALUES
         ('preference', 'Studies best after Fajr', 'high', 1, '2026-11-01', '2026-11-05')""")
+    con.execute("""INSERT INTO tasks (title, status, priority, postponement_count, created_at, updated_at) VALUES
+        ('Write FYP introduction', 'todo', 'high', 2, '2026-11-01', '2026-11-01')""")
     con.commit()
     con.close()
 
@@ -73,6 +75,10 @@ def test_upgrading_a_database_with_messages_keeps_every_row_and_foreign_keys(tmp
     con.close()
     # 0009 kept the memory word for word; it was never told who wrote it, so it says so instead of guessing
     assert memory == [("Studies best after Fajr", "preference", "high", "general", None, "unknown", "2026-11-05")]
+    con = sqlite3.connect(db)
+    task = con.execute("SELECT title, status, priority, postponement_count, recurrence, blocked_by_id, waiting_on, follow_up_date FROM tasks").fetchall()
+    con.close()
+    assert task == [("Write FYP introduction", "todo", "high", 2, None, None, None, None)]  # 0010 left it as it was
     with engine.connect() as c:
         assert c.exec_driver_sql("PRAGMA foreign_keys").fetchone()[0] == 1  # switched back on for the app
 

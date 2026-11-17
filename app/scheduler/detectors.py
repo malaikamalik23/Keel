@@ -42,7 +42,16 @@ def detect_nudges(db: Session, now_local: datetime, tz: ZoneInfo) -> list[Nudge]
                 f"You committed to “{c.text}” by {c.deadline:%b %d}. Still doable today, or should we reset the deadline?",
             ))
 
-    overdue = [t for t in db.scalars(select(Task).where(Task.status.in_(OPEN))) if t.due_date and t.due_date < today]
+    # Waiting on someone and the follow-up date has come: remind the user to chase them (once per task per day).
+    for t in db.scalars(select(Task).where(Task.status.in_(OPEN), Task.waiting_on.isnot(None), Task.follow_up_date <= today)):
+        out.append(Nudge(
+            "normal", f"follow-up:{t.id}:{today}",
+            {"what": "follow_up", "title": t.title, "waiting_on": t.waiting_on, "follow_up_date": t.follow_up_date.isoformat()},
+            f"Still waiting on {t.waiting_on} for “{t.title}”. Time to follow up?",
+        ))
+
+    # Overdue tasks the user could act on (ones waiting on someone get the follow-up above instead).
+    overdue = [t for t in db.scalars(select(Task).where(Task.status.in_(OPEN))) if t.due_date and t.due_date < today and not t.waiting_on]
     if overdue:
         titles = [t.title for t in overdue][:3]
         out.append(Nudge(

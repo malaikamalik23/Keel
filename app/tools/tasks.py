@@ -6,15 +6,18 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.db.models import PlanItem, Task, utcnow
+from app.db.models import PlanItem, Project, Task, utcnow
+from app.security.untrusted import sanitize_text
 from app.services.task_events import record_task_event
+from app.services.task_state import next_due, open_blocker, would_cycle
 from app.tools.base import Permission, Tool, ToolContext, ToolError, ToolRegistry
 
 OPEN_STATUSES = ("todo", "in_progress")
 PRIORITY_RANK = {"high": 0, "medium": 1, "low": 2}
+Recurrence = Literal["daily", "weekdays", "weekly", "monthly"]
 
 
-def _task_dict(t: Task, today: date | None = None) -> dict:
+def _task_dict(t: Task, today: date | None = None, db=None) -> dict:
     d = {
         "id": t.id,
         "title": t.title,
@@ -28,7 +31,37 @@ def _task_dict(t: Task, today: date | None = None) -> dict:
     }
     if today and t.due_date and t.status in OPEN_STATUSES and t.due_date < today:
         d["overdue"] = True
+    if t.project_id:
+        d["project_id"] = t.project_id
+    if t.recurrence:
+        d["repeats"] = t.recurrence
+    if t.waiting_on:
+        d["waiting_on"] = t.waiting_on
+        d["follow_up_date"] = t.follow_up_date.isoformat() if t.follow_up_date else None
+    if db is not None and t.status in OPEN_STATUSES:
+        blocker = open_blocker(db, t)
+        if blocker is not None:
+            d["blocked_by"] = {"id": blocker.id, "title": blocker.title}
     return d
+
+
+def _clean_waiting(text: str | None) -> str | None:
+    """Who/what the task waits for: one short line of plain text (it is shown in the prompt and the dashboard)."""
+    if text is None:
+        return None
+    return " ".join(sanitize_text(text).split())[:120] or None
+
+
+def _check_blocker(ctx: ToolContext, task_id: int | None, blocker_id: int) -> Task:
+    blocker = _get_task(ctx, blocker_id)
+    if task_id is not None and (blocker_id == task_id or would_cycle(ctx.db, task_id, blocker_id)):
+        raise ToolError(f"Task #{blocker_id} already depends on this task, directly or through others: that would be a loop.")
+    return blocker
+
+
+def _check_project(ctx: ToolContext, project_id: int) -> None:
+    if ctx.db.get(Project, project_id) is None:
+        raise ToolError(f"No project with id {project_id}.")
 
 
 def _get_task(ctx: ToolContext, task_id: int) -> Task:
@@ -45,20 +78,36 @@ class CreateTaskInput(BaseModel):
     due_date: date | None = Field(None, description="Deadline as YYYY-MM-DD in the user's local timezone.")
     priority: Literal["low", "medium", "high"] = "medium"
     estimated_minutes: int | None = Field(None, ge=1, le=1440, description="Realistic time estimate.")
+    repeats: Recurrence | None = None
+    blocked_by_task_id: int | None = Field(None, description="Task that must be done first.")
+    waiting_on: str | None = Field(None, max_length=120, description="Who/what the user waits for.")
+    follow_up_date: date | None = Field(None, description="When to chase them.")
+    project_id: int | None = None
 
 
 def create_task(ctx: ToolContext, p: CreateTaskInput) -> dict:
+    if p.blocked_by_task_id is not None:
+        _check_blocker(ctx, None, p.blocked_by_task_id)
+    if p.project_id is not None:
+        _check_project(ctx, p.project_id)
+    if p.follow_up_date and not p.waiting_on:
+        raise ToolError("follow_up_date needs waiting_on: say who or what the user is waiting for.")
     task = Task(
         title=p.title.strip(),
         description=p.description,
-        due_date=p.due_date,
+        due_date=p.due_date or (ctx.today() if p.repeats else None),  # a routine needs a first date
         priority=p.priority,
         estimated_minutes=p.estimated_minutes,
+        recurrence=p.repeats,
+        blocked_by_id=p.blocked_by_task_id,
+        waiting_on=_clean_waiting(p.waiting_on),
+        follow_up_date=p.follow_up_date,
+        project_id=p.project_id,
     )
     ctx.db.add(task)
     ctx.db.flush()
     record_task_event(ctx.db, task, "created")
-    out = {"task": _task_dict(task, ctx.today())}
+    out = {"task": _task_dict(task, ctx.today(), ctx.db)}
     if p.due_date and p.due_date < ctx.today():
         out["warning"] = "The due date is in the past."
     return out
@@ -70,6 +119,7 @@ class ListTasksInput(BaseModel):
         "open", description="'open' = todo + in_progress."
     )
     due_on_or_before: date | None = Field(None, description="Only tasks due on or before this date (YYYY-MM-DD).")
+    only: Literal["waiting", "blocked", "repeating"] | None = None
     limit: int = Field(25, ge=1, le=100)
 
 
@@ -81,11 +131,17 @@ def list_tasks(ctx: ToolContext, p: ListTasksInput) -> dict:
         stmt = stmt.where(Task.status == p.status)
     if p.due_on_or_before:
         stmt = stmt.where(Task.due_date <= p.due_on_or_before)
+    if p.only == "waiting":
+        stmt = stmt.where(Task.waiting_on.isnot(None))
+    elif p.only == "repeating":
+        stmt = stmt.where(Task.recurrence.isnot(None))
     tasks = list(ctx.db.scalars(stmt))
+    if p.only == "blocked":
+        tasks = [t for t in tasks if open_blocker(ctx.db, t) is not None]
     # Soonest deadline first (no deadline last), then priority.
     tasks.sort(key=lambda t: (t.due_date is None, t.due_date or date.max, PRIORITY_RANK[t.priority], t.id))
     today = ctx.today()
-    return {"total": len(tasks), "tasks": [_task_dict(t, today) for t in tasks[: p.limit]]}
+    return {"total": len(tasks), "tasks": [_task_dict(t, today, ctx.db) for t in tasks[: p.limit]]}
 
 
 # ---------- update_task ----------
@@ -99,6 +155,11 @@ class UpdateTaskInput(BaseModel):
     priority: Literal["low", "medium", "high"] | None = None
     due_date: date | None = Field(None, description="New deadline (YYYY-MM-DD). null clears it.")
     estimated_minutes: int | None = Field(None, ge=1, le=1440)
+    repeats: Recurrence | None = None
+    blocked_by_task_id: int | None = None
+    waiting_on: str | None = Field(None, max_length=120, description="null once the reply came.")
+    follow_up_date: date | None = None
+    project_id: int | None = None
     reason: str | None = Field(
         None,
         max_length=500,
@@ -118,6 +179,20 @@ def update_task(ctx: ToolContext, p: UpdateTaskInput) -> dict:
     for required in ("title", "status", "priority"):
         if required in changes and changes[required] is None:
             raise ToolError(f"'{required}' cannot be null.")
+
+    renames = {"repeats": "recurrence", "blocked_by_task_id": "blocked_by_id"}
+    changes = {renames.get(k, k): v for k, v in changes.items()}
+    if changes.get("blocked_by_id") is not None:
+        _check_blocker(ctx, task.id, changes["blocked_by_id"])
+    if changes.get("project_id") is not None:
+        _check_project(ctx, changes["project_id"])
+    if "waiting_on" in changes:
+        changes["waiting_on"] = _clean_waiting(changes["waiting_on"])
+        if changes["waiting_on"] is None:
+            changes.setdefault("follow_up_date", None)  # no longer waiting: nothing to chase
+    still_waiting = changes["waiting_on"] if "waiting_on" in changes else task.waiting_on
+    if changes.get("follow_up_date") and not still_waiting:
+        raise ToolError("follow_up_date needs waiting_on: say who or what the user is waiting for.")
 
     old_status = task.status
     postponed = False
@@ -142,7 +217,7 @@ def update_task(ctx: ToolContext, p: UpdateTaskInput) -> dict:
             record_task_event(ctx.db, task, "reopened", old=old_status, new=task.status, reason=reason)
 
     ctx.db.flush()
-    out = {"task": _task_dict(task, ctx.today())}
+    out = {"task": _task_dict(task, ctx.today(), ctx.db)}
     if postponed:
         out["postponed"] = True
     return out
@@ -165,8 +240,25 @@ def complete_task(ctx: ToolContext, p: CompleteTaskInput) -> dict:
     # Keep today's plan honest: finishing a task checks it off wherever it was planned.
     for item in ctx.db.scalars(select(PlanItem).where(PlanItem.task_id == task.id, PlanItem.status == "planned")):
         item.status = "done"
+    out: dict = {"task": _task_dict(task), "was_overdue": was_overdue}
+    if task.recurrence:
+        # A routine: the next one appears as soon as this one is done, on the next date after today in its rhythm.
+        nxt = Task(
+            title=task.title, description=task.description, priority=task.priority, estimated_minutes=task.estimated_minutes,
+            due_date=next_due(task.recurrence, task.due_date or ctx.today(), ctx.today()), recurrence=task.recurrence,
+            project_id=task.project_id, goal_id=task.goal_id, milestone_id=task.milestone_id,
+        )
+        ctx.db.add(nxt)
+        ctx.db.flush()
+        record_task_event(ctx.db, nxt, "created", reason=f"repeats {task.recurrence} (after #{task.id})")
+        out["next_occurrence"] = _task_dict(nxt, ctx.today())
+    unblocked = list(ctx.db.scalars(select(Task).where(Task.blocked_by_id == task.id, Task.status.in_(OPEN_STATUSES))))
+    if unblocked:
+        out["unblocked"] = [{"id": t.id, "title": t.title} for t in unblocked]
+        for t in unblocked:
+            t.blocked_by_id = None  # the dependency is satisfied
     ctx.db.flush()
-    return {"task": _task_dict(task), "was_overdue": was_overdue}
+    return out
 
 
 # ---------- delete_task (HIGH IMPACT) ----------
@@ -202,7 +294,8 @@ def register(registry: ToolRegistry) -> None:
             name="create_task",
             description=(
                 "Create a task. Use when the user wants to add something to their to-do list or commits to doing "
-                "something concrete. Prefer one clear next action per task."
+                "something concrete. Prefer one clear next action per task. Routines: repeats. Waiting on someone: "
+                "waiting_on (+ follow_up_date)."
             ),
             permission=Permission.WRITE,
             input_model=CreateTaskInput,
@@ -215,7 +308,7 @@ def register(registry: ToolRegistry) -> None:
             description=(
                 "List the user's tasks, soonest due date first. Use to answer 'what should I work on', "
                 "or 'what's due'. Overdue tasks are flagged; postponement_count shows how often "
-                "a task has slipped. For things the user promised or said they would do (commitments), use "
+                "a task has slipped. only='waiting' answers 'what am I waiting on'. For things the user promised or said they would do (commitments), use "
                 "list_commitments instead."
             ),
             permission=Permission.READ,
@@ -227,8 +320,8 @@ def register(registry: ToolRegistry) -> None:
         Tool(
             name="update_task",
             description=(
-                "Change a task's title, description, status, priority, due date or estimate. Moving a due date "
-                "later is recorded as a postponement. 'Move my <thing> deadline' or anything the user promised is a "
+                "Change a task's fields (title, status, priority, due date, estimate, repeats, waiting_on...). Moving a "
+                "due date later is recorded as a postponement. 'Move my <thing> deadline' or anything the user promised is a "
                 "commitment: use update_commitment (list_commitments first if you need its id)."
             ),
             permission=Permission.WRITE,

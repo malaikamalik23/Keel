@@ -152,11 +152,15 @@ python -m evals.run_routing        # how often does the model pick the right too
 - **Real-model routing on Groq `openai/gpt-oss-120b`** (lean profile, Nov 2026):
   - On the original 57 cases: 52/57 (91%). Two of the misses were then fixed: reminders (the tool schema demanded a stricter time
     format than Groq would accept) and "plan my day" (the model listed tasks first).
-  - On the expanded 160-case set: **135 of the 143 cases that ran passed (94%), with 0 unsafe calls and 0 wrong arguments**
-    (GitHub 8/8, notes 7/7). The other 17 (most small talk, work logging, multi-step) have not run yet: the free tier's daily
-    token limit kept being reached. Until they are, this is a partial result.
-  - Still weak: commitments phrased like tasks ("move my poster deadline", "I finished the poster I promised" go to tasks first).
-    Scores move by a case or two between runs.
+  - On the expanded 160-case set: **every case passes in its most recent run (160/160), with 0 unsafe calls and 0 wrong
+    arguments.** Read that carefully: it combines several partial runs (the free tier's daily token limit cut each one short),
+    and it is the *latest* answer per case, so the 8 earlier failures count as fixed only because their re-run passed.
+    Not yet done: one uninterrupted 160-case run, and repeat runs to show how much the score moves (it moved by a case or two
+    before).
+  - The weak spot was commitments phrased like tasks ("move my poster deadline", "I finished the poster I promised" went to
+    the task tools first). After improving the tool descriptions and the system prompt (not the cases), all 14 regression
+    cases pass, including those three.
+  - Cost per case (one request, lean profile): median about 1.0 s and 2,650 tokens in, 90th percentile 1.8-2.3 s.
   - Re-measure with `python -m evals.run_routing --sleep 20` (the pause keeps Groq's free tier under its tokens-per-minute limit);
     `--rerun-errors <results file>` finishes a run that hit a daily limit.
 

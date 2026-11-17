@@ -11,8 +11,15 @@ import sqlite3
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 
 from app.db.session import PROJECT_ROOT, init_db, make_engine
+
+
+def _head() -> str:
+    cfg = Config(str(PROJECT_ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(PROJECT_ROOT / "migrations"))
+    return ScriptDirectory.from_config(cfg).get_current_head()
 
 
 def _db_at(path, revision: str):
@@ -33,6 +40,8 @@ def _seed(path):
         (1, 'user', '[{"type":"text","text":"hi"}]', '2026-11-10'),
         (2, 'user', '[{"type":"tool_result","content":"<untrusted_content source=\\"web_fetch\\">x</untrusted_content>"}]', '2026-11-11'),
         (2, 'assistant', '[{"type":"text","text":"done"}]', '2026-11-11')""")
+    con.execute("""INSERT INTO memories (kind, content, importance, conversation_id, created_at, updated_at) VALUES
+        ('preference', 'Studies best after Fajr', 'high', 1, '2026-11-01', '2026-11-05')""")
     con.commit()
     con.close()
 
@@ -57,8 +66,13 @@ def test_upgrading_a_database_with_messages_keeps_every_row_and_foreign_keys(tmp
     engine = make_engine(f"sqlite:///{db.as_posix()}")  # the app's engine: foreign keys ON
     init_db(engine)
     s = _state(db)
-    assert s["version"] == "0008" and s["messages"] == 3 and s["tmp"] == [] and s["fk_problems"] == []
+    assert s["version"] == _head() and s["messages"] == 3 and s["tmp"] == [] and s["fk_problems"] == []
     assert s["conversations"] == [(1, 1), (2, 1)]  # 1 had a summary, 2 read external content: both tainted
+    con = sqlite3.connect(db)
+    memory = con.execute("SELECT content, kind, importance, category, topic, source, confirmed_at FROM memories").fetchall()
+    con.close()
+    # 0009 kept the memory word for word; it was never told who wrote it, so it says so instead of guessing
+    assert memory == [("Studies best after Fajr", "preference", "high", "general", None, "unknown", "2026-11-05")]
     with engine.connect() as c:
         assert c.exec_driver_sql("PRAGMA foreign_keys").fetchone()[0] == 1  # switched back on for the app
 
@@ -74,7 +88,7 @@ def test_a_rebuild_left_half_done_by_an_earlier_failure_is_cleaned_up(tmp_path):
     con.close()
     init_db(make_engine(f"sqlite:///{db.as_posix()}"))
     s = _state(db)
-    assert s["version"] == "0008" and s["tmp"] == [] and s["messages"] == 3
+    assert s["version"] == _head() and s["tmp"] == [] and s["messages"] == 3
 
 
 def test_a_leftover_copy_without_its_original_is_never_dropped(tmp_path):

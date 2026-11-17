@@ -3,7 +3,8 @@ export interface Milestone { id: number; title: string; position: number; status
 export interface Goal { id: number; title: string; description: string | null; horizon: string; category: string; status: string; priority: string; target_date: string | null; milestones: Milestone[]; }
 export interface Project { id: number; name: string; description: string | null; purpose: string | null; status: string; priority: string; deadline: string | null; goal_id: number | null; }
 export interface Commitment { id: number; text: string; deadline: string | null; importance: string; status: string; postponement_count: number; completed_at: string | null; }
-export interface Memory { id: number; kind: string; content: string; importance: string; created_at: string; updated_at: string; }
+export interface Memory { id: number; kind: string; category: string; topic: string | null; content: string; importance: string; source: string; created_at: string; updated_at: string; confirmed_at: string | null; last_used_at: string | null; needs_review: boolean; }
+export interface MemoryReview { stale: Memory[]; conflicts: Memory[][]; }
 export interface PendingAction { id: number; tool_name: string; summary: string; status: string; created_at: string; }
 export interface AuditEntry { id: number; created_at: string; actor: string; tool_name: string; permission: string; status: string; detail: string | null; }
 export interface PlanItem { item_id: number; task_id: number | null; title: string; minutes: number; major: boolean; status: string; }

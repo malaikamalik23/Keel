@@ -60,7 +60,7 @@ def test_what_the_user_approves_is_exactly_what_is_stored(make_container):
         out = c.executor.run(ctx, "save_memory", {"content": f"Prefers short replies.{TAG_SMUGGLED}​", "kind": "preference"})
         assert out.status == "pending_confirmation"
         summary = db.get(PendingAction, out.pending_action_id).summary
-        assert summary == 'Save a preference memory: "Prefers short replies."'
+        assert summary == 'Save a preference memory (general): "Prefers short replies."'
         assert not has_invisible_chars(summary)
 
         assert c.executor.confirm(ToolContext(db=db, tz=ZoneInfo("UTC")), out.pending_action_id).status == "ok"

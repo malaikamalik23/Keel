@@ -160,9 +160,19 @@ class Memory(Base):
     __tablename__ = "memories"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    kind: Mapped[str] = mapped_column(String(16), default="fact", index=True)  # preference|context|fact
+    kind: Mapped[str] = mapped_column(String(16), default="fact", index=True)  # preference|context|fact|decision
     content: Mapped[str] = mapped_column(Text)
     importance: Mapped[str] = mapped_column(String(8), default="medium")
+    # personal|academic|professional|project|general: which part of the user's life this is about.
+    category: Mapped[str] = mapped_column(String(16), default="general", server_default="general", index=True)
+    # A short name for a profile fact ("university", "supervisor", "career goal"). At most one memory per topic: a new
+    # value for the same topic is a conflict the user resolves, not a second, contradicting memory.
+    topic: Mapped[str | None] = mapped_column(String(60), nullable=True, index=True)
+    # chat = saved by the agent in a clean conversation; approved = the user approved the agent's request;
+    # user = entered or edited by the user in the dashboard/API; unknown = from before this was recorded.
+    source: Mapped[str] = mapped_column(String(16), default="chat", server_default="unknown")
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=utcnow)  # saved, edited or confirmed
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # last shown to the model
     conversation_id: Mapped[int | None] = mapped_column(
         ForeignKey("conversations.id", ondelete="SET NULL"), nullable=True
     )

@@ -29,6 +29,7 @@ class ToolContext:
     tainted: bool = False  # set once untrusted external content has entered this turn
     seen_urls: set[str] = field(default_factory=set)  # URLs the user typed or a search returned (see taint_gate)
     active_groups: set[str] = field(default_factory=set)  # tool groups advertised to the model this turn (lean profile)
+    actor: str = "agent"  # who is running the current tool: "agent", "user" (dashboard/API) or "approved" (user approved it)
 
     def now(self) -> datetime:
         return datetime.now(self.tz)

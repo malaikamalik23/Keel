@@ -221,6 +221,7 @@ class ToolExecutor:
             actor=actor, tool_name=tool.name, permission=tool.permission.value, params=dump,
             conversation_id=ctx.conversation_id, pending_action_id=pending_action_id,
         )
+        ctx.actor = "approved" if pending_action_id is not None else actor  # tools may record who asked (e.g. memory source)
         try:
             result = tool.handler(ctx, params)
             if tool.returns_untrusted:

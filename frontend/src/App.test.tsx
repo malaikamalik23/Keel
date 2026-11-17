@@ -13,7 +13,11 @@ const FIXTURES: Record<string, unknown> = {
   "/api/accountability": { window: { start: "2026-11-01", end: "2026-11-07", days: 7 }, tasks: { created: 3, completed: 1, open_now: 2, overdue: 1, overdue_titles: ["Write FYP intro"] }, plan_adherence: { planned_items: 4, done: 2, skipped: 1, rate: 0.5 }, most_postponed: [{ task_id: 1, title: "Write FYP intro", postponement_count: 3, reasons_given: ["too big"] }], avoided_tasks: [], overdue_commitments: [], neglected_goals: [{ goal_id: 1, title: "Pentesting", days_since_activity: 21 }], work: { total_minutes: 120, sessions: 3, minutes_by_project: {} } },
   "/api/goals": [{ id: 1, title: "Web pentesting", description: "Get good", horizon: "long", category: "skills", status: "active", priority: "high", target_date: null, milestones: [{ id: 1, title: "HTTP basics", position: 0, status: "done", target_date: null }, { id: 2, title: "Auth", position: 1, status: "todo", target_date: null }] }],
   "/api/projects": [{ id: 1, name: "FYP", description: null, purpose: "Graduate", status: "active", priority: "high", deadline: "2027-03-01", goal_id: null }],
-  "/api/memories": [{ id: 1, kind: "preference", content: "Focuses best in the morning.", importance: "high", created_at: "2026-11-01T00:00:00", updated_at: "2026-11-01T00:00:00" }],
+  "/api/memories": [
+    { id: 1, kind: "preference", category: "general", topic: null, content: "Focuses best in the morning.", importance: "high", source: "chat", created_at: "2026-11-01T00:00:00", updated_at: "2026-11-01T00:00:00", confirmed_at: "2026-11-01T00:00:00", last_used_at: null, needs_review: false },
+    { id: 2, kind: "fact", category: "academic", topic: "supervisor", content: "Dr. Khan", importance: "medium", source: "user", created_at: "2025-01-01T00:00:00", updated_at: "2025-01-01T00:00:00", confirmed_at: "2025-01-01T00:00:00", last_used_at: null, needs_review: true },
+  ],
+  "/api/memories/review": { stale: [{ id: 2, kind: "fact", category: "academic", topic: "supervisor", content: "Dr. Khan", importance: "medium", source: "user", created_at: "2025-01-01T00:00:00", updated_at: "2025-01-01T00:00:00", confirmed_at: "2025-01-01T00:00:00", last_used_at: null, needs_review: true }], conflicts: [] },
   "/api/analytics": { weeks: Array.from({ length: 8 }, (_, i) => week(i)), streak: { current_days: 4, longest_days: 9, window_days: 90 }, commitments: { done: 3, dropped: 1, overdue: 1, kept_rate: 0.6 }, estimates: { tasks_measured: 5, median_actual_vs_estimate: 1.4 }, postponement: { total: 6, avg_before_completion: 1.5, top_reasons: [{ reason: "too big", count: 3 }] }, completions_by_weekday: { Mon: 1, Tue: 2, Wed: 0, Thu: 3, Fri: 1, Sat: 0, Sun: 0 } },
   "/api/reminders": [{ id: 1, text: "Email Dr. Khan", fire_at: "2026-11-08T04:00:00", status: "pending", linked_type: null, linked_id: null, sent_at: null }],
   "/api/checkins": [{ id: 1, kind: "morning", checkin_date: "2026-11-07", summary: "Good morning.", user_response: "On it", created_at: "2026-11-07T03:00:00" }],
@@ -58,6 +62,22 @@ describe("dashboard smoke tests", () => {
     render(<App />);
     await user.click(await screen.findByRole("button", { name: new RegExp(`^${tab}`) }));
     expect(await screen.findByText(text)).toBeTruthy();
+    expect(errors).toEqual([]);
+  });
+
+  it("Memory tab shows the profile and old memories to review, and can confirm and add memories", async () => {
+    const calls = mockFetch();
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Memory" }));
+    expect(await screen.findByText(/Needs review/)).toBeTruthy();
+    expect((await screen.findAllByText("supervisor:")).length).toBeGreaterThan(0);
+    await user.click((await screen.findAllByRole("button", { name: "Still true" }))[0]);
+    await waitFor(() => expect(calls).toContainEqual({ method: "PATCH", path: "/api/memories/2" }));
+    await user.type(screen.getByLabelText("New memory"), "Chose NUST for the fees");
+    await user.selectOptions(screen.getByLabelText("New memory kind"), "decision");
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(calls).toContainEqual({ method: "POST", path: "/api/memories" }));
     expect(errors).toEqual([]);
   });
 

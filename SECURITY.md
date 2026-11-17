@@ -82,7 +82,9 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
     they are guarded where they are written and where they are shown: invisible characters are stripped before storing,
     the approval request shows exactly the text that will be stored (and, for an edit, the text it replaces), and the
     context pack shows each stored item as one flattened, clipped line inside a section labelled as user data, so it
-    can't forge a heading of the system prompt or close a fence.
+    can't forge a heading of the system prompt or close a fence. Profile topics are reduced to plain lower-case words.
+    A stored profile fact can't be silently replaced: a different value for the same topic is saved only after the user
+    decides, and in a tainted conversation the edit is an approval request that shows the old and the new value.
 12. **Audit log.** Every tool call (allowed, queued, rejected, failed, expired) is recorded with actor and parameters.
 13. **Telegram.** Only messages you send in your private chat with the bot are answered (the chat id must match, the chat
     must be private and the sender must be you); groups and everyone else are ignored silently. Approving

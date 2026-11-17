@@ -6,7 +6,6 @@ no LLM involved -- and the block is size-capped so it can't crowd out the conver
 """
 from __future__ import annotations
 
-import re
 from datetime import date, timedelta
 
 from sqlalchemy import select
@@ -14,9 +13,12 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Commitment, Memory, Notification, Plan, Task, utcnow
 from app.security.untrusted import sanitize_text
+from app.tools.memory import rank
+from app.tools.memory import words as memory_words
 
 MAX_TASKS = 5
 MAX_COMMITMENTS = 5
+MAX_PROFILE = 10
 MAX_PREFERENCES = 8
 MAX_RELEVANT_MEMORIES = 5
 MAX_CHARS = 3000
@@ -24,13 +26,6 @@ PROACTIVE_WINDOW = timedelta(hours=12)
 AT_RISK_DAYS = 2  # a commitment due within this many days (or already past due) is flagged
 
 _PRIORITY_RANK = {"high": 0, "medium": 1, "low": 2}
-_WORD = re.compile(r"[a-z0-9]{4,}")
-_STOPWORDS = {"this", "that", "with", "have", "what", "when", "from", "about", "would", "could", "should",
-              "there", "their", "will", "your", "just", "need", "want", "like", "some", "them", "then"}
-
-
-def _keywords(message: str) -> set[str]:
-    return {w for w in _WORD.findall(message.lower()) if w not in _STOPWORDS}
 
 
 def _clip(text: str, n: int = 140) -> str:
@@ -110,26 +105,36 @@ def build_context_pack(db: Session, today: date, message: str = "") -> str:
             + "\n".join(_commitment_line(c, today) for c in proposed[:3])
         )
 
-    # Preferences always apply; other memories only when the message touches them.
-    prefs = list(db.scalars(select(Memory).where(Memory.kind == "preference").order_by(Memory.updated_at.desc())))
+    # The profile (memories with a topic: university, supervisor, career goal...) and preferences always apply; other
+    # memories only when the message touches them, best match first. Everything shown is marked as used.
+    memories = list(db.scalars(select(Memory)))
+    shown: list[Memory] = []
+    profile = rank([m for m in memories if m.topic], set())[:MAX_PROFILE]
+    if profile:
+        profile.sort(key=lambda m: (m.category, m.topic or ""))
+        sections.append("User profile (from stored memories):\n" + "\n".join(
+            f"- (#{m.id}) {m.category} / {_clip(m.topic or '', 40)}: {_clip(m.content)}" for m in profile))
+        shown += profile
+    prefs = rank([m for m in memories if m.kind == "preference" and not m.topic], set())[:MAX_PREFERENCES]
     if prefs:
-        sections.append("User preferences:\n" + "\n".join(f"- (#{m.id}) {_clip(m.content)}" for m in prefs[:MAX_PREFERENCES]))
+        sections.append("User preferences:\n" + "\n".join(f"- (#{m.id}) {_clip(m.content)}" for m in prefs))
+        shown += prefs
 
-    words = _keywords(message)
-    if words:
-        pref_ids = {m.id for m in prefs[:MAX_PREFERENCES]}
-        scored = []
-        for m in db.scalars(select(Memory).where(Memory.kind != "preference")):
-            hits = len(words & _keywords(m.content))
-            if hits:
-                scored.append((hits, m))
-        scored.sort(key=lambda s: (-s[0], -s[1].id))
-        relevant = [m for _, m in scored if m.id not in pref_ids][:MAX_RELEVANT_MEMORIES]
+    query = memory_words(message)
+    if query:
+        taken = {m.id for m in shown}
+        candidates = [m for m in memories if m.id not in taken and query & (memory_words(m.content) | memory_words(m.topic or ""))]
+        relevant = rank(candidates, query)[:MAX_RELEVANT_MEMORIES]
         if relevant:
             sections.append(
                 "Stored memories relevant to this message:\n"
-                + "\n".join(f"- (#{m.id}, {m.kind}) {_clip(m.content)}" for m in relevant)
+                + "\n".join(f"- (#{m.id}, {m.kind}, {m.category}) {_clip(m.content)}" for m in relevant)
             )
+            shown += relevant
+    if shown:
+        now = utcnow()
+        for m in shown:
+            m.last_used_at = now
 
     if not sections:
         return ""

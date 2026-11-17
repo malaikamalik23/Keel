@@ -1,48 +1,128 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { api } from "../api";
 import { useAction, useLoad } from "../hooks";
-import type { Memory } from "../types";
+import type { Memory, MemoryReview } from "../types";
 import { Badge, Card, Empty, ErrorNote, Loading } from "../ui";
+
+const KINDS = ["preference", "context", "fact", "decision"];
+const CATEGORIES = ["personal", "academic", "professional", "project", "general"];
+const SOURCE: Record<string, string> = { chat: "saved in chat", approved: "you approved", user: "added by you", unknown: "older memory" };
+
+function Row({ m, onChange }: { m: Memory; onChange: () => Promise<void> }) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const { run, error } = useAction(onChange);
+  return (
+    <li>
+      {editing !== null ? (
+        <>
+          <textarea name="content" value={editing} onChange={(e) => setEditing(e.target.value)} rows={2} aria-label="Edit memory" />
+          <span className="actions">
+            <button onClick={() => run(async () => { await api.patch(`/api/memories/${m.id}`, { content: editing }); setEditing(null); })}>Save</button>
+            <button className="ghost" onClick={() => setEditing(null)}>Cancel</button>
+          </span>
+        </>
+      ) : (
+        <>
+          <span>
+            {m.topic && <strong>{m.topic}: </strong>}{m.content}{" "}
+            <Badge>{m.kind}</Badge> <Badge>{m.category}</Badge>
+            {m.importance === "high" && <> <Badge tone="warn">high</Badge></>}
+            <span className="muted small"> · {SOURCE[m.source] ?? m.source}</span>
+          </span>
+          <span className="actions">
+            {m.needs_review && <button onClick={() => run(() => api.patch(`/api/memories/${m.id}`, { confirm: true }))}>Still true</button>}
+            <button className="ghost" onClick={() => setEditing(m.content)}>Edit</button>
+            <button className="ghost danger" onClick={() => window.confirm("Permanently delete this memory?") && run(() => api.del(`/api/memories/${m.id}`))}>Delete</button>
+          </span>
+        </>
+      )}
+      <ErrorNote error={error} />
+    </li>
+  );
+}
+
+function AddMemory({ onAdded }: { onAdded: () => Promise<void> }) {
+  const [content, setContent] = useState("");
+  const [kind, setKind] = useState("fact");
+  const [category, setCategory] = useState("general");
+  const [topic, setTopic] = useState("");
+  const { run, error } = useAction(onAdded);
+  const add = () => run(async () => {
+    await api.post("/api/memories", { content, kind, category, ...(topic.trim() ? { topic } : {}) });
+    setContent(""); setTopic("");
+  });
+  return (
+    <Card title="Add a memory">
+      <form onSubmit={(e) => { e.preventDefault(); if (content.trim()) void add(); }}>
+        <textarea name="new-memory" value={content} onChange={(e) => setContent(e.target.value)} rows={2} placeholder="e.g. My supervisor is Dr. Khan" aria-label="New memory" />
+        <div className="composer wrap">
+          <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="New memory kind">{KINDS.map((k) => <option key={k}>{k}</option>)}</select>
+          <select value={category} onChange={(e) => setCategory(e.target.value)} aria-label="New memory category">{CATEGORIES.map((k) => <option key={k}>{k}</option>)}</select>
+          <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="profile topic (optional), e.g. supervisor" aria-label="Profile topic" />
+          <button type="submit" disabled={!content.trim()}>Add</button>
+        </div>
+      </form>
+      <ErrorNote error={error} />
+    </Card>
+  );
+}
 
 export default function MemoryView() {
   const [kind, setKind] = useState("all");
-  const { data, error, loading, reload } = useLoad<Memory[]>(`/api/memories?kind=${kind}`);
-  const { run, error: actionError } = useAction(reload);
-  const [editing, setEditing] = useState<{ id: number; text: string } | null>(null);
+  const [category, setCategory] = useState("all");
+  const list = useLoad<Memory[]>(`/api/memories?kind=${kind}&category=${category}`);
+  const all = useLoad<Memory[]>("/api/memories");
+  const review = useLoad<MemoryReview>("/api/memories/review");
+  const { reload: reloadList } = list;
+  const { reload: reloadAllMemories } = all;
+  const { reload: reloadReview } = review;
+  const reloadAll = useCallback(async () => {
+    await Promise.all([reloadList(), reloadAllMemories(), reloadReview()]);
+  }, [reloadList, reloadAllMemories, reloadReview]);
+
+  const topics = (all.data ?? []).filter((m) => m.topic);
+  const stale = review.data?.stale ?? [];
+  const conflicts = review.data?.conflicts ?? [];
 
   return (
-    <div>
-      <div className="toolbar">
-        <select name="kind" value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Memory kind">{["all", "preference", "context", "fact"].map((k) => <option key={k}>{k}</option>)}</select>
-      </div>
-      <p className="muted small">Everything the agent remembers about you. Edit or delete anything — changes are audited.</p>
-      <ErrorNote error={actionError} />
-      <Loading loading={loading} error={error} />
-      {data?.length === 0 && <Empty>No memories yet.</Empty>}
-      <Card>
-        <ul className="list">
-          {data?.map((m) => (
-            <li key={m.id}>
-              {editing?.id === m.id ? (
-                <>
-                  <textarea name="content" value={editing.text} onChange={(e) => setEditing({ id: m.id, text: e.target.value })} rows={2} aria-label="Edit memory" />
-                  <span className="actions">
-                    <button onClick={() => run(async () => { await api.patch(`/api/memories/${m.id}`, { content: editing.text }); setEditing(null); })}>Save</button>
-                    <button className="ghost" onClick={() => setEditing(null)}>Cancel</button>
-                  </span>
-                </>
-              ) : (
-                <>
-                  <span>{m.content} <Badge>{m.kind}</Badge> {m.importance === "high" && <Badge tone="warn">high</Badge>}</span>
-                  <span className="actions">
-                    <button className="ghost" onClick={() => setEditing({ id: m.id, text: m.content })}>Edit</button>
-                    <button className="ghost danger" onClick={() => window.confirm("Permanently delete this memory?") && run(() => api.del(`/api/memories/${m.id}`))}>Delete</button>
-                  </span>
-                </>
-              )}
-            </li>
+    <div className="stack">
+      <p className="muted small">Everything the agent remembers about you. Edit, confirm or delete anything; changes are audited.</p>
+
+      <Card title="Profile">
+        {topics.length === 0 ? (
+          <Empty>No profile facts yet. Tell the agent things like your university or supervisor, or add one below with a topic.</Empty>
+        ) : (
+          <ul className="list">{topics.map((m) => <Row key={m.id} m={m} onChange={reloadAll} />)}</ul>
+        )}
+      </Card>
+
+      {(stale.length > 0 || conflicts.length > 0) && (
+        <Card title="Needs review">
+          {conflicts.map((group) => (
+            <div key={group[0].id}>
+              <p className="small">Two answers for <strong>{group[0].topic}</strong>. Keep the right one and delete the other:</p>
+              <ul className="list">{group.map((m) => <Row key={m.id} m={m} onChange={reloadAll} />)}</ul>
+            </div>
           ))}
-        </ul>
+          {stale.length > 0 && <p className="small">Not confirmed for over six months. Still true?</p>}
+          <ul className="list">{stale.map((m) => <Row key={m.id} m={m} onChange={reloadAll} />)}</ul>
+        </Card>
+      )}
+
+      <AddMemory onAdded={reloadAll} />
+
+      <Card
+        title="All memories"
+        right={
+          <span>
+            <select name="kind" value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Memory kind">{["all", ...KINDS].map((k) => <option key={k} value={k}>{k === "all" ? "every kind" : k}</option>)}</select>{" "}
+            <select name="category" value={category} onChange={(e) => setCategory(e.target.value)} aria-label="Memory category">{["all", ...CATEGORIES].map((k) => <option key={k} value={k}>{k === "all" ? "every category" : k}</option>)}</select>
+          </span>
+        }
+      >
+        <Loading loading={list.loading} error={list.error} />
+        {list.data?.length === 0 && <Empty>No memories match.</Empty>}
+        <ul className="list">{list.data?.map((m) => <Row key={m.id} m={m} onChange={reloadAll} />)}</ul>
       </Card>
     </div>
   );

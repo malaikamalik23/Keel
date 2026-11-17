@@ -70,7 +70,7 @@ Hand-written Alembic migrations `0001`–`0006`; SQLite today, SQLAlchemy keeps 
 | `task_events` | **Append-only history**: created / postponed (old→new date + reason) / completed / reopened / cancelled / skipped. Survives task deletion. |
 | `goals`, `milestones`, `projects` | The goal → milestone → task and project → task hierarchies |
 | `commitments` | "I'll do X by Y": `proposed` until you confirm → `open` → `done` / `dropped`; "missed" is derived, not stored |
-| `memories` | Durable facts about you (preference / context / fact), editable and deletable |
+| `memories` | Durable facts about you: kind (preference / context / fact / decision), category (personal / academic / professional / project / general), an optional profile topic, source and review dates |
 | `plans`, `plan_items` | One plan per local day; items snapshot the title so history stays readable |
 | `work_sessions` | Time actually worked: the ground truth plans are compared against |
 | `reminders`, `checkins`, `notifications` | Scheduler state. `notifications` *is* the budget: counts and dedupe keys are read from it, so limits survive restarts |
@@ -127,11 +127,14 @@ Tools that need configuration (calendar, web, notes, GitHub) are only advertised
 |---|---|---|---|
 | Working | The conversation | `messages`, windowed | Replayed each turn (+ rolling summary) |
 | Structured | Goals, projects, tasks, commitments, plans | Relational tables | Tools + SQL |
-| Semantic | Preferences and context | `memories` | Keyword overlap in the context pack; `search_memories` for depth |
+| Semantic | Profile, preferences, context, decisions | `memories` | The context pack always shows the profile and preferences, plus the best-matching memories for the message (word overlap, then importance, then how recently confirmed); `search_memories` and `review_memories` for depth |
 | Behavioural | Postponement patterns, completion rate, neglected goals, time worked | **Computed** from `task_events`, `work_sessions`, `plan_items` | SQL aggregates, never LLM-written |
 
 Write policy: commitments are proposed, then confirmed; memories are saved only when useful, are visible in the dashboard, and every
-change is audited. Embeddings were deliberately skipped: keyword + FTS5 covers this scale and avoids a second datastore.
+change is audited. A profile topic holds one answer: saving a different value for an existing topic saves nothing and tells the
+agent to ask the user which is right, so contradicting facts are never kept side by side. Each memory records its source (saved in
+chat, approved by the user, added by the user) and when it was last confirmed; memories unconfirmed for six months are offered for
+review in the dashboard and through `review_memories`. Embeddings were deliberately skipped: keyword + FTS5 covers this scale and avoids a second datastore.
 
 ## 6. Planning and accountability (`app/services/planner.py`, `accountability.py`)
 

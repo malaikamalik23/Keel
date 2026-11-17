@@ -35,6 +35,7 @@ from app.errors import ConflictError, NotFoundError
 from app.services import accountability as accountability_svc
 from app.services import analytics as analytics_svc
 from app.tools.base import ToolContext
+from app.tools.memory import needs_review as memory_needs_review
 from app.tools.planning import get_plan, plan_dict
 
 
@@ -198,15 +199,38 @@ def commitments(
     return rows
 
 
+def _memory_out(m: Memory) -> schemas.MemoryOut:
+    out = schemas.MemoryOut.model_validate(m)
+    out.needs_review = memory_needs_review(m)
+    return out
+
+
 @router.get("/memories", response_model=list[schemas.MemoryOut])
 def memories(
-    kind: Literal["preference", "context", "fact", "all"] = "all",
+    kind: Literal["preference", "context", "fact", "decision", "all"] = "all",
+    category: Literal["personal", "academic", "professional", "project", "general", "all"] = "all",
     db: Session = Depends(get_db),
 ):
     stmt = select(Memory).order_by(Memory.updated_at.desc())
     if kind != "all":
         stmt = stmt.where(Memory.kind == kind)
-    return db.scalars(stmt).all()
+    if category != "all":
+        stmt = stmt.where(Memory.category == category)
+    return [_memory_out(m) for m in db.scalars(stmt)]
+
+
+@router.get("/memories/review", response_model=schemas.MemoryReview)
+def memories_to_review(db: Session = Depends(get_db)):
+    """Memories not confirmed for a long time, and profile topics recorded more than once."""
+    every = list(db.scalars(select(Memory).order_by(Memory.id)))
+    by_topic: dict[str, list[Memory]] = {}
+    for m in every:
+        if m.topic:
+            by_topic.setdefault(m.topic.lower(), []).append(m)
+    return schemas.MemoryReview(
+        stale=[_memory_out(m) for m in every if memory_needs_review(m)],
+        conflicts=[[_memory_out(m) for m in ms] for ms in by_topic.values() if len(ms) > 1],
+    )
 
 
 def _run_user_tool(c: Container, db: Session, name: str, payload: dict) -> dict:
@@ -216,13 +240,23 @@ def _run_user_tool(c: Container, db: Session, name: str, payload: dict) -> dict:
     return outcome.result
 
 
+@router.post("/memories", response_model=schemas.MemoryOut, status_code=status.HTTP_201_CREATED)
+def create_memory(body: schemas.MemoryCreate, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    """Add a memory yourself (source "user"). A topic that already has a value is refused: edit that memory instead."""
+    result = _run_user_tool(c, db, "save_memory", body.model_dump())
+    if result.get("conflict"):
+        raise HTTPException(status_code=409, detail=result["message"])
+    return _memory_out(db.get(Memory, result["memory"]["id"]))
+
+
 @router.patch("/memories/{memory_id}", response_model=schemas.MemoryOut)
 def update_memory(memory_id: int, body: schemas.MemoryUpdate, db: Session = Depends(get_db), c: Container = Depends(get_container)):
     if db.get(Memory, memory_id) is None:
         raise NotFoundError(f"No memory with id {memory_id}.")
     changes = body.model_dump(exclude_unset=True)
     _run_user_tool(c, db, "update_memory", {"memory_id": memory_id, **changes})
-    return db.get(Memory, memory_id)
+    db.expire_all()
+    return _memory_out(db.get(Memory, memory_id))
 
 
 @router.delete("/memories/{memory_id}", status_code=status.HTTP_204_NO_CONTENT)

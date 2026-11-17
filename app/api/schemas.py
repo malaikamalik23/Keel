@@ -87,20 +87,46 @@ class CommitmentOut(BaseModel):
     completed_at: datetime | None
 
 
+MemoryKind = Literal["preference", "context", "fact", "decision"]
+MemoryCategory = Literal["personal", "academic", "professional", "project", "general"]
+
+
 class MemoryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     kind: str
+    category: str
+    topic: str | None
     content: str
     importance: str
+    source: str
     created_at: datetime
     updated_at: datetime
+    confirmed_at: datetime | None
+    last_used_at: datetime | None
+    needs_review: bool = False
+
+
+class MemoryCreate(BaseModel):
+    content: str = Field(min_length=1, max_length=1000)
+    kind: MemoryKind = "fact"
+    category: MemoryCategory = "general"
+    topic: str | None = Field(None, max_length=60)
+    importance: Literal["low", "medium", "high"] = "medium"
 
 
 class MemoryUpdate(BaseModel):
     content: str | None = Field(None, min_length=1, max_length=1000)
-    kind: Literal["preference", "context", "fact"] | None = None
+    kind: MemoryKind | None = None
+    category: MemoryCategory | None = None
+    topic: str | None = Field(None, max_length=60)
     importance: Literal["low", "medium", "high"] | None = None
+    confirm: bool = False
+
+
+class MemoryReview(BaseModel):
+    stale: list[MemoryOut]
+    conflicts: list[list[MemoryOut]]
 
 
 class CommitmentUpdate(BaseModel):

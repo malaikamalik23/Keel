@@ -88,3 +88,28 @@ def test_latency_and_tokens_are_recorded_per_case_and_shown_per_run(tmp_path):
     assert "800 ms" in page and "1,200 ms" in page and "3,001" in page  # median and 90th percentile, tokens in
     old_row = page.split("before these were recorded")[0].rsplit("<tr>", 1)[1]
     assert old_row.count("–") == 4  # the older run shows dashes, not zeros
+
+
+def test_another_models_answers_never_change_the_main_view_and_are_compared_separately(tmp_path):
+    def run(model, at, results, note=""):
+        (tmp_path / "results" / f"{at}.json").write_text(json.dumps({"results": results}), encoding="utf-8")
+        return json.dumps({"at": at, "model": model, "n": len(results), "unsafe": 0, "note": note}) + "\n"
+
+    (tmp_path / "results").mkdir()
+    lines = [
+        run("big", "20261101-100000", [_result("a", "wrong_tool", "list_tasks"), _result("b", "pass"), _result("c", "pass")]),
+        run("big", "20261102-100000", [_result("a", "pass"), _result("b", "pass"), _result("c", "error")]),
+        run("small", "20261103-100000", [_result("a", "wrong_tool", "list_tasks"), _result("b", "wrong_tool", "x"), _result("c", "pass")], "other model"),
+    ]
+    (tmp_path / "history.jsonl").write_text("".join(lines), encoding="utf-8")
+    runs = load_runs(tmp_path / "history.jsonl", tmp_path / "results")
+    page = render(CASES, runs)
+
+    assert "model <code>big</code>" in page          # two runs beat one: "big" is the main view
+    assert "3 of 3 answered cases pass" in page     # the later, worse "small" run did not overwrite big's answers
+    compare = page.split("Models compared")[1].split("</table>")[0]
+    assert "<code>big</code>" in compare and "3/3" in compare
+    assert "<code>small</code>" in compare and "1/3" in compare
+    assert "01 Nov 10:00: 2/3" in compare            # big's first run was a full run; its second was not (an error)
+    assert "03 Nov 10:00: 1/3" in compare
+    assert "Runs of other models" in page and "other model" in page

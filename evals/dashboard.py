@@ -77,6 +77,45 @@ def combined(cases: list[dict], runs: list[Run]) -> dict[str, dict | None]:
     return state
 
 
+def primary_model(runs: list[Run]) -> str:
+    """The model the main view is about: the one with the most runs that have results (ties: the most recent)."""
+    detailed = [r for r in runs if r.results] or runs
+    if not detailed:
+        return "?"
+    count = Counter(r.model for r in detailed)
+    return max(count, key=lambda m: (count[m], max(r.at for r in detailed if r.model == m)))
+
+
+def is_full(run: Run, cases: list[dict]) -> bool:
+    """One uninterrupted run: every current case was sent and answered (no provider errors)."""
+    ids = {c["id"] for c in cases}
+    return bool(run.results) and ids <= set(run.results) and all(run.results[i].get("outcome") != "error" for i in ids)
+
+
+def model_rows(cases: list[dict], runs: list[Run]) -> str:
+    """One row per model (all its runs combined), then one row per full, uninterrupted run (repeatability)."""
+    rows = []
+    for model in sorted({r.model for r in runs if r.results}):
+        mine = [r for r in runs if r.results and r.model == model]
+        state = combined(cases, mine)
+        t = Counter(status_of(r) for r in state.values())
+        done = t["pass"] + t["fail"]
+        if not done:
+            continue
+        cost = cost_summary([r for r in state.values() if r])
+        unsafe = sum(1 for r in state.values() if r and r.get("unsafe"))
+        bad = sum(1 for r in state.values() if r and r.get("outcome") == "bad_args")
+        routing = sum(1 for r in state.values() if r and r.get("routing_ok"))
+        full = [r for r in mine if is_full(r, cases)]
+        rows.append(
+            f"<tr><td><code>{esc(model)}</code></td><td class='num'>{t['pass']}/{done}</td>"
+            f"<td class='num'>{t['pass'] / done:.0%}</td><td class='num'>{routing / done:.0%}</td><td class='num'>{unsafe}</td><td class='num'>{bad}</td>"
+            f"<td class='num'>{t['not run']}</td><td class='num'>{dash(cost['latency_ms_p50'], ' ms')}</td><td class='num'>{dash(cost['input_tokens_p50'])}</td>"
+            f"<td>{', '.join(f'{esc(r.when)}: {r.passed}/{len(cases)}' for r in full) or 'none yet'}</td></tr>"
+        )
+    return "".join(rows)
+
+
 def status_of(r: dict | None) -> str:
     return "not run" if r is None else ("pass" if r.get("passed") else "fail")
 
@@ -169,13 +208,15 @@ LEGEND = ('<div class="legend"><span><i class="sw s-pass"></i>✓ pass</span><sp
 
 
 def render(cases: list[dict], runs: list[Run]) -> str:
+    all_runs = runs
+    model = primary_model(runs)
+    runs = [r for r in runs if r.model == model]  # one model per view: another model's answers must not count here
     detailed = [r for r in runs if r.results]
     state = combined(cases, detailed)
     total = Counter(status_of(r) for r in state.values())
     answered = total["pass"] + total["fail"]
     unsafe_now = sum(1 for r in state.values() if r and r.get("unsafe"))
     bad_args = sum(1 for r in state.values() if r and r.get("outcome") == "bad_args")
-    model = runs[-1].model if runs else "?"
 
     trend_rate, trend_cov = [], []
     for i, run in enumerate(detailed):
@@ -234,14 +275,32 @@ def render(cases: list[dict], runs: list[Run]) -> str:
         f"<td>{esc(r.note)}</td></tr>"
         for r in reversed(runs)
     )
+    other = "".join(
+        f"<tr><td>{esc(r.when)}</td><td><code>{esc(r.model)}</code></td><td class='num'>{r.n}</td><td class='num'>{r.passed if r.results else '–'}</td><td>{esc(r.note)}</td></tr>"
+        for r in reversed(all_runs) if r.model != model
+    )
+    compare = model_rows(cases, all_runs)
+    compare_html = "" if not compare else (
+        '<h2>Models compared</h2><div class="card"><table><tr><th>model</th><th class="num">passed</th><th class="num">score</th>'
+        '<th class="num">right tool</th><th class="num">unsafe</th><th class="num">wrong args</th><th class="num">not run</th>'
+        '<th class="num">median latency</th><th class="num">tokens in / case</th><th>full uninterrupted runs</th></tr>'
+        f"{compare}</table><p class='muted'>Each model's own runs, combined the same way as above (latest answer per case). "
+        "Score is right tool and right arguments; \"right tool\" ignores arguments. A full run is one uninterrupted run of every "
+        "case with no provider errors; more than one per model shows how much the score moves between runs.</p></div>"
+    )
+    other_html = "" if not other else (
+        "<h2>Runs of other models</h2><div class='card'><table><tr><th>run (UTC)</th><th>model</th><th class='num'>cases</th>"
+        f"<th class='num'>passed</th><th>note</th></tr>{other}</table></div>"
+    )
 
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Keel routing eval</title><style>{CSS}</style></head><body><main>
 <h1>Keel routing eval</h1>
 <p class="sub">Does the model pick the right tool, with the right arguments? {len(cases)} cases, model <code>{esc(model)}</code>.
-Each case shows its most recent answered run, so partial runs (rate limits, re-runs) still add up.
+Each case shows its most recent answered run of this model, so partial runs (rate limits, re-runs) still add up.
 Generated by <code>python -m evals.dashboard</code>.</p>
 <div class="tiles">{tiles}</div>
+{compare_html}
 <h2>Over time</h2>{charts or '<p class="muted">No run results yet.</p>'}
 <h2>By category</h2><div class="card">{LEGEND}{bar_rows(counts(cases, state, lambda c: [c['category']]))}</div>
 <h2>By tag</h2><div class="card">{LEGEND}{bar_rows(counts(cases, state, lambda c: c.get('tags', [])))}</div>
@@ -252,6 +311,7 @@ Generated by <code>python -m evals.dashboard</code>.</p>
 <th class="num">tokens in / case</th><th class="num">tokens out / case</th><th>note</th></tr>{run_rows}</table>
 <p class="muted">Latency is one LLM request per case, measured from this machine. Tokens are the provider's own counts (median per case):
 "in" is the system prompt plus the tool definitions plus the message. Runs from before these were recorded show –.</p></div>
+{other_html}
 </main></body></html>
 """
 

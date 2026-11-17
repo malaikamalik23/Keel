@@ -153,14 +153,17 @@ python -m evals.run_routing        # how often does the model pick the right too
 - **Real-model routing on Groq `openai/gpt-oss-120b`** (lean profile, Nov 2026):
   - On the original 57 cases: 52/57 (91%). Two of the misses were then fixed: reminders (the tool schema demanded a stricter time
     format than Groq would accept) and "plan my day" (the model listed tasks first).
-  - On the expanded 160-case set: **every case passes in its most recent run (160/160), with 0 unsafe calls and 0 wrong
-    arguments.** Read that carefully: it combines several partial runs (the free tier's daily token limit cut each one short),
-    and it is the *latest* answer per case, so the 8 earlier failures count as fixed only because their re-run passed.
-    Not yet done: one uninterrupted 160-case run, and repeat runs to show how much the score moves (it moved by a case or two
-    before).
+  - On the expanded 160-case set: **157 of 160 pass in their most recent run (98%), with 0 unsafe calls** (one right tool with
+    a wrong date). This combines several partial runs, because the free tier's daily token limit cuts every run short, and
+    takes the *latest* answer per case.
+  - **Run to run, the same model moves by a few cases.** A repeat pass answered 86 cases: 83 passed, and 3 that had passed
+    before failed this time (a commitment routed to tasks, a plan that listed tasks first, a deadline on the wrong day).
+    So read 94-98% as the range, not a single exact number. One uninterrupted 160-case run is still to do.
+  - **Second model, `qwen/qwen3.8-27b`:** 39 of the 43 cases it answered pass (91%), 0 unsafe; the daily limit stopped the
+    rest. Too few to rank the two models yet. The [dashboard](evals/dashboard.html) keeps each model separate and compares them.
   - The weak spot was commitments phrased like tasks ("move my poster deadline", "I finished the poster I promised" went to
     the task tools first). After improving the tool descriptions and the system prompt (not the cases), all 14 regression
-    cases pass, including those three.
+    cases passed in one run; one of them failed again in the repeat pass, so this is better, not solved.
   - Cost per case (one request, lean profile): median about 1.0 s and 2,650 tokens in, 90th percentile 1.8-2.3 s.
   - Re-measure with `python -m evals.run_routing --sleep 20` (the pause keeps Groq's free tier under its tokens-per-minute limit);
     `--rerun-errors <results file>` finishes a run that hit a daily limit.

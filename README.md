@@ -170,7 +170,8 @@ python -m evals.run_routing        # how often does the model pick the right too
 
 - **Live services: some verified, some only mocked.** GitHub (including your private repos when a token is set), the iCal calendar and
   the notes folder have been checked against the real services with `python -m scripts.smoke_integrations` (one read-only call each,
-  never prints keys). Telegram and Brave Search are so far verified only against mocked HTTP; try them with your own keys
+  never prints keys). Email delivery has been checked against real Gmail (STARTTLS, App Password, a test message received with
+  `--send-test-email`). Telegram and Brave Search are so far verified only against mocked HTTP; try them with your own keys
   (see [docs/DEMO.md](docs/DEMO.md)) and please open an issue if a real API behaves differently.
 - The dashboard is type-checked, has 16 jsdom tests (every tab, empty states, a malformed response, the approval flow, skip-cancel) and 2 **real-Chromium end-to-end tests** (`tests/e2e`, Playwright; CI job `e2e`) that drive the real server through chat, plan, delete-and-approve and reminders and fail on any console error. The browser tests exist because the first manual run found a Chrome-only crash that jsdom could not see.
 - Single-user by design: one API key, no accounts. Not multi-tenant.

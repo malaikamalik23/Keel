@@ -87,6 +87,10 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
 13. **Telegram.** Only messages you send in your private chat with the bot are answered (the chat id must match, the chat
     must be private and the sender must be you); groups and everyone else are ignored silently. Approving
     actions is deliberately **not** possible from Telegram.
+14. **Email.** Reminders and check-ins go to the single address in `EMAIL_TO`, from configuration only: no tool can
+    send email, and the model can't choose a recipient. Only encrypted connections (STARTTLS or TLS, certificate
+    checked) are used, the message is plain text, its subject can't add headers, and errors never include the password
+    or the server's reply.
 
 Tool *advertising* is not part of this model: in the default lean profile each request lists only some tools, but the executor applies every rule above to any tool the model tries to call, advertised or not (there is a test for that).
 

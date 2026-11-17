@@ -54,6 +54,14 @@ class Settings(BaseSettings):
     telegram_chat_id: str | None = None  # the ONLY chat the bot talks to / listens to
     telegram_inbound: bool = True  # also let you chat with the agent through the bot
     calendar_ics_url: str | None = None  # secret iCal address of your calendar (read-only)
+    # Email delivery (used when Telegram is not configured). The recipient is fixed here: nothing else can choose it.
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_security: Literal["starttls", "ssl"] = "starttls"  # 587 = starttls, 465 = ssl. Plain, unencrypted SMTP is refused.
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    email_from: str | None = None  # defaults to smtp_username
+    email_to: str | None = None  # where reminders and check-ins go: your own address
 
     # ---- Phase 5: research tools ----
     web_fetch_enabled: bool = True

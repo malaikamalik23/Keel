@@ -1,9 +1,11 @@
 """Smoke-test the live integrations with YOUR keys: one read-only call each. Never sends anything, never writes.
 
     python -m scripts.smoke_integrations
+    python -m scripts.smoke_integrations --send-test-email     # also email ONE test message to EMAIL_TO (yourself)
 
 For each integration: if its setting is missing -> SKIPPED(no key); otherwise one read-only request -> PASS / FAIL.
-Telegram is only checked with getMe (validates the bot token); no message is ever sent. Notes are only listed on disk
+Telegram is only checked with getMe (validates the bot token); no message is ever sent. Email is checked by connecting,
+encrypting and logging in, then hanging up; a test email is sent only with --send-test-email, and only to EMAIL_TO. Notes are only listed on disk
 (nothing is indexed into the database). Key values are never printed: every message is also scrubbed of them.
 Exit code is 1 if anything FAILED, else 0.
 """
@@ -77,17 +79,33 @@ def check_telegram(s: Settings) -> str:
     return f"token valid, bot is_bot={bot.get('is_bot')}{note}"
 
 
+def check_email(s: Settings, send: bool = False) -> str:
+    from app.integrations.notifier import EmailNotifier, build_notifier
+
+    _need(s.smtp_host, "SMTP_HOST")
+    _need(s.email_to, "EMAIL_TO")
+    notifier = build_notifier(s)
+    if not isinstance(notifier, EmailNotifier):
+        return "configured, but Telegram is set too and takes priority, so email is not used"
+    if send:
+        notifier.send("Keel test email\nIf you can read this, reminders and check-ins will reach you by email.")
+        return f"logged in and sent one test email to {s.email_to}"
+    notifier.verify()
+    return f"connected ({s.smtp_security}), logged in; nothing sent. Add --send-test-email to send one to {s.email_to}"
+
+
 CHECKS: list[tuple[str, Check]] = [
     ("Brave search", check_brave),
     ("GitHub", check_github),
     ("Notes folder", check_notes),
     ("Calendar", check_calendar),
     ("Telegram", check_telegram),
+    ("Email", check_email),
 ]
 
 
 def _scrub(message: str, s: Settings) -> str:
-    for secret in (s.brave_api_key, s.github_token, s.telegram_bot_token, s.calendar_ics_url, s.telegram_chat_id):
+    for secret in (s.brave_api_key, s.github_token, s.telegram_bot_token, s.calendar_ics_url, s.telegram_chat_id, s.smtp_password):
         if secret and len(secret) >= 4:
             message = message.replace(secret, "***")
     return message[:200]
@@ -106,8 +124,10 @@ def run(settings: Settings | None = None, checks: list[tuple[str, Check]] | None
     return rows
 
 
-def main() -> int:
-    rows = run()
+def main(argv: list[str] | None = None) -> int:
+    send = "--send-test-email" in (sys.argv[1:] if argv is None else argv)
+    checks = [(n, (lambda st: check_email(st, send=True)) if n == "Email" and send else c) for n, c in CHECKS]
+    rows = run(checks=checks)
     width = max(len(n) for n, _, _ in rows)
     for name, status, detail in rows:
         print(f"{name:<{width}}  {status:<16} {detail}")

@@ -14,7 +14,7 @@ machine, with your data in one SQLite file.
 
 | | |
 |---|---|
-| **Chat** | Talk to it in the terminal, the web dashboard, or Telegram. It calls tools to read and change your data. |
+| **Chat** | Talk to it in the terminal, the web dashboard, or Telegram (reminders can also come by email). It calls tools to read and change your data. |
 | **Goals → milestones → tasks** | "I want to get good at web pentesting" becomes a goal, ordered milestones, and concrete first tasks. |
 | **Commitments** | Notices "I'll finish the GRE set by Friday", asks you to confirm, tracks it, counts postponements. |
 | **Realistic daily plans** | A deterministic planner: never exceeds your available time (15% buffer), at most 3 major priorities, and tells you what it left out and why. |
@@ -112,6 +112,7 @@ The ones you'll touch first:
 | `API_KEY` | **Set this before exposing the API anywhere.** Without it, only the dashboard and tools on the same machine are answered (not other machines, and not websites open in your browser). |
 | `SCHEDULER_ENABLED=true` | Turns on check-ins, reminders and nudges (run one process only). |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Deliver messages to, and chat from, your phone. |
+| `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `EMAIL_TO` | Or receive reminders and check-ins by email ([setup](docs/INSTALL.md#reminders-and-check-ins-by-email)). |
 | `NOTES_DIR` | A folder of notes/papers for `notes_search`. |
 | `BRAVE_API_KEY` | Enables `web_search`. |
 | `WEB_ALLOWED_DOMAINS` | Restrict the web fetcher to a short allow-list. |

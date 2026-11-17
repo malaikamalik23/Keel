@@ -86,7 +86,8 @@ Keel. A longer tour is in [DEMO.md](DEMO.md).
 | You want | Set in `.env` |
 |---|---|
 | Reminders, morning and evening check-ins | `SCHEDULER_ENABLED=true` (run only one Keel process) |
-| Messages on your phone | `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` |
+| Messages on your phone | `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` (also lets you chat from your phone) |
+| Reminders by email instead | `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD` and `EMAIL_TO` (see below) |
 | Web search | `BRAVE_API_KEY` |
 | Search over your notes and papers | `NOTES_DIR=/path/to/folder` |
 | Your calendar (read-only) | `CALENDAR_ICS_URL` |
@@ -97,6 +98,29 @@ Check the ones you configured with one read-only call each (it never prints keys
 ```bash
 python -m scripts.smoke_integrations
 ```
+
+### Reminders and check-ins by email
+
+If Telegram is not an option (it is blocked on some networks), Keel can email them to you instead. It only ever sends
+to the one address in `EMAIL_TO`, over an encrypted connection, as plain text. With Gmail:
+
+1. Turn on 2-Step Verification for your Google account, then create an **App Password** (Google Account > Security >
+   2-Step Verification > App passwords). Use that, not your normal password.
+2. In `.env`:
+
+   ```ini
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=587
+   SMTP_USERNAME=you@gmail.com
+   SMTP_PASSWORD=the-16-character-app-password
+   EMAIL_TO=you@gmail.com
+   SCHEDULER_ENABLED=true
+   ```
+
+3. Check it: `python -m scripts.smoke_integrations` logs in without sending; add `--send-test-email` to receive one.
+
+Email is one-way: you get reminders and check-ins, and reply in the dashboard or the CLI. If Telegram is also
+configured, Telegram is used instead. The same daily budget, quiet hours and de-duplication apply to both.
 
 ## 7. Docker instead
 
@@ -200,6 +224,11 @@ shown in the dashboard's Activity tab rather than pushed to you. Quiet hours and
 **Every check-in arrives twice.**
 Two schedulers are running on the same database (two server processes, or the server plus `python -m app.scheduler`).
 Run one.
+
+**Emails do not arrive.**
+Run `python -m scripts.smoke_integrations`. "rejected the username or password" with Gmail means you need an App
+Password (step above), not your account password. Look in Spam once and mark the first message as not spam. If
+Telegram variables are also set, Telegram is used instead of email.
 
 **Telegram stays silent.**
 Send your bot `/start` once (a bot cannot message you first), and check that `TELEGRAM_CHAT_ID` is your *numeric* id

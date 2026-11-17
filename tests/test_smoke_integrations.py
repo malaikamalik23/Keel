@@ -12,7 +12,7 @@ def _settings(**kw) -> Settings:
 
 def test_every_integration_is_skipped_when_nothing_is_configured():
     rows = smoke.run(_settings())
-    assert [r[0] for r in rows] == ["Brave search", "GitHub", "Notes folder", "Calendar", "Telegram"]
+    assert [r[0] for r in rows] == ["Brave search", "GitHub", "Notes folder", "Calendar", "Telegram", "Email"]
     assert all(status == "SKIPPED(no key)" for _, status, _ in rows)
 
 

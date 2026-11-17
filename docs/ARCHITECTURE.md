@@ -160,7 +160,7 @@ daily budget. Nudges draw from their own pool so they can never crowd out the ch
 
 `web_fetch`, `web_search`, `github_*`, `notes_search`, `read_note` and `read_calendar` all return text written by third parties, so
 they are `returns_untrusted`: output is sanitised, fenced in `<untrusted_content>`, and taints the conversation (WRITE tools then need approval until a new chat).
-`web_fetch` additionally has an SSRF-hardened fetcher and an exfiltration `taint_gate`. The full threat model, the 13 enforced controls, how
+`web_fetch` additionally has an SSRF-hardened fetcher and an exfiltration `taint_gate`. The full threat model, the 14 enforced controls, how
 they are tested (the red-team suite, mutation-checked) and the known limitations are in **[SECURITY.md](../SECURITY.md)**.
 
 ## 9. Quality gates

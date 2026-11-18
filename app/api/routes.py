@@ -8,6 +8,7 @@ from typing import Literal
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -35,6 +36,7 @@ from app.errors import ConflictError, NotFoundError
 from app.services import accountability as accountability_svc
 from app.services import analytics as analytics_svc
 from app.services.briefing import briefing_text, build_briefing, calendar_events
+from app.services.ics_export import plan_to_ics
 from app.tools.base import ToolContext
 from app.tools.memory import needs_review as memory_needs_review
 from app.tools.planning import get_plan, plan_dict
@@ -325,6 +327,17 @@ def task_events(task_id: int, db: Session = Depends(get_db)):
 def plan(plan_date: date | None = Query(None, alias="date"), db: Session = Depends(get_db), c: Container = Depends(get_container)):
     day = plan_date or datetime.now(ZoneInfo(c.settings.agent_timezone)).date()
     return plan_dict(get_plan(db, day), day)
+
+
+@router.get("/plan.ics")
+def plan_ics(plan_date: date | None = Query(None, alias="date"), db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    """The day's time blocks as a calendar file, to import into Google Calendar yourself (Keel never writes to it)."""
+    tz = ZoneInfo(c.settings.agent_timezone)
+    day = plan_date or datetime.now(tz).date()
+    return Response(
+        plan_to_ics(get_plan(db, day), day, tz), media_type="text/calendar; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="keel-plan-{day.isoformat()}.ics"'},
+    )
 
 
 @router.get("/briefing")

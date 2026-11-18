@@ -44,7 +44,7 @@ GROUP_INFO: dict[str, str] = {
 
 TOOL_GROUP: dict[str, str] = {
     **dict.fromkeys(["get_current_datetime", "create_task", "list_tasks", "update_task", "complete_task", "delete_task"], "tasks"),
-    **dict.fromkeys(["get_briefing", "create_daily_plan", "get_daily_plan", "update_plan_item", "log_work_session", "list_work_sessions"], "plan"),
+    **dict.fromkeys(["get_briefing", "get_week_overview", "create_daily_plan", "get_daily_plan", "update_plan_item", "log_work_session", "list_work_sessions"], "plan"),
     **dict.fromkeys(["accountability_report", "task_history"], "accountability"),
     **dict.fromkeys(["propose_commitment", "confirm_commitment", "list_commitments", "update_commitment", "complete_commitment"], "commitments"),
     **dict.fromkeys(["create_goal", "list_goals", "update_goal", "add_milestones", "milestone_to_tasks", "create_project", "list_projects", "update_project"], "goals"),

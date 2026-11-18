@@ -196,6 +196,8 @@ class PlanItemOut(BaseModel):
     planned_minutes: int
     is_major: bool
     status: str
+    start_time: str | None = None
+    end_time: str | None = None
 
 
 class PlanOut(BaseModel):

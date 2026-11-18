@@ -18,7 +18,7 @@ machine, with your data in one SQLite file.
 | **Goals → milestones → tasks** | "I want to get good at web pentesting" becomes a goal, ordered milestones, and concrete first tasks. |
 | **Commitments** | Notices "I'll finish the GRE set by Friday", asks you to confirm, tracks it, counts postponements. |
 | **Routines and waiting** | Tasks can repeat (daily, weekdays, weekly, monthly; finishing one creates the next), wait for another task to be done first, or wait on someone else with a follow-up date. Waiting and blocked tasks stay off the plan, and you get a nudge on the day to chase the reply. |
-| **Realistic daily plans** | A deterministic planner: never exceeds your available time (15% buffer), at most 3 major priorities, and tells you what it left out and why. |
+| **Realistic daily plans** | A deterministic planner: never exceeds your available time (15% buffer), at most 3 major priorities, and tells you what it left out and why. Each item gets a time block that fits around your calendar's meetings and your working hours, re-planned from the current time if your day changes; the plan can be downloaded as a calendar file to import. "How does my week look?" shows free time per day against what is due, and flags packed or double-booked days. |
 | **Accountability from facts** | "What have I been avoiding?" is answered from the event history: postponements with your reasons, old tasks never touched, neglected goals, time per project. No invented patterns. |
 | **Memory you control** | A profile (university, supervisor, career goal...), preferences, background and the decisions you made, sorted into personal, academic, professional and project. One answer per profile topic: a contradicting fact makes it ask you which is right. Old memories come up for review. Every memory shows where it came from, and is visible, editable and deletable. |
 | **Proactive, within a budget** | A morning briefing by email: the best next task, what is due or overdue, promises due soon, who to follow up with, and today's calendar. A heads-up the day before a promise or important task is due, an evening check-in and a weekly review that looks ahead. All limited by a daily budget, quiet hours and de-duplication. Ask "brief me" any time, or see it on the Today tab. |
@@ -64,7 +64,7 @@ pip install -r requirements-dev.txt
 cp .env.example .env                                      # Windows: copy .env.example .env
 #   then edit .env: set ANTHROPIC_API_KEY (or GROQ_API_KEY) and AGENT_TIMEZONE
 
-pytest -q                                                 # ~515 tests, no key or network needed
+pytest -q                                                 # ~525 tests, no key or network needed
 
 (cd frontend && npm ci && npm run build)                  # build the dashboard once
 uvicorn app.api.main:create_app --factory                 # dashboard + API at http://127.0.0.1:8000
@@ -129,8 +129,8 @@ Scheduler ──▶ detectors (SQL) ──▶ notification budget ──▶ LLM 
 ```
 
 - **One agent, native tool calling**, bounded loop (`MAX_AGENT_STEPS`), atomic history (a `tool_use` is never saved without its result).
-- **45 tools** in three permission tiers (one is the small `load_tools` helper); see the generated **[docs/TOOLS.md](docs/TOOLS.md)**.
-- **Lean tool profile (default).** A request that carries all 44 tool definitions is ~7,000 tokens before the conversation starts. Keel sends the core task tools plus only the groups the message needs (keywords, groups used recently, or a `load_tools` call), about 2.6-3.2k tokens. That is cheaper everywhere and is what makes it usable on Groq's free tier (8,000 tokens/minute). `TOOL_PROFILE=full` restores everything.
+- **46 tools** in three permission tiers (one is the small `load_tools` helper); see the generated **[docs/TOOLS.md](docs/TOOLS.md)**.
+- **Lean tool profile (default).** A request that carries all 45 tool definitions is ~7,000 tokens before the conversation starts. Keel sends the core task tools plus only the groups the message needs (keywords, groups used recently, or a `load_tools` call), about 2.6-3.2k tokens. That is cheaper everywhere and is what makes it usable on Groq's free tier (8,000 tokens/minute). `TOOL_PROFILE=full` restores everything.
 - **Proactivity = detectors + budget.** SQL decides *whether* something is overdue or neglected; the model only decides *how to say it*, and a deterministic fallback text is sent if the LLM is down.
 - Full design: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
@@ -145,7 +145,7 @@ python -m evals.run_routing        # how often does the model pick the right too
 ```
 
 - Agent logic is tested against a scripted fake LLM, and all network calls (email, Brave, GitHub, web pages, calendar) against mocks, so CI needs no keys and no network.
-- `evals/` holds 168 routing cases (59 with argument checks, tagged for natural-language deadlines, ambiguity, multi-step, safety, Roman Urdu and regressions), scored per category and tag, with history in `evals/history.jsonl` and a generated [dashboard](evals/dashboard.html) of scores over time, plus latency and token use per run. [More](evals/README.md).
+- `evals/` holds 170 routing cases (59 with argument checks, tagged for natural-language deadlines, ambiguity, multi-step, safety, Roman Urdu and regressions), scored per category and tag, with history in `evals/history.jsonl` and a generated [dashboard](evals/dashboard.html) of scores over time, plus latency and token use per run. [More](evals/README.md).
 - CI (GitHub Actions): lint, tests on Python 3.11 and 3.12, red-team suite, dashboard tests + build, real-Chromium end-to-end tests, dependency audit, secret scan, static analysis (Bandit and Semgrep's python, security-audit and secrets rules), Docker build plus the deployment guide's backup and restore.
 
 ## Honest status
@@ -153,7 +153,7 @@ python -m evals.run_routing        # how often does the model pick the right too
 - **Real-model routing on Groq `openai/gpt-oss-120b`** (lean profile, Nov 2026):
   - On the original 57 cases: 52/57 (91%). Two of the misses were then fixed: reminders (the tool schema demanded a stricter time
     format than Groq would accept) and "plan my day" (the model listed tasks first).
-  - On the expanded 160-case set (now 168; the 8 newest cases, for memory, tasks and the briefing, have not run yet): **157 of 160 pass in their most recent run (98%), with 0 unsafe calls** (one right tool with
+  - On the expanded 160-case set (now 170; the 10 newest cases, for memory, tasks, the briefing and the week view, have not run yet): **157 of 160 pass in their most recent run (98%), with 0 unsafe calls** (one right tool with
     a wrong date). This combines several partial runs, because the free tier's daily token limit cuts every run short, and
     takes the *latest* answer per case.
   - **Run to run, the same model moves by a few cases.** A repeat pass answered 86 cases: 83 passed, and 3 that had passed

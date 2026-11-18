@@ -79,6 +79,8 @@
  {"id":"task-waiting-feedback","category":"tasks","prompt":"I can't revise chapter 2 until Dr. Khan sends feedback, remind me to chase him on Friday","expect":["create_task","list_tasks","update_task"],"tags":["deadline-nl"],"args":{"create_task":{"waiting_on":{"contains":"khan"},"follow_up_date":{"date":"2026-11-13"}}}},
  {"id":"brief-me","category":"planning","prompt":"Brief me on my day","expect":["get_briefing","get_daily_plan"]},
  {"id":"brief-important","category":"planning","prompt":"What is important today?","expect":["get_briefing","get_daily_plan","list_tasks"]},
+ {"id":"week-overview","category":"planning","prompt":"How does my week look?","expect":["get_week_overview","read_calendar","get_briefing"]},
+ {"id":"week-free-day","category":"planning","prompt":"Which day this week do I have the most free time?","expect":["get_week_overview","read_calendar"]},
  {"id":"mem-review","category":"memory","prompt":"Is anything you remember about me out of date?","expect":["review_memories","search_memories"]},
  {"id":"mem-decision","category":"memory","prompt":"I've decided to go with NUST instead of FAST because the fees are lower, remember that","expect":["save_memory"],"args":{"save_memory":{"kind":"decision","content":{"contains":"nust"}}}},
  {"id":"mem-profile-university","category":"memory","prompt":"Remember that I study at COMSATS Islamabad","expect":["save_memory"],"args":{"save_memory":{"content":{"contains":"comsats"},"category":"academic"}}},

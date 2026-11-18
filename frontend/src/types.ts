@@ -17,7 +17,7 @@ export interface Briefing {
 export interface MemoryReview { stale: Memory[]; conflicts: Memory[][]; }
 export interface PendingAction { id: number; tool_name: string; summary: string; status: string; created_at: string; }
 export interface AuditEntry { id: number; created_at: string; actor: string; tool_name: string; permission: string; status: string; detail: string | null; }
-export interface PlanItem { item_id: number; task_id: number | null; title: string; minutes: number; major: boolean; status: string; }
+export interface PlanItem { item_id: number; task_id: number | null; title: string; minutes: number; major: boolean; status: string; start?: string; end?: string; }
 export interface Plan { date: string; exists: boolean; capacity_minutes?: number; usable_minutes?: number; planned_minutes?: number; items: PlanItem[]; }
 export interface ToolCall { name: string; permission: string; status: string; }
 export interface ChatResponse { conversation_id: number; reply: string; tool_calls: ToolCall[]; pending_action_ids: number[]; }

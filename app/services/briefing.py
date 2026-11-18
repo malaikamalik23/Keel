@@ -47,7 +47,8 @@ def build_briefing(db: Session, today: date) -> dict:
     commitments = [c for c in db.scalars(select(Commitment).where(Commitment.status == "open")) if c.deadline]
     ranked = rank_tasks(ready, today)
     plan = plan_dict(get_plan(db, today), today)
-    planned_left = [i for i in plan.get("items", []) if i["status"] == "planned"]
+    # Time-blocked items in clock order (the next one to do is the earliest block), unscheduled ones after them.
+    planned_left = sorted((i for i in plan.get("items", []) if i["status"] == "planned"), key=lambda i: i.get("start") or "99:99")
 
     return {
         "date": today.isoformat(),

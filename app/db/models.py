@@ -265,6 +265,9 @@ class PlanItem(Base):
     position: Mapped[int] = mapped_column(Integer, default=0)
     is_major: Mapped[bool] = mapped_column(default=False)
     status: Mapped[str] = mapped_column(String(12), default="planned")  # planned|done|skipped
+    # The time block the planner chose (local "HH:MM"); None when it was planned without a schedule.
+    start_time: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    end_time: Mapped[str | None] = mapped_column(String(5), nullable=True)
 
     plan: Mapped[Plan] = relationship(back_populates="items")
 

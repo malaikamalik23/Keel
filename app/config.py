@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     notification_min_priority: Literal["low", "normal", "high"] = "normal"
     quiet_hours_start: str = "22:00"
     quiet_hours_end: str = "07:00"
+    # The hours the planner may put work into, in local time. Calendar events inside them are planned around.
+    workday_start: str = "09:00"
+    workday_end: str = "21:00"
     telegram_bot_token: str | None = None
     telegram_chat_id: str | None = None  # the ONLY chat the bot talks to / listens to
     telegram_inbound: bool = True  # also let you chat with the agent through the bot

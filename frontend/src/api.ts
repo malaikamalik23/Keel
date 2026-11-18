@@ -22,7 +22,21 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
 }
 
+/** Download a file from the API (sends the API key like every other request), then save it in the browser. */
+async function download(path: string, filename: string): Promise<void> {
+  const headers: Record<string, string> = {};
+  const key = getApiKey();
+  if (key) headers["X-API-Key"] = key;
+  const res = await fetch(path, { headers });
+  if (!res.ok) throw new ApiError(res.status, res.statusText);
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
 export const api = {
+  download,
   get: <T,>(path: string) => request<T>("GET", path),
   post: <T,>(path: string, body?: unknown) => request<T>("POST", path, body ?? {}),
   patch: <T,>(path: string, body: unknown) => request<T>("PATCH", path, body),

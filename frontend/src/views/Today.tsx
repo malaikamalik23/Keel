@@ -49,15 +49,23 @@ export default function Today() {
           </>
         )}
       </Card>
-      <Card title="Today's plan" right={p?.exists ? <Badge>{p.planned_minutes} / {p.usable_minutes} min</Badge> : undefined}>
+      <Card
+        title="Today's plan"
+        right={p?.exists ? (
+          <span>
+            <Badge>{p.planned_minutes} / {p.usable_minutes} min</Badge>{" "}
+            {p.items.some((i) => i.start) && <button className="ghost" onClick={() => run(() => api.download(`/api/plan.ics?date=${p.date}`, `keel-plan-${p.date}.ics`))}>Add to calendar</button>}
+          </span>
+        ) : undefined}
+      >
         <Loading loading={plan.loading} error={plan.error} />
         {p && !p.exists && <Empty>No plan yet. Ask the agent in Chat: “Plan my day, I have 4 hours.”</Empty>}
         {p?.exists && p.items.length === 0 && <Empty>Nothing is planned for today (the plan's tasks were removed). Ask in Chat to plan again.</Empty>}
         {p?.exists && p.items.length > 0 && (
           <ul className="list">
-            {p.items.map((i) => (
+            {[...p.items].sort((x, y) => (x.start ?? "99:99").localeCompare(y.start ?? "99:99")).map((i) => (
               <li key={i.item_id} className={i.status !== "planned" ? "done" : ""}>
-                <span>{i.title} <Badge>{i.minutes} min</Badge> {i.major && <Badge tone="warn">major</Badge>} {i.status !== "planned" && <Badge tone={i.status === "done" ? "ok" : ""}>{i.status}</Badge>}</span>
+                <span>{i.start && <strong className="small">{i.start}–{i.end} </strong>}{i.title} <Badge>{i.minutes} min</Badge> {i.major && <Badge tone="warn">major</Badge>} {i.status !== "planned" && <Badge tone={i.status === "done" ? "ok" : ""}>{i.status}</Badge>}</span>
                 {i.status === "planned" && (
                   <span className="actions">
                     <button onClick={() => run(() => (i.task_id ? api.post(`/api/tasks/${i.task_id}/complete`) : api.patch(`/api/plan-items/${i.item_id}`, { status: "done" })))}>Done</button>

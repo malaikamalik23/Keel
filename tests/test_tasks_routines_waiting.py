@@ -19,7 +19,8 @@ WED = date(2026, 11, 18)  # a Wednesday
 
 
 def _run(c, db, name, args, today=WED):
-    with patch.object(ToolContext, "today", lambda self: today):
+    # A fixed morning: the planner fits work into the rest of the working day, so the real clock must not matter.
+    with patch.object(ToolContext, "today", lambda self: today),          patch.object(ToolContext, "now", lambda self: datetime(today.year, today.month, today.day, 8, 0, tzinfo=UTC)):
         out = c.executor.run(ToolContext(db=db, tz=UTC), name, args)
     db.commit()
     return out

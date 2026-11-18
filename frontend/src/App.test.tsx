@@ -7,7 +7,7 @@ const weekStart = (i: number) => new Date(Date.UTC(2026, 9, 5 + i * 7)).toISOStr
 const week = (i: number) => ({ week_start: weekStart(i), created: i, completed: i, postponed: 1, planned_items: 2, planned_done: 1, minutes_worked: 30 * i });
 const FIXTURES: Record<string, unknown> = {
   "/api/pending-actions": [{ id: 3, tool_name: "delete_task", summary: "Permanently delete task #1: “Write intro”", status: "pending", created_at: "2026-11-07T10:00:00" }],
-  "/api/plan": { date: "2026-11-07", exists: true, capacity_minutes: 240, usable_minutes: 204, planned_minutes: 90, items: [{ item_id: 1, task_id: 1, title: "Write FYP intro", minutes: 60, major: true, status: "planned" }, { item_id: 2, task_id: null, title: "Read paper", minutes: 30, major: false, status: "done" }] },
+  "/api/plan": { date: "2026-11-07", exists: true, capacity_minutes: 240, usable_minutes: 204, planned_minutes: 90, items: [{ item_id: 1, task_id: 1, title: "Write FYP intro", minutes: 60, major: true, status: "planned", start: "09:00", end: "10:00" }, { item_id: 2, task_id: null, title: "Read paper", minutes: 30, major: false, status: "done" }] },
   "/api/tasks": [{ id: 1, title: "Write FYP intro", description: null, status: "todo", priority: "high", due_date: "2026-11-01", estimated_minutes: 60, postponement_count: 2 }],
   "/api/commitments": [{ id: 1, text: "Finish the GRE set", deadline: "2026-11-09", importance: "high", status: "open", postponement_count: 1, completed_at: null }],
   "/api/accountability": { window: { start: "2026-11-01", end: "2026-11-07", days: 7 }, tasks: { created: 3, completed: 1, open_now: 2, overdue: 1, overdue_titles: ["Write FYP intro"] }, plan_adherence: { planned_items: 4, done: 2, skipped: 1, rate: 0.5 }, most_postponed: [{ task_id: 1, title: "Write FYP intro", postponement_count: 3, reasons_given: ["too big"] }], avoided_tasks: [], overdue_commitments: [], neglected_goals: [{ goal_id: 1, title: "Pentesting", days_since_activity: 21 }], work: { total_minutes: 120, sessions: 3, minutes_by_project: {} } },
@@ -53,6 +53,8 @@ describe("dashboard smoke tests", () => {
     expect(await screen.findByText("Finish the GRE set")).toBeTruthy();
     expect(await screen.findByText(/Time to follow up: Dr. Khan \(Revise chapter 2\)/)).toBeTruthy();
     expect(await screen.findByText("Supervisor meeting")).toBeTruthy();
+    expect(await screen.findByText(/09:00–10:00/)).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Add to calendar" })).toBeTruthy();
     expect(errors).toEqual([]);
   });
 

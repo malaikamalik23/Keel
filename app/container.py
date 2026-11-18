@@ -66,6 +66,7 @@ def build_container(
         github=GitHubClient(settings.github_token) if settings.github_enabled else None,
         github_user=settings.github_user,
         notes_enabled=bool(settings.notes_dir) and settings.database_url.startswith("sqlite"),
+        workday=(settings.workday_start, settings.workday_end),
     )
     executor = ToolExecutor(
         registry,

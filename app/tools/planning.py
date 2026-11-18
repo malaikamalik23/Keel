@@ -1,15 +1,17 @@
 """Phase 3 tools: daily planning, plan items, work sessions, accountability queries."""
 from __future__ import annotations
 
-from datetime import date, timedelta
+from collections.abc import Callable
+from datetime import date, time, timedelta
 from typing import Literal
 
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.db.models import Plan, PlanItem, Project, Task, WorkSession, utcnow
+from app.db.models import Commitment, Plan, PlanItem, Project, Task, WorkSession, utcnow
 from app.services import accountability
 from app.services.planner import MAX_MAJOR, build_plan, rank_tasks, usable_capacity
+from app.services.scheduling import busy_intervals, free_slots, overlapping_events, place
 from app.services.task_events import record_task_event
 from app.services.task_state import actionable, open_blocker
 from app.services.timeutil import window_utc
@@ -17,10 +19,14 @@ from app.tools.base import Permission, Tool, ToolContext, ToolError, ToolRegistr
 
 OPEN = ("todo", "in_progress")
 DEFAULT_CAPACITY_MINUTES = 240
+DEFAULT_WORKDAY = (time(9, 0), time(21, 0))
 
 
 def _item_dict(i: PlanItem) -> dict:
-    return {"item_id": i.id, "task_id": i.task_id, "title": i.title, "minutes": i.planned_minutes, "major": i.is_major, "status": i.status}
+    d = {"item_id": i.id, "task_id": i.task_id, "title": i.title, "minutes": i.planned_minutes, "major": i.is_major, "status": i.status}
+    if i.start_time:
+        d["start"], d["end"] = i.start_time, i.end_time
+    return d
 
 
 def plan_dict(plan: Plan | None, plan_date: date) -> dict:
@@ -51,15 +57,37 @@ class CreateDailyPlanInput(BaseModel):
     )
 
 
-def create_daily_plan(ctx: ToolContext, p: CreateDailyPlanInput) -> dict:
+def make_create_daily_plan(calendar_source: Callable[[], str] | None = None, workday: tuple[time, time] = DEFAULT_WORKDAY):
+    def create_daily_plan(ctx: ToolContext, p: CreateDailyPlanInput) -> dict:
+        return _create_daily_plan(ctx, p, calendar_source, workday)
+
+    return create_daily_plan
+
+
+def _create_daily_plan(ctx: ToolContext, p: CreateDailyPlanInput, calendar_source, workday) -> dict:
     day = p.plan_date or ctx.today()
+    # Free time: working hours minus calendar events (times only, never titles), from now on if the day is today.
+    busy = busy_intervals(calendar_source, day, ctx.tz)
+    slots = free_slots(day, ctx.tz, workday, busy or [], now=ctx.now())
+    free_minutes = sum(s.minutes for s in slots)
+    capacity = p.capacity_minutes
+    time_warnings: list[str] = []
+    if busy is not None and capacity > free_minutes:
+        time_warnings.append(
+            f"You said {capacity} min, but your calendar and working hours leave {free_minutes} min free"
+            f"{' from now' if day == ctx.today() else ''}, so the plan uses {free_minutes} min."
+        )
+        capacity = free_minutes
     plan = get_plan(ctx.db, day)
+    if capacity < 15:
+        raise ToolError(f"There is no free time left {'today' if day == ctx.today() else 'that day'} "
+                        f"between your calendar events and working hours ({free_minutes} min).")
     if plan is None:
-        plan = Plan(plan_date=day, capacity_minutes=p.capacity_minutes)
+        plan = Plan(plan_date=day, capacity_minutes=capacity)
         ctx.db.add(plan)
         ctx.db.flush()
     else:
-        plan.capacity_minutes = p.capacity_minutes
+        plan.capacity_minutes = capacity
 
     # Re-planning keeps what is already done/skipped; only the still-"planned" items are rebuilt.
     kept = [i for i in plan.items if i.status != "planned"]
@@ -86,21 +114,37 @@ def create_daily_plan(ctx: ToolContext, p: CreateDailyPlanInput) -> dict:
         not_ready = []
         ordered = rank_tasks([t for t in open_tasks if actionable(ctx.db, t)], day)
 
-    result = build_plan(ordered, p.capacity_minutes, already_used_minutes=used, already_major=majors)
+    result = build_plan(ordered, capacity, already_used_minutes=used, already_major=majors)
+    # Time-block what was chosen, in order, into the free slots (whole blocks, a short break after each).
+    placed, unplaced = place([(c.task.id, c.minutes) for c in result.selected], slots)
     pos = len(kept)
     for c in result.selected:
-        plan.items.append(PlanItem(task_id=c.task.id, title=c.task.title, planned_minutes=c.minutes, position=pos, is_major=c.is_major))
+        block = placed.get(c.task.id)
+        plan.items.append(PlanItem(
+            task_id=c.task.id, title=c.task.title, planned_minutes=c.minutes, position=pos, is_major=c.is_major,
+            start_time=block.start.strftime("%H:%M") if block else None, end_time=block.end.strftime("%H:%M") if block else None,
+        ))
         pos += 1
     ctx.db.flush()
     out = plan_dict(plan, day)
     out["deferred"] = result.deferred[:10]
     out["limits"] = {"max_major_priorities": MAX_MAJOR}
-    if not_ready:
-        out["warnings"] = [
-            f"'{t.title}' is waiting on {t.waiting_on}." if t.waiting_on else f"'{t.title}' can't start until '{open_blocker(ctx.db, t).title}' is done."
-            for t in not_ready
-        ]
+    out["free_minutes"] = free_minutes
+    if busy is not None:
+        out["busy"] = [{"start": b.start.strftime("%H:%M"), "end": b.end.strftime("%H:%M")} for b in busy]
+    if unplaced:
+        names = [c.task.title for c in result.selected if c.task.id in unplaced]
+        time_warnings.append("No single free stretch is long enough for: " + ", ".join(names) + ". They are planned without a time.")
+    warnings = time_warnings + [
+        f"'{t.title}' is waiting on {t.waiting_on}." if t.waiting_on else f"'{t.title}' can't start until '{open_blocker(ctx.db, t).title}' is done."
+        for t in not_ready
+    ]
+    if warnings:
+        out["warnings"] = warnings
     return out
+
+
+create_daily_plan = make_create_daily_plan()  # no calendar, default working hours (tests and direct use)
 
 
 # ---------- get_daily_plan ----------
@@ -200,6 +244,44 @@ def task_history(ctx: ToolContext, p: TaskHistoryInput) -> dict:
     return {"task_id": task.id, "title": task.title, "postponement_count": task.postponement_count, "events": accountability.task_history(ctx.db, task.id)}
 
 
+# ---------- get_week_overview ----------
+class WeekOverviewInput(BaseModel):
+    start_date: date | None = Field(None, description="First day (YYYY-MM-DD). Defaults to today.")
+    days: int = Field(7, ge=1, le=14)
+
+
+def make_week_overview(calendar_source: Callable[[], str] | None = None, workday: tuple[time, time] = DEFAULT_WORKDAY):
+    def get_week_overview(ctx: ToolContext, p: WeekOverviewInput) -> dict:
+        """Per day: calendar time taken, free working time, and what is due. Uses event times only, never titles."""
+        start = p.start_date or ctx.today()
+        open_tasks = list(ctx.db.scalars(select(Task).where(Task.status.in_(OPEN))))
+        promises = [c for c in ctx.db.scalars(select(Commitment).where(Commitment.status == "open")) if c.deadline]
+        out = []
+        for n in range(p.days):
+            day = start + timedelta(days=n)
+            busy = busy_intervals(calendar_source, day, ctx.tz)
+            free = sum(s.minutes for s in free_slots(day, ctx.tz, workday, busy or [], now=ctx.now()))
+            due = [t for t in open_tasks if t.due_date == day]
+            need = sum(t.estimated_minutes or 30 for t in due if actionable(ctx.db, t))
+            entry = {
+                "date": day.isoformat(), "weekday": day.strftime("%A"),
+                "busy_minutes": sum(b.minutes for b in busy) if busy else 0, "free_minutes": free,
+                "tasks_due": [t.title for t in due], "promises_due": [c.text for c in promises if c.deadline == day],
+            }
+            notes = []
+            if due and need > free:
+                notes.append(f"packed: about {need} min of work due but only {free} min free")
+            overlaps = overlapping_events(calendar_source, day, ctx.tz)
+            if overlaps:
+                notes.append(f"double-booked: {overlaps} pair(s) of events overlap")
+            if notes:
+                entry["warnings"] = notes
+            out.append(entry)
+        return {"calendar": calendar_source is not None, "days": out}
+
+    return get_week_overview
+
+
 # ---------- get_briefing ----------
 class GetBriefingInput(BaseModel):
     pass
@@ -213,8 +295,17 @@ def get_briefing(ctx: ToolContext, p: GetBriefingInput) -> dict:
     return build_briefing(ctx.db, ctx.today())
 
 
-def register(registry: ToolRegistry) -> None:
+def register(registry: ToolRegistry, calendar_source: Callable[[], str] | None = None, workday: tuple[time, time] = DEFAULT_WORKDAY) -> None:
     for tool in (
+        Tool(
+            name="get_week_overview",
+            description=(
+                "The week ahead, day by day: how much of the working day the calendar takes, how much is free, and "
+                "which tasks and promises are due, with warnings for packed or double-booked days. Use for 'how does "
+                "my week look', 'when do I have time', 'which day is free for X'."
+            ),
+            permission=Permission.READ, input_model=WeekOverviewInput, handler=make_week_overview(calendar_source, workday),
+        ),
         Tool(
             name="get_briefing",
             description=(
@@ -229,10 +320,12 @@ def register(registry: ToolRegistry) -> None:
             description=(
                 "Build the plan for a day. Code picks and orders tasks by urgency/priority and guarantees the plan "
                 f"fits the available time (with a buffer) and has at most {MAX_MAJOR} major priorities; anything left "
-                "out comes back in 'deferred' with a reason. Use for 'plan my day'; call it directly, it reads the open tasks itself, so don't list tasks first. If you don't know how much time "
-                "the user has, ask once first. Calling it again re-plans without losing finished items."
+                "out comes back in 'deferred' with a reason. Each item gets a time block around the user's calendar "
+                "events and working hours. Use for 'plan my day'; call it directly, it reads the open tasks and the "
+                "calendar itself, so don't list tasks first. If you don't know how much time the user has, ask once "
+                "first. Calling it again re-plans from now without losing finished items."
             ),
-            permission=Permission.WRITE, input_model=CreateDailyPlanInput, handler=create_daily_plan,
+            permission=Permission.WRITE, input_model=CreateDailyPlanInput, handler=make_create_daily_plan(calendar_source, workday),
         ),
         Tool(
             name="get_daily_plan",

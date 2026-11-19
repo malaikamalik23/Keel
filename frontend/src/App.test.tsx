@@ -17,7 +17,7 @@ const FIXTURES: Record<string, unknown> = {
     { id: 1, kind: "preference", category: "general", topic: null, content: "Focuses best in the morning.", importance: "high", source: "chat", created_at: "2026-11-01T00:00:00", updated_at: "2026-11-01T00:00:00", confirmed_at: "2026-11-01T00:00:00", last_used_at: null, needs_review: false },
     { id: 2, kind: "fact", category: "academic", topic: "supervisor", content: "Dr. Khan", importance: "medium", source: "user", created_at: "2025-01-01T00:00:00", updated_at: "2025-01-01T00:00:00", confirmed_at: "2025-01-01T00:00:00", last_used_at: null, needs_review: true },
   ],
-  "/api/briefing": { date: "2026-11-18", weekday: "Wednesday", next_action: { id: 1, title: "Write FYP intro", priority: "high" }, plan: { exists: true, items_left: 1, items_total: 2 }, due_today: [], overdue: [], coming_up: [{ id: 4, title: "GRE set 4", priority: "medium", due: "2026-11-20" }], commitments_due_soon: [], follow_ups_due: [{ title: "Revise chapter 2", waiting_on: "Dr. Khan", since: "2026-11-18" }], waiting_count: 1, blocked_count: 0, slipping: [], calendar: [{ title: "Supervisor meeting", time: "10:00-10:30", minutes: 30 }], text: "" },
+  "/api/briefing": { date: "2026-11-18", weekday: "Wednesday", next_action: { id: 1, title: "Write FYP intro", priority: "high" }, plan: { exists: true, items_left: 1, items_total: 2 }, due_today: [], overdue: [], coming_up: [{ id: 4, title: "GRE set 4", priority: "medium", due: "2026-11-20" }], commitments_due_soon: [], follow_ups_due: [{ title: "Revise chapter 2", waiting_on: "Dr. Khan", since: "2026-11-18" }], waiting_count: 1, blocked_count: 0, slipping: [], calendar: [{ title: "Supervisor meeting", time: "10:00-10:30", minutes: 30 }], text: "", important_dates: [{ title: "GRE exam", date: "2026-11-21", days_left: 3 }], calendar_warnings: ["Tomorrow: 1 pair(s) of calendar events overlap. You can't be in both."] },
   "/api/memories/review": { stale: [{ id: 2, kind: "fact", category: "academic", topic: "supervisor", content: "Dr. Khan", importance: "medium", source: "user", created_at: "2025-01-01T00:00:00", updated_at: "2025-01-01T00:00:00", confirmed_at: "2025-01-01T00:00:00", last_used_at: null, needs_review: true }], conflicts: [] },
   "/api/analytics": { weeks: Array.from({ length: 8 }, (_, i) => week(i)), streak: { current_days: 4, longest_days: 9, window_days: 90 }, commitments: { done: 3, dropped: 1, overdue: 1, kept_rate: 0.6 }, estimates: { tasks_measured: 5, median_actual_vs_estimate: 1.4 }, postponement: { total: 6, avg_before_completion: 1.5, top_reasons: [{ reason: "too big", count: 3 }] }, completions_by_weekday: { Mon: 1, Tue: 2, Wed: 0, Thu: 3, Fri: 1, Sat: 0, Sun: 0 } },
   "/api/reminders": [{ id: 1, text: "Email Dr. Khan", fire_at: "2026-11-08T04:00:00", status: "pending", linked_type: null, linked_id: null, sent_at: null }],
@@ -54,6 +54,8 @@ describe("dashboard smoke tests", () => {
     expect(await screen.findByText(/Time to follow up: Dr. Khan \(Revise chapter 2\)/)).toBeTruthy();
     expect(await screen.findByText("Supervisor meeting")).toBeTruthy();
     expect(await screen.findByText(/09:00–10:00/)).toBeTruthy();
+    expect(await screen.findByText(/Dates: GRE exam/)).toBeTruthy();
+    expect(await screen.findByText(/Tomorrow: 1 pair\(s\) of calendar events overlap/)).toBeTruthy();
     expect(await screen.findByRole("button", { name: "Add to calendar" })).toBeTruthy();
     expect(errors).toEqual([]);
   });

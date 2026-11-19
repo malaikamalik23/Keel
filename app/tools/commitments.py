@@ -22,6 +22,8 @@ def _commitment_dict(c: Commitment, today: date | None = None) -> dict:
         "postponement_count": c.postponement_count,
         "completed_at": c.completed_at.isoformat(timespec="minutes") if c.completed_at else None,
     }
+    if c.check_in_date:
+        d["check_in_date"] = c.check_in_date.isoformat()
     if today and c.status in ("proposed", "open") and c.deadline and c.deadline < today:
         d["overdue"] = True
     return d
@@ -41,6 +43,7 @@ class ProposeCommitmentInput(BaseModel):
     importance: Literal["low", "medium", "high"] = "medium"
     project_id: int | None = None
     task_id: int | None = Field(None, description="Link to an existing task this commitment refers to, if any.")
+    check_in_date: date | None = Field(None, description="A day before the deadline to ask how it's going.")
     confirmed: bool = Field(
         False,
         description=(
@@ -51,11 +54,17 @@ class ProposeCommitmentInput(BaseModel):
     )
 
 
+def _check_check_in(check_in: date | None, deadline: date | None) -> None:
+    if check_in and deadline and check_in > deadline:
+        raise ToolError("The check-in date is after the deadline: it should come before it.")
+
+
 def propose_commitment(ctx: ToolContext, p: ProposeCommitmentInput) -> dict:
+    _check_check_in(p.check_in_date, p.deadline)
     c = Commitment(
         text=p.text.strip(), deadline=p.deadline, importance=p.importance,
         project_id=p.project_id, task_id=p.task_id, conversation_id=ctx.conversation_id,
-        status="open" if p.confirmed else "proposed",
+        status="open" if p.confirmed else "proposed", check_in_date=p.check_in_date,
     )
     ctx.db.add(c)
     ctx.db.flush()
@@ -103,6 +112,7 @@ class UpdateCommitmentInput(BaseModel):
     status: Literal["open", "dropped"] | None = Field(
         None, description="To mark it done, use complete_commitment instead."
     )
+    check_in_date: date | None = Field(None, description="A day before the deadline to ask how it's going; null clears it.")
 
 
 def update_commitment(ctx: ToolContext, p: UpdateCommitmentInput) -> dict:
@@ -113,6 +123,7 @@ def update_commitment(ctx: ToolContext, p: UpdateCommitmentInput) -> dict:
     if "text" in changes and not changes["text"]:
         raise ToolError("'text' cannot be empty.")
 
+    _check_check_in(changes.get("check_in_date", c.check_in_date), changes.get("deadline", c.deadline))
     postponed = False
     if "deadline" in changes:
         new_deadline = changes.pop("deadline")

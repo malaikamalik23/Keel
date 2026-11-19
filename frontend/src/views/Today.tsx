@@ -39,6 +39,8 @@ export default function Today() {
         {b && (
           <>
             <p>{next ? <>Start with <strong>{next}</strong>.</> : "Nothing that can be started right now."}</p>
+            {(b.calendar_warnings ?? []).map((w, i) => <p key={i} className="small" role="alert">{w}</p>)}
+            {(b.important_dates ?? []).length > 0 && <p className="small">Dates: {(b.important_dates ?? []).map((d) => `${d.title} (${d.days_left === 0 ? "today" : fmtDate(d.date)})`).join(", ")}</p>}
             {b.follow_ups_due.length > 0 && <p className="small">Time to follow up: {b.follow_ups_due.map((f) => `${f.waiting_on} (${f.title})`).join(", ")}</p>}
             {b.commitments_due_soon.length > 0 && <p className="small">Promises due soon: {b.commitments_due_soon.map((c) => `${c.text} (${fmtDate(c.deadline)})`).join(", ")}</p>}
             {b.coming_up.length > 0 && <p className="small">Coming up: {b.coming_up.map((t) => `${t.title} (${fmtDate(t.due ?? null)})`).join(", ")}</p>}

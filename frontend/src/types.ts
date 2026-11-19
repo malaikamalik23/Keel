@@ -13,6 +13,7 @@ export interface Briefing {
   follow_ups_due: { title: string; waiting_on: string; since: string }[];
   waiting_count: number; blocked_count: number; slipping: { title: string; postponed: number }[];
   calendar: { title: string; time: string; minutes: number }[] | null; text: string;
+  important_dates?: { title: string; date: string; days_left: number }[]; calendar_warnings?: string[];
 }
 export interface MemoryReview { stale: Memory[]; conflicts: Memory[][]; }
 export interface PendingAction { id: number; tool_name: string; summary: string; status: string; created_at: string; }

@@ -50,6 +50,27 @@ def detect_nudges(db: Session, now_local: datetime, tz: ZoneInfo) -> list[Nudge]
             f"Still waiting on {t.waiting_on} for “{t.title}”. Time to follow up?",
         ))
 
+    # A promise's check-in day: ask how it's going while there is still time (once per promise).
+    for c in db.scalars(select(Commitment).where(Commitment.status == "open", Commitment.check_in_date == today)):
+        due = f" It's due {c.deadline:%b %d}." if c.deadline else ""
+        out.append(Nudge(
+            "normal", f"commitment-check-in:{c.id}:{today}",
+            {"what": "commitment_check_in", "text": c.text, "deadline": c.deadline.isoformat() if c.deadline else None},
+            f"Checking in on your promise “{c.text}”: how is it going?{due}",
+        ))
+
+    # Important dates: a few days ahead (as the user chose) and on the day.
+    from app.tools.dates import upcoming
+
+    for d in upcoming(db, today, 60):
+        if d["days_left"] in (0, d["remind_days_before"]):
+            when = "today" if d["days_left"] == 0 else f"in {d['days_left']} day(s), on {d['date']}"
+            out.append(Nudge(
+                "normal", f"important-date:{d['id']}:{d['date']}:{d['days_left']}",
+                {"what": "important_date", "title": d["title"], "date": d["date"], "days_left": d["days_left"]},
+                f"{d['title']} is {when}.",
+            ))
+
     # Heads-up: promises and high-priority tasks due tomorrow, so there is still a day to do them (one message a day).
     tomorrow = today + timedelta(days=1)
     due_tomorrow = [c.text for c in db.scalars(select(Commitment).where(Commitment.status == "open", Commitment.deadline == tomorrow))]

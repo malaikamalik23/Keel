@@ -64,7 +64,7 @@ def make_create_daily_plan(calendar_source: Callable[[], str] | None = None, wor
     return create_daily_plan
 
 
-def _create_daily_plan(ctx: ToolContext, p: CreateDailyPlanInput, calendar_source, workday) -> dict:
+def _create_daily_plan(ctx: ToolContext, p: CreateDailyPlanInput, calendar_source, workday, exclude: frozenset[int] = frozenset()) -> dict:
     day = p.plan_date or ctx.today()
     # Free time: working hours minus calendar events (times only, never titles), from now on if the day is today.
     busy = busy_intervals(calendar_source, day, ctx.tz)
@@ -110,7 +110,7 @@ def _create_daily_plan(ctx: ToolContext, p: CreateDailyPlanInput, calendar_sourc
         not_ready = [t for t in ordered if not actionable(ctx.db, t)]  # the user chose them: plan them, but say so
     else:
         # Only what can be worked on now: not waiting on someone, not waiting for an unfinished task.
-        open_tasks = [t for t in ctx.db.scalars(select(Task).where(Task.status.in_(OPEN))) if t.id not in kept_task_ids]
+        open_tasks = [t for t in ctx.db.scalars(select(Task).where(Task.status.in_(OPEN))) if t.id not in kept_task_ids and t.id not in exclude]
         not_ready = []
         ordered = rank_tasks([t for t in open_tasks if actionable(ctx.db, t)], day)
 
@@ -244,6 +244,61 @@ def task_history(ctx: ToolContext, p: TaskHistoryInput) -> dict:
     return {"task_id": task.id, "title": task.title, "postponement_count": task.postponement_count, "events": accountability.task_history(ctx.db, task.id)}
 
 
+# ---------- plan_week ----------
+class PlanWeekInput(BaseModel):
+    start_date: date | None = Field(None, description="First day to plan (YYYY-MM-DD). Defaults to today.")
+    days: int = Field(5, ge=1, le=7, description="How many days to plan.")
+    capacity_minutes_per_day: int = Field(
+        DEFAULT_CAPACITY_MINUTES, ge=15, le=1440, description="Minutes the user can work on a normal day. Ask if you don't know."
+    )
+    skip_weekends: bool = Field(True, description="Leave Saturday and Sunday unplanned.")
+
+
+def make_plan_week(calendar_source: Callable[[], str] | None = None, workday: tuple[time, time] = DEFAULT_WORKDAY):
+    def plan_week(ctx: ToolContext, p: PlanWeekInput) -> dict:
+        """Day by day, the same planner as create_daily_plan: each day around that day's meetings, each task once,
+        the most urgent first. What doesn't fit anywhere is reported, not dropped."""
+        start = p.start_date or ctx.today()
+        scheduled: set[int] = set()
+        days, skipped = [], []
+        day, planned_days = start, 0
+        while planned_days < p.days:
+            if p.skip_weekends and day.weekday() >= 5:
+                day += timedelta(days=1)
+                continue
+            try:
+                out = _create_daily_plan(
+                    ctx, CreateDailyPlanInput(plan_date=day, capacity_minutes=p.capacity_minutes_per_day),
+                    calendar_source, workday, exclude=frozenset(scheduled),
+                )
+            except ToolError as exc:
+                skipped.append({"date": day.isoformat(), "reason": str(exc)})
+            else:
+                ids = {i["task_id"] for i in out["items"] if i["task_id"] and i["status"] == "planned"}
+                scheduled |= ids
+                days.append({
+                    "date": day.isoformat(), "weekday": day.strftime("%A"), "planned_minutes": out["planned_minutes"],
+                    "free_minutes": out["free_minutes"],
+                    "items": [{k: i[k] for k in ("title", "minutes", "start", "end") if k in i} for i in out["items"] if i["status"] == "planned"],
+                    **({"warnings": out["warnings"]} if out.get("warnings") else {}),
+                })
+            planned_days += 1
+            day += timedelta(days=1)
+        left = [t for t in ctx.db.scalars(select(Task).where(Task.status.in_(OPEN)))
+                if t.id not in scheduled and actionable(ctx.db, t)]
+        result: dict = {"days": days}
+        if skipped:
+            result["days_without_time"] = skipped
+        if left:
+            result["not_planned"] = [{"title": t.title, "due": t.due_date.isoformat() if t.due_date else None} for t in left][:10]
+            late = [t.title for t in left if t.due_date and t.due_date <= start + timedelta(days=p.days)]
+            if late:
+                result["warning"] = "Due this week but no room for: " + ", ".join(late[:5]) + ". Something has to give."
+        return result
+
+    return plan_week
+
+
 # ---------- get_week_overview ----------
 class WeekOverviewInput(BaseModel):
     start_date: date | None = Field(None, description="First day (YYYY-MM-DD). Defaults to today.")
@@ -297,6 +352,15 @@ def get_briefing(ctx: ToolContext, p: GetBriefingInput) -> dict:
 
 def register(registry: ToolRegistry, calendar_source: Callable[[], str] | None = None, workday: tuple[time, time] = DEFAULT_WORKDAY) -> None:
     for tool in (
+        Tool(
+            name="plan_week",
+            description=(
+                "Plan several days at once (default the next 5 weekdays): each day gets time blocks around that day's "
+                "calendar, each task is planned once, most urgent first, and anything due this week that doesn't fit is "
+                "flagged. Use for 'plan my week'. Ask how many hours a day they have if you don't know."
+            ),
+            permission=Permission.WRITE, input_model=PlanWeekInput, handler=make_plan_week(calendar_source, workday),
+        ),
         Tool(
             name="get_week_overview",
             description=(

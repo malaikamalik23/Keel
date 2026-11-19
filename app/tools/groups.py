@@ -35,7 +35,7 @@ GROUP_INFO: dict[str, str] = {
     "commitments": "commitments: promises with deadlines (propose, confirm, list, update, complete)",
     "goals": "goals: goals, milestones and projects",
     "memory": "memory: save, search, review, edit or forget facts, preferences and decisions about the user",
-    "reminders": "reminders: schedule, list or cancel a reminder",
+    "reminders": "reminders: schedule, list or cancel a reminder; important dates (exams, birthdays)",
     "calendar": "calendar: read calendar events and free time",
     "web": "web: search the web, read a web page",
     "github": "github: repositories, READMEs, issues, recent commits",
@@ -44,12 +44,12 @@ GROUP_INFO: dict[str, str] = {
 
 TOOL_GROUP: dict[str, str] = {
     **dict.fromkeys(["get_current_datetime", "create_task", "list_tasks", "update_task", "complete_task", "delete_task"], "tasks"),
-    **dict.fromkeys(["get_briefing", "get_week_overview", "create_daily_plan", "get_daily_plan", "update_plan_item", "log_work_session", "list_work_sessions"], "plan"),
+    **dict.fromkeys(["get_briefing", "get_week_overview", "plan_week", "create_daily_plan", "get_daily_plan", "update_plan_item", "log_work_session", "list_work_sessions"], "plan"),
     **dict.fromkeys(["accountability_report", "task_history"], "accountability"),
     **dict.fromkeys(["propose_commitment", "confirm_commitment", "list_commitments", "update_commitment", "complete_commitment"], "commitments"),
     **dict.fromkeys(["create_goal", "list_goals", "update_goal", "add_milestones", "milestone_to_tasks", "create_project", "list_projects", "update_project"], "goals"),
     **dict.fromkeys(["save_memory", "search_memories", "review_memories", "update_memory", "delete_memory"], "memory"),
-    **dict.fromkeys(["create_reminder", "list_reminders", "cancel_reminder"], "reminders"),
+    **dict.fromkeys(["create_reminder", "list_reminders", "cancel_reminder", "add_important_date", "list_important_dates", "delete_important_date"], "reminders"),
     "read_calendar": "calendar",
     **dict.fromkeys(["web_fetch", "web_search"], "web"),
     **dict.fromkeys(["github_list_repos", "github_get_readme", "github_list_issues", "github_recent_commits"], "github"),
@@ -86,7 +86,7 @@ KEYWORDS: dict[str, re.Pattern[str]] = {
                   r"\bhow i (like|study|work|learn)\b", r"\bi (study|work|focus|learn|sleep|concentrate)( best| better| well)?\b", r"\bkeep in mind\b", r"\bfrom now on\b", r"\bdo you know\b",
                   r"\bfyi\b", r"\bmy (supervisor|advisor|mentor|teacher|manager|boss|roommate|sister|brother|mother|father) is\b", r"\b(tips|advice) (for|on)\b",
                   r"\byaad rakh\w*"),  # Roman Urdu: remember
-    "reminders": _rx(r"\bremind\w*", r"\balarm\b", r"\bnotify me\b", r"\bping me\b", r"\bnudge me\b", r"\bwake me\b", r"\balert me\b", r"\bdon'?t let me forget\b",
+    "reminders": _rx(r"\bbirthday\w*", r"\banniversar\w*", r"\bimportant dates?\b", r"\bexam\b", r"\bremind\w*", r"\balarm\b", r"\bnotify me\b", r"\bping me\b", r"\bnudge me\b", r"\bwake me\b", r"\balert me\b", r"\bdon'?t let me forget\b",
                      r"\byaad dila\w*"),  # Roman Urdu: remind me
     "calendar": _rx(r"\bcalendar\b", r"\bmeetings?\b", r"\bappointments?\b", r"\bfree time\b", r"\bbusy\b", r"\bavailabilit\w*", r"\bam i free\b", r"\bany(thing| plans)? on (mon|tues|wednes|thurs|fri|satur|sun)day\b", r"\bnext (week|few days)\b", r"\bwhat'?s on (my )?(day|week|schedule)\b"),
     "web": _rx(r"\bsearch\b", r"\bgoogle\b", r"\blook(ing)? up\b", r"\bonline\b", r"\bweb\b", r"\binternet\b", r"\blatest\b", r"\bnews\b", r"\bpapers?\b",

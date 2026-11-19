@@ -67,6 +67,9 @@ def build_facts(db: Session, kind: str, today: date, tz: ZoneInfo) -> dict:
                              if c.deadline and today < c.deadline <= next_week][:5],
         }
         facts["waiting_on"] = [{"title": t.title, "waiting_on": t.waiting_on} for t in open_tasks if t.waiting_on][:5]
+        from app.tools.dates import upcoming
+
+        facts["next_week"]["important_dates"] = [{"title": d["title"], "date": d["date"]} for d in upcoming(db, today, 7) if d["days_left"] > 0][:5]
     return facts
 
 

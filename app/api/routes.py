@@ -35,8 +35,9 @@ from app.db.models import (
 from app.errors import ConflictError, NotFoundError
 from app.services import accountability as accountability_svc
 from app.services import analytics as analytics_svc
-from app.services.briefing import briefing_text, build_briefing, calendar_events
+from app.services.briefing import briefing_text, build_briefing, calendar_events, calendar_warnings
 from app.services.ics_export import plan_to_ics
+from app.services.notifications import parse_hhmm
 from app.tools.base import ToolContext
 from app.tools.memory import needs_review as memory_needs_review
 from app.tools.planning import get_plan, plan_dict
@@ -346,6 +347,8 @@ def briefing(db: Session = Depends(get_db), c: Container = Depends(get_container
     tz = ZoneInfo(c.settings.agent_timezone)
     today = datetime.now(tz).date()
     facts = build_briefing(db, today)
+    workday = (parse_hhmm(c.settings.workday_start), parse_hhmm(c.settings.workday_end))
+    facts["calendar_warnings"] = calendar_warnings(db, c.calendar_source, today, tz, workday)
     events = calendar_events(c.calendar_source, today, tz)
     return {**facts, "calendar": events, "text": briefing_text(facts, events)}
 

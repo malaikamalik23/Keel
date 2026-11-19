@@ -69,7 +69,34 @@ def build_briefing(db: Session, today: date) -> dict:
         "waiting_count": sum(1 for t in open_tasks if t.waiting_on),
         "blocked_count": sum(1 for t in open_tasks if not t.waiting_on and open_blocker(db, t) is not None),
         "slipping": [{"title": t.title, "postponed": t.postponement_count} for t in open_tasks if t.postponement_count >= 2][:3],
+        "important_dates": _upcoming_dates(db, today),
     }
+
+
+def _upcoming_dates(db: Session, today: date) -> list[dict]:
+    from app.tools.dates import upcoming
+
+    return [{"title": d["title"], "date": d["date"], "days_left": d["days_left"]} for d in upcoming(db, today, 7)][:5]
+
+
+def calendar_warnings(db: Session, source: Callable[[], str] | None, today: date, tz: ZoneInfo, workday) -> list[str]:
+    """Double-booked or packed days, today and tomorrow, from event *times* only (safe to show the model)."""
+    from app.services.scheduling import busy_intervals, free_slots, overlapping_events
+
+    if source is None:
+        return []
+    out = []
+    for day, name in ((today, "Today"), (today + timedelta(days=1), "Tomorrow")):
+        clashes = overlapping_events(source, day, tz)
+        if clashes:
+            out.append(f"{name}: {clashes} pair(s) of calendar events overlap. You can't be in both.")
+        busy = busy_intervals(source, day, tz) or []
+        free = sum(s.minutes for s in free_slots(day, tz, workday, busy))
+        due = [t for t in db.scalars(select(Task).where(Task.status.in_(OPEN), Task.due_date == day)) if actionable(db, t)]
+        need = sum(t.estimated_minutes or 30 for t in due)
+        if due and need > free:
+            out.append(f"{name}: about {need} min of work is due but meetings leave only {free} min free.")
+    return out
 
 
 def _clean_title(title: str) -> str:
@@ -130,6 +157,10 @@ def briefing_text(b: dict, events: list[dict] | None = None) -> str:
         lines.append("Coming up: " + ", ".join(f"{t['title']} ({t['due']})" for t in b["coming_up"][:3]) + ".")
     if b["follow_ups_due"]:
         lines.append("Time to follow up: " + ", ".join(f"{f['waiting_on']} about {f['title']}" for f in b["follow_ups_due"][:3]) + ".")
+    if b.get("important_dates"):
+        lines.append("Dates: " + ", ".join(f"{d['title']} ({'today' if d['days_left'] == 0 else d['date']})" for d in b["important_dates"][:3]) + ".")
+    for warning in b.get("calendar_warnings", [])[:2]:
+        lines.append(warning)
     text = " ".join(lines)
     cal = calendar_lines(events)
     return f"{text}\n\n{cal}" if cal else text

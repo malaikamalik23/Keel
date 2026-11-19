@@ -22,8 +22,8 @@ from app.integrations.notifier import Notifier, TelegramNotifier
 from app.integrations.telegram_bot import TelegramInbox
 from app.scheduler.checkins import build_facts, checkins_due, fallback_text
 from app.scheduler.detectors import detect_nudges
-from app.services.briefing import calendar_events, calendar_lines
-from app.services.notifications import NotificationService
+from app.services.briefing import calendar_events, calendar_lines, calendar_warnings
+from app.services.notifications import NotificationService, parse_hhmm
 from app.services.timeutil import local_to_naive_utc
 
 logger = logging.getLogger(__name__)
@@ -88,6 +88,9 @@ class Scheduler:
         today = now_local.date()
         for kind in checkins_due(db, now_local, self.settings):
             facts = build_facts(db, kind, today, self.tz)
+            if kind == "morning":
+                workday = (parse_hhmm(self.settings.workday_start), parse_hhmm(self.settings.workday_end))
+                facts["briefing"]["calendar_warnings"] = calendar_warnings(db, self.calendar_source, today, self.tz, workday)
             # Calendar titles come from other people: the model never sees them; code adds them, links removed.
             calendar = calendar_lines(calendar_events(self.calendar_source, today, self.tz)) if kind == "morning" else ""
 

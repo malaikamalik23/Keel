@@ -10,6 +10,7 @@ python -m evals.run_routing --sleep 20         # all 176 cases (176 API calls; t
 python -m evals.run_routing --tag regression   # only cases that have failed in a real run before
 python -m evals.run_routing --rerun-errors results/<run>.json   # finish a run that hit a daily rate limit
 python -m evals.run_routing --category web     # one category
+python -m evals.run_routing --ids plan-week,mem-review   # just these cases
 python -m evals.run_routing --profile full     # every tool advertised (default: your TOOL_PROFILE, lean)
 python -m evals.run_routing --min-score 0.85   # non-zero exit if below (use in a scheduled job)
 ```

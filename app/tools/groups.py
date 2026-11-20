@@ -69,7 +69,8 @@ def _rx(*alts: str) -> re.Pattern[str]:
 
 # Deliberately generous: a false positive costs ~1k tokens, a false negative costs one extra load_tools call.
 KEYWORDS: dict[str, re.Pattern[str]] = {
-    "plan": _rx(r"\bplan(s|ning|ned)?\b", r"\bbrief(ing)?\b", r"\bmy day\b", r"\b(important|on) today\b", r"\bschedul\w*", r"\bagenda\b", r"\btimetable\b", r"\bworked\b", r"\bworking on\b", r"\bspent\b",
+    "plan": _rx(r"\bplan(s|ning|ned)?\b", r"\bbrief(ing)?\b", r"\bmy day\b", r"\b(important|on) today\b",
+                r"\b(this|my|next|the) week\b", r"\bfree time\b", r"\bfree (day|slot)s?\b", r"\bbusy\b", r"\bschedul\w*", r"\bagenda\b", r"\btimetable\b", r"\bworked\b", r"\bworking on\b", r"\bspent\b",
                 r"\blog(ged)?\b", r"\bsessions?\b", r"\b\d+ ?(mins?|minutes|hrs?|hours?) (on|of|for)\b", r"\bskip\b", r"\bfocus(ed)? (time|session)\b", r"\bwhat should i (do|work on)\b",
                 r"\bhow much (time )?(did|have) i (work|stud)\w*", r"\bghant[ae]\w*", r"\bparh(a|i|ai)\b", r"\bkaam kiya\b"),  # Roman Urdu: hours, studied, worked
     "accountability": _rx(r"\bavoid\w*", r"\bslip\w*", r"\bpostpon\w*", r"\bprocrastinat\w*", r"\bput(ting)? (it )?off\b", r"\breview\b",

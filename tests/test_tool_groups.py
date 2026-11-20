@@ -66,6 +66,9 @@ def test_select_groups_core_keywords_sticky_and_availability():
     assert select_groups("Remind me tomorrow at 9", set(), AVAILABLE) == {CORE, "reminders"}
     assert {"web", "github"} <= select_groups("search github for papers", set(), AVAILABLE)
     assert select_groups("yes", {"commitments"}, AVAILABLE) == {CORE, "commitments"}  # follow-ups keep their tools
+    # found by the eval: "how does my week look" didn't load the planning group, so get_week_overview was never offered
+    for msg in ("How does my week look?", "Which day this week do I have the most free time?", "Am I busy tomorrow?"):
+        assert "plan" in select_groups(msg, set(), AVAILABLE), msg
     assert select_groups("remind me", set(), {CORE, "memory"}) == {CORE}  # a group that isn't configured is never selected
 
 

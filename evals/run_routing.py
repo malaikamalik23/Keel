@@ -30,6 +30,7 @@ def main(argv: list[str] | None = None, llm=None) -> int:
     ap.add_argument("--limit", type=int, default=None, help="only run the first N cases")
     ap.add_argument("--category", default=None, help="only run one category")
     ap.add_argument("--tag", default=None, help="only run cases with this tag (e.g. regression, deadline-nl)")
+    ap.add_argument("--ids", default=None, help="only run these case ids (comma-separated)")
     ap.add_argument("--min-score", type=float, default=None, help="exit non-zero below this score (0-1)")
     ap.add_argument("--out", type=Path, default=HERE / "results")
     ap.add_argument("--profile", choices=["lean", "full"], default=None, help="tool profile to evaluate (default: TOOL_PROFILE from .env)")
@@ -47,6 +48,13 @@ def main(argv: list[str] | None = None, llm=None) -> int:
         cases = [c for c in cases if c["category"] == args.category]
     if args.tag:
         cases = [c for c in cases if args.tag in c.get("tags", [])]
+    if args.ids:
+        wanted = {i.strip() for i in args.ids.split(",") if i.strip()}
+        unknown = wanted - {c["id"] for c in cases}
+        if unknown:
+            print(f"Unknown case id(s): {', '.join(sorted(unknown))}")
+            return 2
+        cases = [c for c in cases if c["id"] in wanted]
     if args.limit:
         cases = cases[: args.limit]
     if not cases:

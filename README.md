@@ -19,9 +19,9 @@ machine, with your data in one SQLite file.
 | **Commitments** | Notices "I'll finish the GRE set by Friday", asks you to confirm, tracks it, counts postponements. Give a promise a check-in date and Keel asks how it's going before it is late. |
 | **Routines and waiting** | Tasks can repeat (daily, weekdays, weekly, monthly; finishing one creates the next), wait for another task to be done first, or wait on someone else with a follow-up date. Waiting and blocked tasks stay off the plan, and you get a nudge on the day to chase the reply. |
 | **Important dates** | Exams, birthdays (yearly), application windows: reminded a few days ahead and on the day, and listed in the briefing. |
-| **Realistic daily plans** | A deterministic planner: never exceeds your available time (15% buffer), at most 3 major priorities, and tells you what it left out and why. Each item gets a time block that fits around your calendar's meetings and your working hours, re-planned from the current time if your day changes; the plan can be downloaded as a calendar file to import. "How does my week look?" shows free time per day against what is due, and flags packed or double-booked days. "Plan my week" time-blocks several days at once, each task once, and says what doesn't fit. The morning briefing warns about double-booked or packed days today and tomorrow. |
+| **Realistic daily plans** | A deterministic planner: never exceeds your available time (15% buffer), at most 3 major priorities, and tells you what it left out and why. Each item gets a time block that fits around your calendar's meetings and your working hours, re-planned from the current time if your day changes; the plan can be downloaded as a calendar file to import. "How does my week look?" shows free time per day against what is due, and flags packed or double-booked days. "Plan my week" time-blocks several days at once, each task once, and says what doesn't fit. The morning briefing warns about double-booked or packed days today and tomorrow. A task can be tied to a meeting ("prepare slides for Thursday's committee"): it is planned to finish before the meeting, and follows it if the meeting moves. When a new meeting lands on today's plan, the blocks that haven't started move and you get a note. Google Calendar and Outlook calendar links both work. |
 | **Accountability from facts** | "What have I been avoiding?" is answered from the event history: postponements with your reasons, old tasks never touched, neglected goals, time per project. No invented patterns. |
-| **Memory you control** | A profile (university, supervisor, career goal...), preferences, background and the decisions you made, sorted into personal, academic, professional and project. One answer per profile topic: a contradicting fact makes it ask you which is right. Old memories come up for review. Every memory shows where it came from, and is visible, editable and deletable. |
+| **Memory you control** | A profile (university, supervisor, career goal...), preferences, background and the decisions you made, sorted into personal, academic, professional and project. One answer per profile topic: a contradicting fact makes it ask you which is right. Old memories come up for review. Every memory shows where it came from, and is visible, editable and deletable. When a search shares no words with any memory ("where do I study?"), the model is shown your memories and judges by meaning; saving a memory shows it the others in that category so it can catch a contradiction. |
 | **Proactive, within a budget** | A morning briefing by email: the best next task, what is due or overdue, promises due soon, who to follow up with, and today's calendar. A heads-up the day before a promise or important task is due, an evening check-in and a weekly review that looks ahead. All limited by a daily budget, quiet hours and de-duplication. Ask "brief me" any time, or see it on the Today tab. |
 | **Research** | Web search and page reading, search over your own notes and papers (including Urdu), read-only GitHub and calendar access. |
 | **Insights** | Weekly trends, streaks, promises kept, how long things really take versus your estimates. |
@@ -65,7 +65,7 @@ pip install -r requirements-dev.txt
 cp .env.example .env                                      # Windows: copy .env.example .env
 #   then edit .env: set ANTHROPIC_API_KEY (or GROQ_API_KEY) and AGENT_TIMEZONE
 
-pytest -q                                                 # ~535 tests, no key or network needed
+pytest -q                                                 # ~550 tests, no key or network needed
 
 (cd frontend && npm ci && npm run build)                  # build the dashboard once
 uvicorn app.api.main:create_app --factory                 # dashboard + API at http://127.0.0.1:8000
@@ -154,15 +154,23 @@ python -m evals.run_routing        # how often does the model pick the right too
 - **Real-model routing on Groq `openai/gpt-oss-120b`** (lean profile, Nov 2026):
   - On the original 57 cases: 52/57 (91%). Two of the misses were then fixed: reminders (the tool schema demanded a stricter time
     format than Groq would accept) and "plan my day" (the model listed tasks first).
-  - On the expanded 160-case set (now 176; the 16 newest cases, for memory, tasks, the briefing, important dates and week planning, have not run yet): **157 of 160 pass in their most recent run (98%), with 0 unsafe calls** (one right tool with
-    a wrong date). This combines several partial runs, because the free tier's daily token limit cuts every run short, and
-    takes the *latest* answer per case.
+  - On all 176 cases: **172 pass in their most recent run (98%), with 0 unsafe calls.** This combines several partial runs,
+    because the free tier's daily token limit cuts every run short, and takes the *latest* answer per case. The 4 failing
+    now: "move my poster deadline" and "check my calendar then plan" answered in text instead of calling a tool,
+    "what's my plan" once did the same, and "review her code tomorrow" (see the next point).
+  - **One known eval artifact:** cases are judged as if it is Monday 9 November 2026, but Groq also tells this model the
+    real date, so "tomorrow" sometimes resolves to the real tomorrow. In real use the two dates are the same.
+  - **The newest 16 cases** (memory review and decisions, routines, waiting on someone, the briefing, the week view, important
+    dates, week planning, promise check-ins): 14 passed first time. One miss was a real bug the eval found: "How does my week
+    look?" never offered the week-overview tool, because "week" wasn't a planning keyword; fixed, re-run, passes. The other
+    turned out to be a fair alternative (a reminder for "remind me to chase him on Friday") and is now accepted.
   - **Run to run, the same model moves by a few cases.** A repeat pass answered 86 cases: 83 passed, and 3 that had passed
     before failed this time (a commitment routed to tasks, a plan that listed tasks first, a deadline on the wrong day).
     So read 94-98% as the range, not a single exact number. One uninterrupted run of all cases is still to do.
-    Part of that movement was self-inflicted: Keel never set the model's temperature, so the provider's default (about 1)
-    added randomness to every tool choice. It now sends `LLM_TEMPERATURE=0.2`; whether that narrows the range is not measured
-    yet (the daily limit stopped the first re-run after 4 cases).
+    Keel used to leave the model's temperature at the provider's default (about 1); it now sends `LLM_TEMPERATURE=0.2`.
+    Measured on two back-to-back passes over the 20 regression cases: 19 of 20 gave the same result both times. That is
+    about the same as before, so there is **no evidence yet that the lower temperature helped**; it stays, because it
+    can't hurt routing, but the claim isn't made.
   - **Second model, `qwen/qwen3.8-27b`:** 39 of the 43 cases it answered pass (91%), 0 unsafe; the daily limit stopped the
     rest. Too few to rank the two models yet. The [dashboard](evals/dashboard.html) keeps each model separate and compares them.
   - The weak spot was commitments phrased like tasks ("move my poster deadline", "I finished the poster I promised" went to

@@ -14,7 +14,7 @@ def build_default_registry(
     """Tools that need configuration (calendar, web, notes, GitHub) are only advertised to the model when configured."""
     registry = ToolRegistry()
     system.register(registry)
-    tasks.register(registry)
+    tasks.register(registry, calendar_source)
     goals.register(registry)
     projects.register(registry)
     commitments.register(registry)

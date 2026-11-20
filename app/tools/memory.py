@@ -24,6 +24,8 @@ from app.tools.base import Permission, Tool, ToolContext, ToolError, ToolRegistr
 Kind = Literal["preference", "context", "fact", "decision"]
 Category = Literal["personal", "academic", "professional", "project", "general"]
 REVIEW_AFTER = timedelta(days=180)  # a memory not confirmed for this long is offered for review
+MEANING_POOL = 40  # memories handed to the model when a search finds no shared words
+CONTRADICTION_POOL = 8  # other memories in the same category shown when saving, to spot contradictions
 _IMPORTANCE = {"high": 0, "medium": 1, "low": 2}
 _WORD = re.compile(r"[a-z0-9]{3,}")
 # Words too common to say two texts are about the same thing. 3+ letters so "FYP", "GRE" and "CV" still count.
@@ -153,6 +155,14 @@ def save_memory(ctx: ToolContext, p: SaveMemoryInput) -> dict:
         out["similar"] = [memory_dict(s) for s in similar]
         out["note"] = ("Saved. These existing memories look similar: if one of them is now out of date, tell the user and "
                        "offer to update or delete it.")
+    # Contradictions worded differently ("lives in Lahore" vs "moved to Islamabad") share few words, so the model
+    # gets the other memories in this category to compare by meaning.
+    seen = {s.id for s in similar} | {m.id}
+    others = [o for o in rank(list(ctx.db.scalars(select(Memory).where(Memory.category == p.category))), set()) if o.id not in seen][:CONTRADICTION_POOL]
+    if others:
+        out["same_category"] = [{"id": o.id, "topic": o.topic, "content": o.content[:160]} for o in others]
+        out.setdefault("note", "Saved.")
+        out["note"] += " If the new memory contradicts one in same_category, ask the user which is right."
     return out
 
 
@@ -179,16 +189,25 @@ def search_memories(ctx: ToolContext, p: SearchMemoriesInput) -> dict:
         stmt = stmt.where(Memory.kind == p.kind)
     if p.category != "all":
         stmt = stmt.where(Memory.category == p.category)
-    rows = list(ctx.db.scalars(stmt))
+    every = list(ctx.db.scalars(stmt))
     q = words(p.query or "")
-    if q:  # any query word in the content or topic, so "supervisor email" finds "Dr. Khan is my supervisor"
-        rows = [m for m in rows if q & (words(m.content) | words(m.topic or ""))]
+    # any query word in the content or topic, so "supervisor email" finds "Dr. Khan is my supervisor"
+    rows = [m for m in every if q & (words(m.content) | words(m.topic or ""))] if q else every
     rows = rank(rows, q)[: p.limit]
     now = utcnow()
     for m in rows:
         m.last_used_at = now
     ctx.db.flush()
-    return {"total": len(rows), "memories": [memory_dict(m) for m in rows]}
+    out: dict = {"total": len(rows), "memories": [memory_dict(m) for m in rows]}
+    if q and not rows and every:
+        # No shared words ("where do I study" vs "COMSATS Islamabad, BS CS"): hand the model the memories themselves,
+        # compactly, and let it judge by meaning. No extra LLM call, and only on a search that missed.
+        pool = rank(every, set())[:MEANING_POOL]
+        out["no_word_match"] = True
+        out["candidates"] = [{"id": m.id, "category": m.category, "topic": m.topic, "content": m.content[:160]} for m in pool]
+        out["note"] = ("No memory shares words with the query. Read these and use the ones that answer it by meaning; "
+                       f"if none does, say you don't know.{'' if len(every) <= MEANING_POOL else ' (Only the most important and recent ' + str(MEANING_POOL) + ' are shown.)'}")
+    return out
 
 
 # ---------- review_memories ----------

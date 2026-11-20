@@ -92,7 +92,7 @@ export default function Today() {
         <ul className="list">
           {tasks.data?.map((t) => (
             <li key={t.id}>
-              <span>{t.title} {t.due_date && <Badge tone={isOverdue(t.due_date) ? "bad" : ""}>{fmtDate(t.due_date)}</Badge>} {t.priority === "high" && <Badge tone="warn">high</Badge>} {t.postponement_count > 0 && <Badge tone="warn">postponed {t.postponement_count}×</Badge>} {t.recurrence && <Badge>repeats {t.recurrence}</Badge>} {t.waiting_on && <Badge>waiting on {t.waiting_on}{t.follow_up_date ? `, follow up ${fmtDate(t.follow_up_date)}` : ""}</Badge>} {t.blocked_by_id && openIds.has(t.blocked_by_id) && <Badge>after #{t.blocked_by_id}</Badge>}</span>
+              <span>{t.title} {t.due_date && <Badge tone={isOverdue(t.due_date) ? "bad" : ""}>{fmtDate(t.due_date)}</Badge>} {t.priority === "high" && <Badge tone="warn">high</Badge>} {t.postponement_count > 0 && <Badge tone="warn">postponed {t.postponement_count}×</Badge>} {t.recurrence && <Badge>repeats {t.recurrence}</Badge>} {t.waiting_on && <Badge>waiting on {t.waiting_on}{t.follow_up_date ? `, follow up ${fmtDate(t.follow_up_date)}` : ""}</Badge>} {t.blocked_by_id && openIds.has(t.blocked_by_id) && <Badge>after #{t.blocked_by_id}</Badge>} {t.event_start && <Badge>before meeting {new Date(t.event_start + "Z").toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })}</Badge>}</span>
               <button onClick={() => run(() => api.post(`/api/tasks/${t.id}/complete`))}>Done</button>
             </li>
           ))}

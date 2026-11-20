@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from datetime import date
-from typing import Literal
+from collections.abc import Callable
+from datetime import date, datetime
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, WithJsonSchema
 from sqlalchemy import select
 
 from app.db.models import PlanItem, Project, Task, utcnow
@@ -38,6 +39,8 @@ def _task_dict(t: Task, today: date | None = None, db=None) -> dict:
     if t.waiting_on:
         d["waiting_on"] = t.waiting_on
         d["follow_up_date"] = t.follow_up_date.isoformat() if t.follow_up_date else None
+    if t.event_start:
+        d["before_event_at_utc"] = t.event_start.isoformat(timespec="minutes")
     if db is not None and t.status in OPEN_STATUSES:
         blocker = open_blocker(db, t)
         if blocker is not None:
@@ -57,6 +60,22 @@ def _check_blocker(ctx: ToolContext, task_id: int | None, blocker_id: int) -> Ta
     if task_id is not None and (blocker_id == task_id or would_cycle(ctx.db, task_id, blocker_id)):
         raise ToolError(f"Task #{blocker_id} already depends on this task, directly or through others: that would be a loop.")
     return blocker
+
+
+def _link_event(ctx: ToolContext, source, uid: str, start: datetime) -> tuple[str, datetime]:
+    """Confirm the calendar really has event `uid` at `start` (local); return (uid, start as naive UTC)."""
+    from app.services.event_links import find_occurrence, to_utc_naive
+
+    if source is None:
+        raise ToolError("No calendar is connected, so a task can't be linked to an event.")
+    local = start if start.tzinfo else start.replace(tzinfo=ctx.tz)
+    try:
+        found = find_occurrence(source, ctx.tz, uid, local)
+    except Exception:  # noqa: BLE001 - calendar errors become a plain message
+        raise ToolError("The calendar could not be read just now.") from None
+    if found is None or abs((found - local).total_seconds()) > 60:
+        raise ToolError("That event isn't on the calendar at that time. Use the uid and start from read_calendar.")
+    return uid, to_utc_naive(found)
 
 
 def _check_project(ctx: ToolContext, project_id: int) -> None:
@@ -83,19 +102,33 @@ class CreateTaskInput(BaseModel):
     waiting_on: str | None = Field(None, max_length=120, description="Who/what the user waits for.")
     follow_up_date: date | None = Field(None, description="When to chase them.")
     project_id: int | None = None
+    before_event_uid: str | None = Field(None, max_length=255, description="read_calendar uid of an event this must be ready for.")
+    # Advertised as a plain string: Groq rejects "date-time" values without seconds (see test_reminder_time_schema...).
+    before_event_start: Annotated[datetime | None, WithJsonSchema({"type": "string"})] = Field(
+        None, description="That event's start, from read_calendar, e.g. 2026-11-20T14:00.")
 
 
-def create_task(ctx: ToolContext, p: CreateTaskInput) -> dict:
+def create_task(ctx: ToolContext, p: CreateTaskInput, calendar_source: Callable[[], str] | None = None) -> dict:
     if p.blocked_by_task_id is not None:
         _check_blocker(ctx, None, p.blocked_by_task_id)
     if p.project_id is not None:
         _check_project(ctx, p.project_id)
     if p.follow_up_date and not p.waiting_on:
         raise ToolError("follow_up_date needs waiting_on: say who or what the user is waiting for.")
+    event_uid = event_start = None
+    due = p.due_date
+    if p.before_event_uid or p.before_event_start:
+        if not (p.before_event_uid and p.before_event_start):
+            raise ToolError("To link an event, give both before_event_uid and before_event_start.")
+        event_uid, event_start = _link_event(ctx, calendar_source, p.before_event_uid, p.before_event_start)
+        from app.services.event_links import from_utc_naive
+
+        event_day = from_utc_naive(event_start, ctx.tz).date()
+        due = min(due, event_day) if due else event_day  # ready by the event at the latest
     task = Task(
         title=p.title.strip(),
         description=p.description,
-        due_date=p.due_date or (ctx.today() if p.repeats else None),  # a routine needs a first date
+        due_date=due or (ctx.today() if p.repeats else None),  # a routine needs a first date
         priority=p.priority,
         estimated_minutes=p.estimated_minutes,
         recurrence=p.repeats,
@@ -103,6 +136,8 @@ def create_task(ctx: ToolContext, p: CreateTaskInput) -> dict:
         waiting_on=_clean_waiting(p.waiting_on),
         follow_up_date=p.follow_up_date,
         project_id=p.project_id,
+        event_uid=event_uid,
+        event_start=event_start,
     )
     ctx.db.add(task)
     ctx.db.flush()
@@ -288,18 +323,18 @@ def _summarize_delete(ctx: ToolContext, p: DeleteTaskInput) -> str:
     return f"Permanently delete task #{task.id}: \"{task.title}\""
 
 
-def register(registry: ToolRegistry) -> None:
+def register(registry: ToolRegistry, calendar_source: Callable[[], str] | None = None) -> None:
     registry.register(
         Tool(
             name="create_task",
             description=(
                 "Create a task. Use when the user wants to add something to their to-do list or commits to doing "
                 "something concrete. Prefer one clear next action per task. Routines: repeats. Waiting on someone: "
-                "waiting_on (+ follow_up_date)."
+                "waiting_on (+ follow_up_date). Must be ready for a meeting: before_event_uid/start."
             ),
             permission=Permission.WRITE,
             input_model=CreateTaskInput,
-            handler=create_task,
+            handler=lambda ctx, p: create_task(ctx, p, calendar_source),
         )
     )
     registry.register(

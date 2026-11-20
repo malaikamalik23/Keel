@@ -27,6 +27,7 @@ from app.services.notifications import NotificationService, parse_hhmm
 from app.services.timeutil import local_to_naive_utc
 
 logger = logging.getLogger(__name__)
+CALENDAR_EVERY = timedelta(minutes=30)
 REMINDER_MAX_LATE = timedelta(hours=24)
 RESPONSE_WINDOW = timedelta(hours=6)
 
@@ -48,19 +49,59 @@ class Scheduler:
         self._aps = None
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self._calendar_checked_at: datetime | None = None  # the calendar is re-read at most every CALENDAR_EVERY
 
     # ------------------------------------------------------------------ one pass
     def tick(self, now: datetime | None = None) -> dict:
         now_local = now.astimezone(self.tz) if now and now.tzinfo else (now.replace(tzinfo=self.tz) if now else datetime.now(self.tz))
         report: dict = {"reminders_sent": 0, "checkins_sent": [], "nudges_sent": 0, "blocked": {}}
         with self.session_factory() as db:
-            for step in (self._reminders, self._checkins, self._nudges):
+            for step in (self._reminders, self._calendar, self._checkins, self._nudges):
                 try:
                     step(db, now_local, report)
                 except Exception:  # noqa: BLE001 - one failing step must not stop the others
                     db.rollback()
                     logger.exception("Scheduler step %s failed", step.__name__)
         return report
+
+    def _calendar(self, db: Session, now_local: datetime, report: dict) -> None:
+        """Follow the calendar: linked events that moved or vanished, and today's blocks that a new meeting now hits.
+        Event times only; the messages are written by code from the user's own task titles."""
+        if self.calendar_source is None:
+            return
+        if self._calendar_checked_at and now_local - self._calendar_checked_at < CALENDAR_EVERY:
+            return
+        self._calendar_checked_at = now_local
+        from app.services.event_links import sync_links
+        from app.services.replan import refit_today
+        from app.services.scheduling import busy_intervals
+        from app.tools.planning import get_plan
+
+        for ch in sync_links(db, self.calendar_source, self.tz):
+            if ch["change"] == "moved":
+                when = datetime.fromisoformat(ch["now"])
+                text = f"The meeting your task “{ch['title']}” is for moved to {when:%a %b %d, %H:%M}. The task's due date moved with it."
+            else:
+                text = f"The meeting your task “{ch['title']}” was for is no longer on your calendar. Is the task still needed?"
+            self.notifications.send(db, kind="nudge", priority="normal", dedupe_key=f"event-link:{ch['task_id']}:{ch['change']}:{ch.get('now', ch['was'])}",
+                                    now_local=now_local, text=text)
+        db.commit()
+
+        today = now_local.date()
+        busy = busy_intervals(self.calendar_source, today, self.tz)
+        if busy is None:
+            return
+        workday = (parse_hhmm(self.settings.workday_start), parse_hhmm(self.settings.workday_end))
+        moved = refit_today(db, get_plan(db, today), busy, now_local, self.tz, workday)
+        if moved:
+            lines = [f"{m['title']}: {m['now']}" if m["now"] else f"{m['title']}: no free time left today" for m in moved]
+            report["replanned"] = len(moved)
+            self.notifications.send(
+                db, kind="nudge", priority="normal", now_local=now_local,
+                dedupe_key=f"replan:{today}:" + ",".join(f"{m['title']}={m['now']}" for m in moved),
+                text="A meeting now overlaps your plan, so the rest of today moved: " + "; ".join(lines) + ".",
+            )
+        db.commit()
 
     def _block(self, report: dict, reason: str | None) -> None:
         if reason:

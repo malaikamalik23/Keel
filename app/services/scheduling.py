@@ -94,17 +94,18 @@ def free_slots(day: date, tz: ZoneInfo, workday: tuple[time, time], busy: list[I
     return [s for s in slots if s.minutes > 0]
 
 
-def place(blocks: list[tuple[object, int]], slots: list[Interval]) -> tuple[dict[object, Interval], list[object]]:
-    """Put each (key, minutes) block, in order, into the earliest free slot it fits, whole. A short break follows each
-    block. Returns the placements and the keys that didn't fit anywhere (they are deferred, never squeezed)."""
+def place(blocks: list[tuple], slots: list[Interval]) -> tuple[dict[object, Interval], list[object]]:
+    """Put each (key, minutes[, must_end_by]) block, in order, into the earliest free slot it fits, whole. A short break
+    follows each block. Returns the placements and the keys that didn't fit anywhere (deferred, never squeezed)."""
     remaining = list(slots)
     placed: dict[object, Interval] = {}
     unplaced: list[object] = []
     gap = timedelta(minutes=GAP_MINUTES)
-    for key, minutes in blocks:
+    for key, minutes, *deadline in blocks:
         need = timedelta(minutes=minutes)
+        end_by = deadline[0] if deadline and deadline[0] is not None else None
         for i, s in enumerate(remaining):
-            if s.end - s.start >= need:
+            if s.end - s.start >= need and (end_by is None or s.start + need <= end_by - gap):
                 placed[key] = Interval(s.start, s.start + need)
                 remaining[i] = Interval(min(s.start + need + gap, s.end), s.end)
                 break

@@ -87,6 +87,9 @@ class Task(Base):
     # Waiting for someone else (a reply, a signature, feedback); follow_up_date is when to chase them.
     waiting_on: Mapped[str | None] = mapped_column(String(120), nullable=True)
     follow_up_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    # Must be ready before this calendar event (UID + start, naive UTC). Kept in step with the calendar by the scheduler.
+    event_uid: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    event_start: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class Goal(Base):

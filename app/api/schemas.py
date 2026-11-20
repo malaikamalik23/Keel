@@ -42,6 +42,7 @@ class TaskOut(BaseModel):
     blocked_by_id: int | None = None
     waiting_on: str | None = None
     follow_up_date: date | None = None
+    event_start: datetime | None = None  # naive UTC: the meeting this task must be ready for
 
 
 class MilestoneOut(BaseModel):

@@ -134,7 +134,10 @@ Write policy: commitments are proposed, then confirmed; memories are saved only 
 change is audited. A profile topic holds one answer: saving a different value for an existing topic saves nothing and tells the
 agent to ask the user which is right, so contradicting facts are never kept side by side. Each memory records its source (saved in
 chat, approved by the user, added by the user) and when it was last confirmed; memories unconfirmed for six months are offered for
-review in the dashboard and through `review_memories`. Embeddings were deliberately skipped: keyword + FTS5 covers this scale and avoids a second datastore.
+review in the dashboard and through `review_memories`. Retrieval is by words first; when a search shares no word with
+any memory, the most important memories come back as candidates and the model judges them by meaning (no embeddings, no
+extra call). Saving a memory also shows the model the others in its category, so a contradiction worded differently is
+noticed and put to the user. Embeddings were deliberately skipped: keyword + FTS5 covers this scale and avoids a second datastore.
 
 ## 6. Planning and accountability (`app/services/planner.py`, `accountability.py`)
 

@@ -116,7 +116,16 @@ def _create_daily_plan(ctx: ToolContext, p: CreateDailyPlanInput, calendar_sourc
 
     result = build_plan(ordered, capacity, already_used_minutes=used, already_major=majors)
     # Time-block what was chosen, in order, into the free slots (whole blocks, a short break after each).
-    placed, unplaced = place([(c.task.id, c.minutes) for c in result.selected], slots)
+    def _end_by(t: Task):
+        """A task that must be ready for a meeting that day has to finish before the meeting starts."""
+        if not t.event_start:
+            return None
+        from app.services.event_links import from_utc_naive
+
+        start = from_utc_naive(t.event_start, ctx.tz)
+        return start if start.date() == day else None
+
+    placed, unplaced = place([(c.task.id, c.minutes, _end_by(c.task)) for c in result.selected], slots)
     pos = len(kept)
     for c in result.selected:
         block = placed.get(c.task.id)

@@ -168,3 +168,28 @@ def test_a_poisoned_page_cannot_overwrite_a_profile_fact(make_container, tmp_pat
         assert db.get(Memory, mid).content == "Supervisor is Dr. Khan"
         summary = db.get(PendingAction, result.pending_action_ids[0]).summary
         assert "Dr. Khan" in summary and "Dr. Evil" in summary
+
+
+def test_a_search_with_no_shared_words_hands_the_model_the_memories_to_judge_by_meaning(make_container):
+    c = make_container()
+    with c.session_factory() as db:
+        db.add(Memory(content="COMSATS Islamabad, BS Computer Science", category="academic", topic="university", importance="high"))
+        db.add_all([Memory(content=f"Filler fact number {n}", category="general") for n in range(45)])
+        db.commit()
+        out = _run(c, db, "search_memories", {"query": "where do I study"})
+        assert out.result["total"] == 0 and out.result["no_word_match"] is True
+        assert out.result["candidates"][0]["content"].startswith("COMSATS")  # most important first
+        assert len(out.result["candidates"]) == 40 and "Only the most important" in out.result["note"]
+        hit = _run(c, db, "search_memories", {"query": "computer science"})
+        assert hit.result["total"] == 1 and "candidates" not in hit.result  # a normal hit stays small
+
+
+def test_saving_shows_the_other_memories_in_that_category_to_catch_contradictions(make_container):
+    c = make_container()
+    with c.session_factory() as db:
+        db.add_all([Memory(content="Lives in Lahore with family", category="personal"),
+                    Memory(content="Works at a bakery on weekends", category="professional")])
+        db.commit()
+        out = _run(c, db, "save_memory", {"content": "Moved to Islamabad for university", "category": "personal"})
+        assert [m["content"] for m in out.result["same_category"]] == ["Lives in Lahore with family"]  # not the other category
+        assert "contradicts" in out.result["note"]

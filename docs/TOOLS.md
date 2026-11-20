@@ -38,7 +38,7 @@ Keel has **50 tools**. In the default `TOOL_PROFILE=lean`, each request carries 
 
 | Tool | Group | What it's for |
 |---|---|---|
-| `create_task` | tasks | Create a task. Use when the user wants to add something to their to-do list or commits to doing something concrete. Prefer one clear next action per task. Routines: repeats. Waiting on someone: waiting_on (+ follow_up_date). |
+| `create_task` | tasks | Create a task. Use when the user wants to add something to their to-do list or commits to doing something concrete. Prefer one clear next action per task. Routines: repeats. Waiting on someone: waiting_on (+ follow_up_date). Must be ready for a meeting: before_event_uid/start. |
 | `update_task` | tasks | Change a task's fields (title, status, priority, due date, estimate, repeats, waiting_on...). Moving a due date later is recorded as a postponement. 'Move my <thing> deadline' or anything the user promised is a commitment: use update_commitment (list_commitments first if you need its id). |
 | `complete_task` | tasks | Mark a task as done. Only call when the user says they finished it. If they say they did something they promised or committed to ('I finished the poster I promised'), use complete_commitment instead. |
 | `create_goal` | goals | Create a goal (career, education, research, skills or personal). Use when the user states an ambition, not a one-off task, e.g. 'I want to become good at penetration testing.' |

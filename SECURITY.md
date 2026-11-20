@@ -76,7 +76,8 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
    without `parse_mode`, so a Markdown image/link in a reply is not an exfiltration channel. Calendar event titles are written by whoever sent
    the invite, so the morning briefing never hands them to the model: code appends them after the model's text, as plain
    lines with links removed, and the `get_briefing` tool leaves them out.
-   The planner and the week overview use only the *times* of calendar events, never their titles. The plan export
+   The planner, the week overview, task-to-meeting links and the automatic re-planning use only the *times* and
+   ids of calendar events, never their titles; the messages about a moved or cancelled meeting name the user's own task. The plan export
    (`/api/plan.ics`) escapes task titles so a title can't add lines or events to the file.
 10. **API hardening.** `X-API-Key` (constant-time compare) or, without one, local-only access with Host and
     cross-site checks (see Scope), a per-client rate limit on LLM-calling endpoints,

@@ -61,6 +61,8 @@ def parse_events(ics_text: str, start: date, end: date, tz: ZoneInfo) -> list[di
             "start": s.isoformat(timespec="minutes"), "end": e.isoformat(timespec="minutes"),
             "all_day": all_day, "minutes": 0 if all_day else int((e - s).total_seconds() // 60),
             "location": str(ev.get("LOCATION", ""))[:80] or None,
+            # The calendar's own id for the event: how a task stays linked to it, even if it moves.
+            "uid": " ".join(str(ev.get("UID", "")).split())[:255] or None,
         })
     events.sort(key=lambda x: x["start"])
     return events[:MAX_EVENTS]

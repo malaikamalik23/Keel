@@ -53,13 +53,18 @@ class Container:
             return index_directory(db, Path(self.settings.notes_dir).expanduser()).as_dict()
 
 
-def _gmail(settings: Settings):
-    """Gmail tools exist once a Google OAuth client is configured; until you connect, they say how to."""
+def _google(settings: Settings):
+    """Gmail (and Google Calendar, if switched on) share one sign-in. The tools exist once a Google OAuth client is
+    configured; until you connect, they say how to."""
     if not settings.gmail_client_id:
-        return None
+        return None, None
+    from app.integrations.gcal import GoogleCalendar
     from app.integrations.gmail import GmailClient
+    from app.integrations.google_auth import GoogleAuth
 
-    return GmailClient(settings.gmail_client_id, settings.gmail_client_secret, Path(settings.gmail_token_path))
+    auth = GoogleAuth(settings.gmail_client_id, settings.gmail_client_secret, Path(settings.gmail_token_path))
+    cal = GoogleCalendar(auth, settings.google_calendar_id) if settings.google_calendar_enabled else None
+    return GmailClient.from_auth(auth), cal
 
 
 def build_container(
@@ -70,6 +75,7 @@ def build_container(
     init_db(engine)
     calendar_url = settings.calendar_ics_url
     calendar_source = (lambda: fetch_ics(calendar_url)) if calendar_url else None
+    gmail, google_calendar = _google(settings)
     registry = build_default_registry(
         calendar_source=calendar_source,
         fetcher=SafeFetcher(allowed_domains=csv_list(settings.web_allowed_domains), blocked_domains=csv_list(settings.web_blocked_domains))
@@ -80,7 +86,7 @@ def build_container(
         notes_enabled=bool(settings.notes_dir) and settings.database_url.startswith("sqlite"),
         workday=(settings.workday_start, settings.workday_end),
         workflow_engine=(workflow_holder := {}),
-        gmail=_gmail(settings), gmail_send=settings.gmail_send_enabled, gmail_max_sends=settings.gmail_max_sends_per_day,
+        gmail=gmail, google_calendar=google_calendar, gmail_send=settings.gmail_send_enabled, gmail_max_sends=settings.gmail_max_sends_per_day,
         notes_dir=settings.notes_dir,
     )
     executor = ToolExecutor(

@@ -111,6 +111,13 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
    extra headers. Keel asks Google only for read and compose access (no delete, labels or filters). The refresh token
    stays in a local file under `data/` (never committed); access tokens live in memory only and no error message
    contains a token. The red-team suite reads a poisoned inbox and tries to send and draft mail to the attacker.
+   Google Calendar (off by default) uses the same sign-in with only the `calendar.events` permission. Listing events is
+   untrusted (invites carry other people's text). Every change (add, move, edit, delete, adding a plan) is high impact:
+   the approval shows the exact change, warns about overlaps (by time only, so another invite's title can't speak in
+   the approval), guests and repeating events, and includes the event's last-changed stamp, so if it was edited before
+   you approve, nothing happens; the write itself is conditional on that version (If-Match). Guests are never emailed
+   (sendUpdates=none). A day's plan is never added twice. The red-team suite reads a poisoned invite and tries to
+   create, move and delete events.
    With `LLM_PROVIDER=ollama` the model runs on the user's own computer, so no chat, memory or document text goes to a
    model provider. Keel refuses a plain-`http` Ollama address on another machine (only `https` there), so chats are
    never sent unencrypted over a network. A local model gets the same tool permissions, taint rules and approvals.

@@ -1,11 +1,13 @@
-"""Connect Keel to your Gmail once (or disconnect it). Run on the computer where Keel runs:
+"""Connect Keel to your Google account once (Gmail, and Google Calendar if GOOGLE_CALENDAR_ENABLED=true), or disconnect it.
+Run on the computer where Keel runs:
 
     python -m scripts.gmail_connect               # opens Google's sign-in page in your browser
     python -m scripts.gmail_connect --disconnect  # revokes Keel's access and deletes the saved sign-in
 
 You need GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET in .env first, from an OAuth client of type "Desktop app" that you
-create in your own Google Cloud project (docs/INSTALL.md walks through it). Keel asks for two permissions: read your
-mail, and create drafts / send mail. Sending still needs your approval of each email inside Keel.
+create in your own Google Cloud project (docs/INSTALL.md walks through it). Keel asks for: read your mail, create
+drafts / send mail, and (only with GOOGLE_CALENDAR_ENABLED=true) see and edit your calendar events. Sending an email or
+changing an event still needs your approval inside Keel. Run it again after turning the calendar on.
 
 The sign-in uses PKCE and a one-time listener on 127.0.0.1, so the code never passes through anyone else's server.
 The saved refresh token goes to GMAIL_TOKEN_PATH (data/gmail_token.json by default; data/ is never committed).
@@ -26,7 +28,9 @@ from urllib.parse import parse_qs, urlencode, urlparse
 import httpx
 
 from app.config import Settings
-from app.integrations.gmail import REVOKE_URL, SCOPES, TOKEN_URL, load_token, save_token
+from app.integrations.google_auth import CALENDAR_SCOPE, GMAIL_SCOPES, REVOKE_URL, TOKEN_URL, load_token, save_token
+
+SCOPES = GMAIL_SCOPES  # what older callers and tests mean by 'the scopes'
 
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 
@@ -37,9 +41,13 @@ def pkce() -> tuple[str, str]:
     return verifier, challenge
 
 
-def auth_url(client_id: str, redirect: str, state: str, challenge: str) -> str:
+def scopes_for(s: Settings) -> list[str]:
+    return GMAIL_SCOPES + ([CALENDAR_SCOPE] if s.google_calendar_enabled else [])
+
+
+def auth_url(client_id: str, redirect: str, state: str, challenge: str, scopes: list[str] = GMAIL_SCOPES) -> str:
     return AUTH_URL + "?" + urlencode({
-        "client_id": client_id, "redirect_uri": redirect, "response_type": "code", "scope": " ".join(SCOPES),
+        "client_id": client_id, "redirect_uri": redirect, "response_type": "code", "scope": " ".join(scopes),
         "access_type": "offline", "prompt": "consent", "state": state, "code_challenge": challenge,
         "code_challenge_method": "S256",
     })
@@ -63,7 +71,7 @@ def wait_for_code(state: str, timeout: float = 300) -> tuple[str, int, threading
             self.send_response(200)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.end_headers()
-            self.wfile.write(("Keel is connected to Gmail. You can close this tab." if ok else "Sign-in failed; see the terminal.").encode())
+            self.wfile.write(("Keel is connected to your Google account. You can close this tab." if ok else "Sign-in failed; see the terminal.").encode())
             done.set()
 
         def log_message(self, *args):  # keep the code out of the terminal
@@ -75,7 +83,8 @@ def wait_for_code(state: str, timeout: float = 300) -> tuple[str, int, threading
     return f"http://127.0.0.1:{server.server_port}", server.server_port, done, result
 
 
-def exchange(client_id: str, secret: str | None, code: str, verifier: str, redirect: str, http: httpx.Client | None = None) -> dict:
+def exchange(client_id: str, secret: str | None, code: str, verifier: str, redirect: str, http: httpx.Client | None = None,
+             scopes: list[str] = GMAIL_SCOPES) -> dict:
     form = {"client_id": client_id, "code": code, "code_verifier": verifier, "redirect_uri": redirect, "grant_type": "authorization_code"}
     if secret:
         form["client_secret"] = secret
@@ -86,8 +95,8 @@ def exchange(client_id: str, secret: str | None, code: str, verifier: str, redir
     if not data.get("refresh_token"):
         raise RuntimeError("Google sent no refresh token. Remove Keel at myaccount.google.com/permissions and run this again.")
     granted = set(str(data.get("scope", "")).split())
-    if not set(SCOPES) <= granted:
-        raise RuntimeError("Not every permission was granted (tick both boxes on Google's page). Run this again.")
+    if not set(scopes) <= granted:
+        raise RuntimeError("Not every permission was granted (tick every box on Google's page). Run this again.")
     return {"refresh_token": data["refresh_token"], "scope": data.get("scope", "")}
 
 
@@ -116,7 +125,8 @@ def main(argv: list[str] | None = None) -> int:
     verifier, challenge = pkce()
     state = secrets.token_urlsafe(24)
     redirect, _, done, result = wait_for_code(state)
-    url = auth_url(s.gmail_client_id, redirect, state, challenge)
+    scopes = scopes_for(s)
+    url = auth_url(s.gmail_client_id, redirect, state, challenge, scopes)
     print("Opening Google's sign-in page. If it doesn't open, paste this link into your browser:\n" + url)
     webbrowser.open(url)
     if not done.wait(300):
@@ -126,12 +136,13 @@ def main(argv: list[str] | None = None) -> int:
         print(result["error"])
         return 1
     try:
-        token = exchange(s.gmail_client_id, s.gmail_client_secret, result["code"], verifier, redirect)
+        token = exchange(s.gmail_client_id, s.gmail_client_secret, result["code"], verifier, redirect, scopes=scopes)
     except RuntimeError as exc:
         print(exc)
         return 1
     save_token(Path(s.gmail_token_path), token)
-    print(f"Connected. The sign-in is saved in {s.gmail_token_path} (keep it private; it is never committed). Restart Keel.")
+    what = "Gmail and Google Calendar" if CALENDAR_SCOPE in scopes else "Gmail"
+    print(f"Connected to {what}. The sign-in is saved in {s.gmail_token_path} (keep it private; it is never committed). Restart Keel.")
     return 0
 
 

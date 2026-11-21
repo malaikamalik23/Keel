@@ -96,6 +96,10 @@ class Settings(BaseSettings):
     gmail_token_path: str = "data/gmail_token.json"  # noqa: S105 # nosec B105 - a file path, not a secret; data/ is never committed
     gmail_send_enabled: bool = True  # false = Keel can read and draft but never send (each send needs approval anyway)
     gmail_max_sends_per_day: int = Field(20, ge=0, le=200)
+    # Google Calendar through the same Google sign-in: read and change events, each change approved by you.
+    # Turn on, then run `python -m scripts.gmail_connect` again to grant the calendar permission.
+    google_calendar_enabled: bool = False
+    google_calendar_id: str = "primary"
 
     rate_limit_per_minute: int = 30  # per client, for endpoints that call the LLM (/api/chat, /api/scheduler/tick). 0 = off
 

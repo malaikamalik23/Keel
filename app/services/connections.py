@@ -146,8 +146,31 @@ def check_gmail(s: Settings) -> str:
     return f"signed in as {mask_email(p.get('emailAddress'))}; {p.get('messagesTotal', '?')} messages"
 
 
+def gcal_connected(s: Settings) -> bool:
+    from app.integrations.google_auth import CALENDAR_SCOPE, GoogleAuth
+
+    return gmail_connected(s) and GoogleAuth(s.gmail_client_id or "", None, Path(s.gmail_token_path)).has_scope(CALENDAR_SCOPE)
+
+
+def check_google_calendar(s: Settings) -> str:
+    from datetime import datetime, timedelta
+
+    from app.integrations.gcal import GoogleCalendar
+    from app.integrations.google_auth import GoogleAuth
+
+    if not s.google_calendar_enabled:
+        raise Skip("GOOGLE_CALENDAR_ENABLED is false")
+    if not gcal_connected(s):
+        raise Skip("calendar permission not granted yet: run `python -m scripts.gmail_connect` again")
+    tz = ZoneInfo(s.agent_timezone)
+    now = datetime.now(tz)
+    cal = GoogleCalendar(GoogleAuth(s.gmail_client_id or "", s.gmail_client_secret, Path(s.gmail_token_path)), s.google_calendar_id)
+    return f"{len(cal.events(now, now + timedelta(days=7)))} event(s) in the next 7 days (read only; nothing changed)"
+
+
 CHECKS: dict[str, Callable[[Settings], str]] = {
     "model": check_model,
+    "google_calendar": check_google_calendar,
     "gmail": check_gmail,
     "search": check_brave, "github": check_github, "notes": check_notes,
     "calendar": check_calendar, "telegram": check_telegram, "email": check_email,
@@ -217,7 +240,15 @@ def describe(s: Settings, indexed_documents: int | None = None) -> list[dict]:
          "access": "Read your mail; create drafts; send only what you approve. Can't delete mail or change labels or filters. "
                    "Emails are treated as untrusted text.",
          "setup": "GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET, then python -m scripts.gmail_connect"},
-        {"id": "calendar", "name": "Calendar", "status": "connected" if s.calendar_ics_url else "not_set_up",
+        {"id": "google_calendar", "name": "Google Calendar",
+         "status": "off" if not s.google_calendar_enabled else "connected" if gcal_connected(s) else "partial",
+         "details": ([] if not s.google_calendar_enabled else
+                     ["Reads events; adds, moves and deletes them only after you approve each change", "Never emails guests"]
+                     if gcal_connected(s) else
+                     ["Not allowed yet: run python -m scripts.gmail_connect again and tick the calendar permission"]),
+         "access": "Events in one calendar (GOOGLE_CALENDAR_ID). Not calendar settings or sharing. Event text is treated as untrusted.",
+         "setup": "GOOGLE_CALENDAR_ENABLED=true (with Gmail's Google client), then python -m scripts.gmail_connect"},
+        {"id": "calendar", "name": "Calendar (iCal, read-only)", "status": "connected" if s.calendar_ics_url else "not_set_up",
          "details": [f"iCal feed from {_host(s.calendar_ics_url) or 'an unknown host'}"] if s.calendar_ics_url else [],
          "access": "Read-only. Keel never changes your calendar; plans download as a file you import yourself.",
          "setup": "CALENDAR_ICS_URL (your calendar's secret iCal address)"},

@@ -10,8 +10,10 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from app.agent.prompts import build_system_prompt
+from app.integrations.gcal import GoogleCalendar
 from app.integrations.github import GitHubClient
 from app.integrations.gmail import GmailClient
+from app.integrations.google_auth import GoogleAuth
 from app.integrations.safe_http import SafeFetcher
 from app.integrations.websearch import BraveSearch
 from app.llm.base import LLMClient
@@ -32,6 +34,7 @@ def full_registry():
         calendar_source=lambda: "", fetcher=SafeFetcher(), search=BraveSearch("unused"), github=GitHubClient(),
         github_user="me", notes_enabled=True, notes_dir="notes",
         gmail=GmailClient("unused.apps.googleusercontent.com", None, Path("unused-token.json")),
+        google_calendar=GoogleCalendar(GoogleAuth("unused", None, Path("unused-token.json"))),
     )
 
 

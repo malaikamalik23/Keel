@@ -127,6 +127,18 @@ text and attachments exactly as shown; at most `GMAIL_MAX_SENDS_PER_DAY`). `GMAI
 and draft only. It can't delete mail or change labels or filters. To disconnect: `python -m scripts.gmail_connect
 --disconnect`, and remove Keel at [myaccount.google.com/permissions](https://myaccount.google.com/permissions).
 
+### Connect Google Calendar
+
+Uses the same Google project and sign-in as Gmail (do "Connect Gmail" first).
+
+1. In the Google Cloud project, **APIs & Services → Library**: enable the **Google Calendar API**.
+2. **Google Auth Platform → Data Access → Add or remove scopes**: add `.../auth/calendar.events`, then **Save**.
+3. In `.env`: `GOOGLE_CALENDAR_ENABLED=true` (and `GOOGLE_CALENDAR_ID` if you don't mean your main calendar).
+4. Run `python -m scripts.gmail_connect` again and tick every permission, including the calendar one. Restart Keel.
+
+Keel can then list, add, move, edit and delete events in that calendar, and add a day's plan to it; every change
+waits for your approval in Keel. It never emails guests and can't change calendar settings or sharing.
+
 ### Run on a local model (Ollama)
 
 Keel can use a model on your own computer instead of Anthropic or Groq. No key is needed and your chats, tasks and

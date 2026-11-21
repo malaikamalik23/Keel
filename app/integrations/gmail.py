@@ -7,10 +7,7 @@ Everything read from a mailbox was written by someone else, so the tools that ex
 from __future__ import annotations
 
 import base64
-import json
-import os
 import re
-import time
 from dataclasses import dataclass, field
 from email.message import EmailMessage
 from email.utils import getaddresses, parseaddr
@@ -18,39 +15,24 @@ from pathlib import Path
 
 import httpx
 
+from app.integrations.google_auth import (  # noqa: F401 - re-exported: older imports use app.integrations.gmail
+    GMAIL_SCOPES,
+    REVOKE_URL,
+    TOKEN_URL,
+    GoogleAuth,
+    GoogleError,
+    GoogleNotConnected,
+    load_token,
+    save_token,
+)
+
 API = "https://gmail.googleapis.com/gmail/v1/users/me"
-TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105 # nosec B105 - a public endpoint, not a password
-REVOKE_URL = "https://oauth2.googleapis.com/revoke"
-SCOPES = ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/gmail.compose"]
+SCOPES = GMAIL_SCOPES
 MAX_BODY_CHARS = 12_000
 MAX_ATTACH_BYTES = 10_000_000
 ADDRESS = re.compile(r"^[^@\s<>,;\"]+@[^@\s<>,;\"]+\.[^@\s<>,;\"]+$")
-
-
-class GmailError(Exception):
-    pass
-
-
-class GmailNotConnected(GmailError):
-    pass
-
-
-# ------------------------------------------------------------------ token file
-def load_token(path: Path) -> dict | None:
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    return data if isinstance(data, dict) and data.get("refresh_token") else None
-
-
-def save_token(path: Path, data: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)  # owner-only where the OS supports it
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        json.dump(data, fh)
-    os.replace(tmp, path)
+GmailError = GoogleError  # one error family for everything Google
+GmailNotConnected = GoogleNotConnected
 
 
 # ------------------------------------------------------------------ parsing
@@ -192,48 +174,30 @@ def build_mime(*, sender: str, to: list[str], cc: list[str], subject: str, body:
 
 # ------------------------------------------------------------------ client
 class GmailClient:
-    def __init__(self, client_id: str, client_secret: str | None, token_path: Path, client: httpx.Client | None = None):
-        self._client_id, self._secret = client_id, client_secret
-        self.token_path = token_path
-        self._http = client or httpx.Client(timeout=20)
-        self._access: tuple[str, float] | None = None
+    def __init__(self, client_id: str, client_secret: str | None, token_path: Path, client: httpx.Client | None = None,
+                 auth: GoogleAuth | None = None):
+        self.auth = auth or GoogleAuth(client_id, client_secret, token_path, client)
+        self.token_path = self.auth.token_path
+        self._http = self.auth.http
         self._me: str | None = None
+
+    @classmethod
+    def from_auth(cls, auth: GoogleAuth) -> GmailClient:
+        return cls("", None, auth.token_path, auth=auth)
 
     @property
     def connected(self) -> bool:
-        return load_token(self.token_path) is not None
-
-    def _token(self) -> str:
-        if self._access and self._access[1] > time.time() + 60:
-            return self._access[0]
-        saved = load_token(self.token_path)
-        if saved is None:
-            raise GmailNotConnected("Gmail isn't connected. Run `python -m scripts.gmail_connect` once.")
-        form = {"client_id": self._client_id, "refresh_token": saved["refresh_token"], "grant_type": "refresh_token"}
-        if self._secret:
-            form["client_secret"] = self._secret
-        try:
-            resp = self._http.post(TOKEN_URL, data=form)
-        except httpx.HTTPError as exc:
-            raise GmailError(f"Couldn't reach Google ({type(exc).__name__}).") from None
-        if resp.status_code != 200:
-            if resp.status_code in (400, 401):
-                raise GmailNotConnected("Google refused the saved sign-in (it was revoked or expired). "
-                                        "Run `python -m scripts.gmail_connect` again.")
-            raise GmailError(f"Google sign-in failed (HTTP {resp.status_code}).")
-        data = resp.json()
-        self._access = (str(data["access_token"]), time.time() + float(data.get("expires_in", 3600)))
-        return self._access[0]
+        return self.auth.connected
 
     def _call(self, method: str, path: str, **kw) -> dict:
         try:
-            resp = self._http.request(method, API + path, headers={"Authorization": f"Bearer {self._token()}"}, **kw)
+            resp = self._http.request(method, API + path, headers={"Authorization": f"Bearer {self.auth.token()}"}, **kw)
         except httpx.HTTPError as exc:
             raise GmailError(f"Gmail request failed ({type(exc).__name__}).") from None
         if resp.status_code == 404:
             raise GmailError("Gmail has no message, thread or attachment with that id.")
         if resp.status_code == 401:
-            self._access = None
+            self.auth.forget()
             raise GmailError("Gmail rejected the sign-in; try again.")
         if resp.status_code == 403:
             raise GmailError("Gmail refused the request (missing permission or the daily limit).")

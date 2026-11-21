@@ -173,4 +173,5 @@ def test_services_endpoints(monkeypatch):
     monkeypatch.setitem(connections.CHECKS, "telegram", lambda st: calls.append(1) or "token valid")
     r = client.post("/api/services/telegram/test").json()
     assert r["ok"] is True and r["detail"] == "token valid" and r["service"] == "telegram" and calls == [1]
-    assert client.post("/api/services/model/test").status_code == 404
+    assert client.post("/api/services/model/test").json()["ok"] is None  # a hosted model has no free check: nothing is sent
+    assert client.post("/api/services/web/test").status_code == 404

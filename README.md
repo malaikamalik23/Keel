@@ -15,6 +15,7 @@ machine, with your data in one SQLite file.
 | | |
 |---|---|
 | **Chat** | Talk to it in the web dashboard or the terminal. It calls tools to read and change your data. Reminders and check-ins arrive by email. |
+| **Voice** | In the dashboard's chat, press the microphone and speak (English or Urdu): your words fill the message box and you press Send, so a misheard word never runs a command. Replies can be read aloud, by switching on "Read replies aloud" or with the Read aloud button on any reply. It uses your browser's own speech features, so there is no extra key or service to set up. Dictation works in Chrome, Edge and Safari; in Chrome and Edge the audio goes to the browser's own speech service (Google or Microsoft). Read-aloud works in every current browser. |
 | **Projects** | A progress report built from the database (tasks done, overdue and waiting, time worked), a log of updates, blockers and decisions with their reasons, attached notes and links, and the project's GitHub pull requests. A blocker still open after 3 and 7 days gets a nudge. Mentioning a project by name ("my FYP is stuck") is enough. |
 | **Goals → milestones → tasks** | "I want to get good at web pentesting" becomes a goal, ordered milestones, and concrete first tasks. |
 | **Commitments** | Notices "I'll finish the GRE set by Friday", asks you to confirm, tracks it, counts postponements. Give a promise a check-in date and Keel asks how it's going before it is late. |
@@ -116,6 +117,7 @@ The ones you'll touch first:
 | Setting | Why |
 |---|---|
 | `ANTHROPIC_API_KEY` / `GROQ_API_KEY`, `AGENT_MODEL` | The LLM. Groq models must support tool calling (`openai/gpt-oss-120b` works on Groq's free tier; set `HISTORY_MESSAGE_LIMIT=12` there). |
+| `LLM_PROVIDER=ollama`, `OLLAMA_MODEL` | Or run a model on your own computer with [Ollama](https://ollama.com): no key, and chats never leave the machine. Slower and less accurate than a hosted model; see [the install guide](docs/INSTALL.md#run-on-a-local-model-ollama). |
 | `AGENT_TIMEZONE` | "Today", check-in times and quiet hours use it. |
 | `API_KEY` | **Not needed on your own laptop.** Leave it unset and only this computer can use Keel (not other devices, and not websites open in your browser). Set it for Docker, or before reaching Keel from another device; the dashboard then asks for it once per tab. |
 | `SCHEDULER_ENABLED=true` | Turns on check-ins, reminders and nudges (run one process only). |
@@ -191,7 +193,7 @@ python -m evals.run_routing        # how often does the model pick the right too
   never prints keys). Email delivery has been checked against real Gmail (STARTTLS, App Password, a test message received with
   `--send-test-email`), and a reminder set in chat arrived by email on time. Brave Search is so far verified only against mocked HTTP; try it with your own key
   (see [docs/DEMO.md](docs/DEMO.md)) and please open an issue if a real API behaves differently.
-- The dashboard is type-checked, has 25 jsdom tests (every tab, empty states, a malformed response, the approval flow, skip-cancel) and 2 **real-Chromium end-to-end tests** (`tests/e2e`, Playwright; CI job `e2e`) that drive the real server through chat, plan, delete-and-approve and reminders and fail on any console error. The browser tests exist because the first manual run found a Chrome-only crash that jsdom could not see.
+- The dashboard is type-checked, has 31 jsdom tests (every tab, voice input and read-aloud, empty states, a malformed response, the approval flow, skip-cancel) and 2 **real-Chromium end-to-end tests** (`tests/e2e`, Playwright; CI job `e2e`) that drive the real server through chat, plan, delete-and-approve and reminders and fail on any console error. The browser tests exist because the first manual run found a Chrome-only crash that jsdom could not see.
 - Single-user by design: no accounts, one optional dashboard key. Not multi-tenant.
 - See [SECURITY.md](SECURITY.md#known-limitations-read-these) for the security limitations (sticky taint, approved-memory risks, and more) and for what is stored and how to back it up (`python -m scripts.backup`).
 

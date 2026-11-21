@@ -101,6 +101,27 @@ python -m scripts.smoke_integrations
 
 The dashboard's Services tab runs the same checks with its "Check connection" buttons.
 
+### Run on a local model (Ollama)
+
+Keel can use a model on your own computer instead of Anthropic or Groq. No key is needed and your chats, tasks and
+notes never leave the machine.
+
+1. Install [Ollama](https://ollama.com) and pull a model that can call tools:
+   `ollama pull qwen2.5:7b` (about 5 GB). `ollama show <model>` must list `tools` under Capabilities;
+   `phi3` and other models without it won't work.
+2. In `.env`: `LLM_PROVIDER=ollama` and `OLLAMA_MODEL=qwen2.5:7b`. No API key is needed.
+3. Restart Keel. The Services tab shows the model, and "Check connection" asks Ollama whether the model is there
+   (it sends no prompt).
+
+What to expect: small local models choose the wrong tool or the wrong date more often than a hosted model, and on a
+laptop without a GPU each message can take a minute or more. Every change still goes through the same permission
+checks, so a wrong guess can't delete anything without your approval. Measured on a laptop CPU with `qwen2.5:3b`
+(Nov 2026): 22 of the first 25 routing cases right, no unsafe calls, a median of 5 s per answer once loaded (up to a
+minute when it starts cold); its misses were dates ("this Friday", "end of the month") and one wrong tool. Those 25
+are mostly task cases, so the full suite will score lower. Measure your model with
+`LLM_PROVIDER=ollama python -m evals.run_routing --limit 25` (free, but slow). `OLLAMA_BASE_URL` may only be plain
+`http` when Ollama runs on this computer; another machine needs `https`.
+
 ### Reminders and check-ins by email
 
 If Telegram is not an option (it is blocked on some networks), Keel can email them to you instead. It only ever sends
@@ -195,6 +216,11 @@ Two different limits on the free tier:
 
 **Both keys are set and the wrong provider is used.**
 Set `LLM_PROVIDER=anthropic` or `LLM_PROVIDER=groq` explicitly.
+
+**Local model (Ollama): "Can't reach Ollama", "isn't on this computer", "can't call tools", or very slow.**
+Start the Ollama app (or `ollama serve`); `ollama pull` the model named in `OLLAMA_MODEL`; pick a model whose
+`ollama show` lists `tools`. If answers take minutes, use a smaller model (`qwen2.5:3b`) or a computer with a GPU, and
+raise `OLLAMA_TIMEOUT_SECONDS` if they time out.
 
 **"Today" or reminder times are hours off.**
 `AGENT_TIMEZONE` is still `UTC`. Set your IANA zone (for example `Asia/Karachi`) and restart.

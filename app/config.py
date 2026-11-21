@@ -13,7 +13,12 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
     groq_api_key: str | None = None
     # "auto" picks Anthropic if ANTHROPIC_API_KEY is set, else Groq if GROQ_API_KEY is set.
-    llm_provider: Literal["auto", "anthropic", "groq"] = "auto"
+    # "ollama" runs a model on your own computer (no key; chats never leave it). Never picked automatically.
+    llm_provider: Literal["auto", "anthropic", "groq", "ollama"] = "auto"
+    ollama_base_url: str = "http://127.0.0.1:11434"
+    ollama_model: str = "qwen2.5:7b"  # must support tools: `ollama show <model>` lists them under Capabilities
+    ollama_num_ctx: int = Field(16384, ge=4096, le=131072)  # context window; Keel's prompt plus tools need ~6-9k tokens
+    ollama_timeout_seconds: float = Field(300, ge=10, le=1800)  # local models on a laptop CPU can be slow
     agent_model: str = "claude-sonnet-5"
     agent_timezone: str = "UTC"
     database_url: str = "sqlite:///./data/agent.db"

@@ -12,6 +12,11 @@ class UnconfiguredLLM:
 
 def build_llm(settings: Settings) -> LLMClient:
     provider = settings.llm_provider
+    if provider == "ollama":
+        from app.llm.ollama_client import OllamaClient
+
+        return OllamaClient(settings.ollama_base_url, settings.ollama_model, settings.max_output_tokens, settings.llm_temperature,
+                            num_ctx=settings.ollama_num_ctx, timeout=settings.ollama_timeout_seconds)
     if provider == "auto":
         if settings.anthropic_api_key:
             provider = "anthropic"
@@ -32,3 +37,8 @@ def build_llm(settings: Settings) -> LLMClient:
     from app.llm.groq_client import GroqClient
 
     return GroqClient(settings.groq_api_key, settings.agent_model, settings.max_output_tokens, settings.llm_temperature)
+
+
+def model_name(settings: Settings) -> str:
+    """The model that will actually answer, for logs and eval history (an Ollama run is labelled with Ollama's model)."""
+    return f"ollama/{settings.ollama_model}" if settings.llm_provider == "ollama" else settings.agent_model

@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from app.config import get_settings
-from app.llm.factory import build_llm
+from app.llm.factory import build_llm, model_name
 from evals.common import CASES_PATH, cost_summary, load_cases, run_eval
 
 HERE = Path(__file__).parent
@@ -64,13 +64,13 @@ def main(argv: list[str] | None = None, llm=None) -> int:
     settings = get_settings()
     llm = llm or build_llm(settings)
     profile = args.profile or settings.tool_profile
-    print(f"Routing eval: {len(cases)} cases, model={settings.agent_model}, tool profile={profile}, temperature={settings.llm_temperature}")
+    print(f"Routing eval: {len(cases)} cases, model={model_name(settings)}, tool profile={profile}, temperature={settings.llm_temperature}")
     def show(r) -> None:
         mark = "PASS" if r.passed else ("UNSAFE" if r.unsafe else r.outcome.upper())
         detail = f"   [{r.error}]" if r.error else (f"   [{'; '.join(r.arg_problems)}]" if r.arg_problems else "")
         print(f"  {mark:10} {r.id:24} -> {r.got or '(text)'}{detail}")
 
-    report = run_eval(llm, cases, settings.agent_model, profile=profile, pause_seconds=args.sleep, on_result=show)
+    report = run_eval(llm, cases, model_name(settings), profile=profile, pause_seconds=args.sleep, on_result=show)
 
     n = len(report.results)
     errors = report.outcomes()["error"]

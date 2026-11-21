@@ -108,7 +108,30 @@ def check_email(s: Settings, send: bool = False) -> str:
     return f"connected ({s.smtp_security}), logged in; nothing sent"
 
 
+def check_model(s: Settings) -> str:
+    """Only for a local model: asks Ollama which models it has. Never sends a prompt, so it costs nothing."""
+    if s.llm_provider != "ollama":
+        raise Skip("only a local (Ollama) model has a free check")
+    import httpx
+
+    from app.llm.ollama_client import check_base_url
+
+    base = check_base_url(s.ollama_base_url)
+    try:
+        info = httpx.post(f"{base}/api/show", json={"model": s.ollama_model}, timeout=10)
+    except httpx.HTTPError:
+        raise RuntimeError(f"can't reach Ollama at {base}; start the Ollama app or run `ollama serve`") from None
+    if info.status_code == 404:
+        raise RuntimeError(f"{s.ollama_model} isn't on this computer; run `ollama pull {s.ollama_model}`")
+    info.raise_for_status()
+    caps = info.json().get("capabilities") or []
+    if caps and "tools" not in caps:
+        raise RuntimeError(f"{s.ollama_model} can't call tools, which Keel needs; pick a model that lists 'tools'")
+    return f"{s.ollama_model} is installed and can call tools"
+
+
 CHECKS: dict[str, Callable[[Settings], str]] = {
+    "model": check_model,
     "search": check_brave, "github": check_github, "notes": check_notes,
     "calendar": check_calendar, "telegram": check_telegram, "email": check_email,
 }
@@ -128,6 +151,8 @@ def run_check(service: str, s: Settings, check: Callable[[Settings], str] | None
 # ---------- what is connected
 
 def _provider(s: Settings) -> str | None:
+    if s.llm_provider == "ollama":
+        return "ollama"
     if s.llm_provider != "auto":
         return s.llm_provider if getattr(s, f"{s.llm_provider}_api_key") else None
     return "anthropic" if s.anthropic_api_key else "groq" if s.groq_api_key else None
@@ -148,9 +173,12 @@ def describe(s: Settings, indexed_documents: int | None = None) -> list[dict]:
     channel = "telegram" if telegram else "email" if email else None
     rows = [
         {"id": "model", "name": "AI model", "status": "connected" if provider else "not_set_up",
-         "details": [f"{'Anthropic' if provider == 'anthropic' else 'Groq'} · {s.agent_model}"] if provider else [],
+         "details": ([f"Ollama on {_host(s.ollama_base_url) or 'this computer'} · {s.ollama_model}"]
+                     + (["Local: chats stay on this computer"] if _host(s.ollama_base_url) in ("127.0.0.1", "localhost", "::1") else [])
+                     if provider == "ollama" else
+                     [f"{'Anthropic' if provider == 'anthropic' else 'Groq'} · {s.agent_model}"] if provider else []),
          "access": "Receives each chat message, the facts Keel looked up to answer it, and the tool list.",
-         "setup": "ANTHROPIC_API_KEY or GROQ_API_KEY"},
+         "setup": "ANTHROPIC_API_KEY or GROQ_API_KEY, or LLM_PROVIDER=ollama for a model on this computer"},
         {"id": "telegram", "name": "Telegram", "status": "connected" if telegram else "partial" if s.telegram_bot_token else "not_set_up",
          "details": ([("Delivers your reminders and check-ins" if channel == "telegram" else "")]
                      + (["You can chat with Keel through the bot (only from your chat)"] if telegram and s.telegram_inbound else [])
@@ -199,4 +227,6 @@ def describe(s: Settings, indexed_documents: int | None = None) -> list[dict]:
         r["testable"] = r["id"] in CHECKS and r["status"] in ("connected", "partial")
         if r["id"] == "github":
             r["testable"] = r["testable"] and bool(s.github_token)  # the check needs a token; public access needs none
+        if r["id"] == "model":
+            r["testable"] = provider == "ollama"  # a hosted model's only check would spend tokens
     return rows

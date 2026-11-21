@@ -102,14 +102,20 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
    failed check's message is scrubbed of every configured secret. Each check is one read-only request: Telegram uses
    `getMe`, email logs in and hangs up, and nothing is sent. The Calendar tab shows invite titles as plain text with
    links removed, and none of it is passed to the model.
+   With `LLM_PROVIDER=ollama` the model runs on the user's own computer, so no chat, memory or document text goes to a
+   model provider. Keel refuses a plain-`http` Ollama address on another machine (only `https` there), so chats are
+   never sent unencrypted over a network. A local model gets the same tool permissions, taint rules and approvals.
    Uploads from the dashboard go only to `NOTES_DIR/uploads/`: the name is reduced to a plain file name with an
    allowed extension (no folders, hidden files or Word lock files), the content must match it (PDF header, readable
    .docx, UTF-8 text), the 2 MB limit is enforced while the body streams in, nothing is overwritten, and the dashboard
    can delete only files in `uploads/`, never the user's own notes.
 10. **API hardening.** `X-API-Key` (constant-time compare) or, without one, local-only access with Host and
     cross-site checks (see Scope), a per-client rate limit on LLM-calling endpoints,
-    security headers (CSP `default-src 'self'`, `frame-ancestors 'none'`, `nosniff`), `Cache-Control: no-store` on API
-    responses. Docker: non-root, read-only root filesystem, all capabilities dropped, published on `127.0.0.1` only.
+    security headers (CSP `default-src 'self'`, `frame-ancestors 'none'`, `nosniff`, and a Permissions-Policy that lets
+    only Keel's own page use the microphone and turns off camera, location and payments), `Cache-Control: no-store` on API
+    responses. Voice: dictation only fills the message box (the user still presses Send, so a misheard phrase can't
+    act), and the dashboard says that Chrome and Edge send dictation audio to their own speech services. Keel's
+    server never receives audio, only the text you send. Docker: non-root, read-only root filesystem, all capabilities dropped, published on `127.0.0.1` only.
 11. **Memory hygiene.** Memories are pasted into every later system prompt, where the session is no longer tainted, so
     they are guarded where they are written and where they are shown: invisible characters are stripped before storing,
     the approval request shows exactly the text that will be stored (and, for an edit, the text it replaces), and the

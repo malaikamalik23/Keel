@@ -27,7 +27,7 @@ database and in code, not in the prompt.
         │                          ┌──────────────▼──────────────┐   ┌───────────────────────┐
 ┌───────▼───────────────┐          │ Tools (app/tools) +          │   │ Security (app/security)│
 │ LLM client (app/llm)  │          │ services (app/services)      │   │ permissions · audit ·  │
-│ Anthropic / Groq      │          │ tasks goals projects         │   │ untrusted fencing ·    │
+│ Anthropic·Groq·Ollama │          │ tasks goals projects         │   │ untrusted fencing ·    │
 └───────────────────────┘          │ commitments memory planning  │   │ sanitising             │
                                    │ reminders calendar web notes │   └───────────────────────┘
                                    │ github                       │
@@ -173,7 +173,7 @@ they are tested (the red-team suite, mutation-checked) and the known limitations
 
 | Gate | What it covers |
 |---|---|
-| `pytest` + `npm test` (25 dashboard tests) + `tests/e2e` (real Chromium) | Tools, executor, agent loop, planner, scheduler, API, notes search, SSRF, GitHub/Brave/Telegram clients (all HTTP mocked, LLM scripted) |
+| `pytest` + `npm test` (31 dashboard tests) + `tests/e2e` (real Chromium) | Tools, executor, agent loop, planner, scheduler, API, notes search, SSRF, GitHub/Brave/Telegram clients (all HTTP mocked, LLM scripted) |
 | `tests/injection` | The red-team suite, a compromised model against 7 channels × 7 payloads |
 | `evals/` | Tool-routing eval (160 cases, 55 with argument checks; reports missed, wrong and unsafe calls), scored per category and tag, history tracked; the dataset itself is validated offline |
 | CI | ruff, Python 3.11/3.12, dashboard type-check + build, real-Chromium e2e, dependency audit, gitleaks secret scan, Docker build + `/health` |

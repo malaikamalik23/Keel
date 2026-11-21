@@ -115,6 +115,10 @@ Keel uses your own Google Cloud project, so no one else's app ever holds access 
    app isn't verified: that's expected for your own app (choose *Continue*). The sign-in is saved in
    `data/gmail_token.json`; keep it private. Restart Keel; the Services tab shows Gmail as connected.
 
+If Google says **"Access blocked: ... has not completed the Google verification process" (Error 403: access_denied)**,
+the account you signed in with isn't a test user yet: add it under **Google Auth Platform → Audience → Test users**
+(or press **Publish app**) and run step 4 again.
+
 While the consent screen is in *Testing*, Google expires the sign-in after 7 days and you run step 4 again. To avoid
 that, press **Publish app** on the consent screen (it stays unverified and only you use it).
 

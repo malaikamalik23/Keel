@@ -35,8 +35,11 @@ def browser():
 
 
 @pytest.fixture
-def serve():
-    """Start the real app (with a scripted LLM) on a free port; returns (base_url, app)."""
+def serve(tmp_path):
+    """Start the real app (with a scripted LLM) on a free port; returns (base_url, app).
+
+    It uses a database *file*, like the real app: the dashboard loads several endpoints at once, and an in-memory test
+    database shares one connection between threads, which SQLite rejects ("bad parameter or other API misuse")."""
     import uvicorn
 
     from app.api.main import create_app
@@ -46,7 +49,8 @@ def serve():
     started: list[uvicorn.Server] = []
 
     def _serve(script, **settings):
-        app = create_app(make_settings(**settings), ScriptedLLM(script))
+        settings.setdefault("database_url", f"sqlite:///{(tmp_path / f'e2e-{len(started)}.db').as_posix()}")
+        app = create_app(make_settings().model_copy(update=settings), ScriptedLLM(script))
         port = _free_port()
         server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
         threading.Thread(target=server.run, daemon=True).start()

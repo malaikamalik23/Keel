@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import Response
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api import schemas
@@ -37,7 +37,9 @@ from app.db.models import (
 from app.errors import ConflictError, NotFoundError
 from app.services import accountability as accountability_svc
 from app.services import analytics as analytics_svc
+from app.services import connections as connections_svc
 from app.services.briefing import briefing_text, build_briefing, calendar_events, calendar_warnings
+from app.services.calendar_view import MAX_DAYS, build_calendar
 from app.services.ics_export import plan_to_ics
 from app.services.notifications import parse_hhmm
 from app.tools.base import ToolContext
@@ -683,3 +685,28 @@ def decide_workflow_run(run_id: int, decision: Literal["approve", "cancel", "ret
 def analytics(weeks: int = Query(8, ge=2, le=26), db: Session = Depends(get_db), c: Container = Depends(get_container)):
     tz = ZoneInfo(c.settings.agent_timezone)
     return analytics_svc.analytics(db, datetime.now(tz).date(), tz, weeks=weeks)
+
+
+# ---------- calendar view (read-only: your calendar's events next to Keel's own dates)
+@router.get("/calendar")
+def calendar_view(start: date | None = None, days: int = Query(7, ge=1, le=MAX_DAYS),
+                  db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    tz = ZoneInfo(c.settings.agent_timezone)
+    now = datetime.now(tz)
+    workday = (parse_hhmm(c.settings.workday_start), parse_hhmm(c.settings.workday_end))
+    return build_calendar(db, c.calendar_source, start or now.date(), days, tz, workday, now)
+
+
+# ---------- connected services (never returns a key, token, password or the calendar's secret address)
+@router.get("/services")
+def services(db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    indexed = db.scalar(select(func.count(Document.id))) if c.settings.notes_dir else None
+    return connections_svc.describe(c.settings, indexed)
+
+
+@router.post("/services/{service}/test", dependencies=[Depends(rate_limit)])
+def test_service(service: str, c: Container = Depends(get_container)):
+    """One read-only request to the service. Never sends a message (Telegram uses getMe; email logs in and hangs up)."""
+    if service not in connections_svc.CHECKS:
+        raise NotFoundError(f"No live check for '{service}'.")
+    return {"service": service, **connections_svc.run_check(service, c.settings), "checked_at": datetime.now(ZoneInfo(c.settings.agent_timezone)).isoformat(timespec="seconds")}

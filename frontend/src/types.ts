@@ -12,6 +12,15 @@ export interface ProjectReport {
   links: { id: number; kind: string; target: string; title: string | null }[]; days_to_deadline?: number;
 }
 export interface DocumentRow { id: number; path: string; size: number; chunk_count: number; indexed_at: string; pages: number | null; pages_estimated: boolean; hidden_skipped: number; }
+export interface CalendarItem {
+  kind: "event" | "block" | "task" | "promise" | "application" | "project" | "reminder" | "date";
+  title: string; id?: number; task_id?: number | null; status?: string; priority?: string; type?: string; category?: string;
+  start?: string | null; end?: string | null; minutes?: number; all_day?: boolean; ends_other_day?: boolean; location?: string | null;
+}
+export interface CalendarDay { date: string; weekday: string; is_today: boolean; busy_minutes: number; free_minutes: number | null; work_due_minutes: number; warnings: string[]; items: CalendarItem[]; }
+export interface CalendarView { start: string; end: string; today: string; calendar: "ok" | "off" | "error"; calendar_error: string | null; events_truncated: boolean; overdue: { id: number; title: string; due: string }[]; days: CalendarDay[]; workday: [string, string]; }
+export interface ServiceRow { id: string; name: string; status: "connected" | "partial" | "not_set_up" | "off"; details: string[]; access: string; setup: string; testable: boolean; }
+export interface ServiceCheck { service: string; ok: boolean | null; detail: string; checked_at: string; }
 export interface WorkflowStep { tool?: string; args?: Record<string, unknown>; notify?: string; approve?: boolean; }
 export interface WorkflowRun { id: number; workflow_id: number; status: string; step: number; event: Record<string, unknown>; attempts: number; error: string | null; started: string; finished: string | null; log: { step: number; state: string; at: string; error?: string; attempt?: number }[]; }
 export interface WorkflowRow { id: number; name: string; enabled: boolean; trigger: Record<string, unknown>; steps: WorkflowStep[]; description: string; runs: WorkflowRun[]; }

@@ -99,6 +99,8 @@ Check the ones you configured with one read-only call each (it never prints keys
 python -m scripts.smoke_integrations
 ```
 
+The dashboard's Services tab runs the same checks with its "Check connection" buttons.
+
 ### Reminders and check-ins by email
 
 If Telegram is not an option (it is blocked on some networks), Keel can email them to you instead. It only ever sends

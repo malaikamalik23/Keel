@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, api, getApiKey, setApiKey } from "./api";
 import Activity from "./views/Activity";
 import Applications from "./views/Applications";
+import Calendar from "./views/Calendar";
 import Documents from "./views/Documents";
+import Services from "./views/Services";
 import Workflows from "./views/Workflows";
 import Approvals from "./views/Approvals";
 import ErrorBoundary from "./ErrorBoundary";
@@ -15,7 +17,7 @@ import Projects from "./views/Projects";
 import Today from "./views/Today";
 import type { PendingAction } from "./types";
 
-const TABS = ["Today", "Goals", "Projects", "Commitments", "Applications", "Documents", "Workflows", "Memory", "Chat", "Insights", "Activity", "Approvals"] as const;
+const TABS = ["Today", "Calendar", "Goals", "Projects", "Commitments", "Applications", "Documents", "Workflows", "Memory", "Chat", "Insights", "Activity", "Services", "Approvals"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function App() {
@@ -60,6 +62,7 @@ export default function App() {
       <main hidden={tab === "Chat"} key={`${tab}-${version}`}>
         <ErrorBoundary>
         {tab === "Today" && <Today />}
+        {tab === "Calendar" && <Calendar />}
         {tab === "Goals" && <Goals />}
         {tab === "Projects" && <Projects />}
         {tab === "Commitments" && <Commitments />}
@@ -69,6 +72,7 @@ export default function App() {
         {tab === "Memory" && <MemoryView />}
         {tab === "Insights" && <Insights />}
         {tab === "Activity" && <Activity />}
+        {tab === "Services" && <Services />}
         {tab === "Approvals" && <Approvals onChange={changed} />}
         </ErrorBoundary>
       </main>

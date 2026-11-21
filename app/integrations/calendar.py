@@ -38,8 +38,8 @@ def _as_local(value, tz: ZoneInfo, *, end_of_day: bool = False) -> tuple[datetim
     return datetime.combine(value, time.min, tzinfo=tz), True  # all-day event
 
 
-def parse_events(ics_text: str, start: date, end: date, tz: ZoneInfo) -> list[dict]:
-    """Events overlapping [start, end] (inclusive, local dates), recurring events expanded."""
+def parse_events(ics_text: str, start: date, end: date, tz: ZoneInfo, limit: int = MAX_EVENTS) -> list[dict]:
+    """Events overlapping [start, end] (inclusive, local dates), recurring events expanded, at most `limit`."""
     import icalendar
     import recurring_ical_events
 
@@ -65,4 +65,4 @@ def parse_events(ics_text: str, start: date, end: date, tz: ZoneInfo) -> list[di
             "uid": " ".join(str(ev.get("UID", "")).split())[:255] or None,
         })
     events.sort(key=lambda x: x["start"])
-    return events[:MAX_EVENTS]
+    return events[:limit]

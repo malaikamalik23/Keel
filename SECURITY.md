@@ -97,6 +97,11 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
    actor `workflow`; templates are plain lookups ({{event.title}}), not an expression language; and a step that may
    have been cut off by a restart is not repeated without the user's OK. The red-team suite tries to create and run
    workflows from injected text.
+   The Services tab says whether each key is set, never its value: no key, token, password, Telegram chat id or the
+   calendar's secret address is ever returned (only the calendar's host name, and your email as `m•••@domain`), and a
+   failed check's message is scrubbed of every configured secret. Each check is one read-only request: Telegram uses
+   `getMe`, email logs in and hangs up, and nothing is sent. The Calendar tab shows invite titles as plain text with
+   links removed, and none of it is passed to the model.
    Uploads from the dashboard go only to `NOTES_DIR/uploads/`: the name is reduced to a plain file name with an
    allowed extension (no folders, hidden files or Word lock files), the content must match it (PDF header, readable
    .docx, UTF-8 text), the 2 MB limit is enforced while the body streams in, nothing is overwritten, and the dashboard

@@ -24,6 +24,20 @@ const FIXTURES: Record<string, unknown> = {
   "/api/documents/upload": { id: 3, path: "uploads/brief.docx", size: 9000, chunk_count: 2, indexed_at: "2026-11-21T10:00:00", pages: 1, pages_estimated: false, hidden_skipped: 1 },
   "/api/workflows": [{ id: 1, name: "Interview: prepare", enabled: true, trigger: { type: "event", event: "opportunity_status", status: "interview" }, steps: [{ tool: "create_task", args: {} }, { tool: "delete_task", args: { task_id: 1 }, approve: true }], description: "When an application moves to 'interview': 1. create_task {} 2. delete_task {\"task_id\": 1} [waits for your approval]", runs: [{ id: 9, workflow_id: 1, status: "waiting_approval", step: 2, event: {}, attempts: 0, error: null, started: "2026-11-21T10:00", finished: null, log: [{ step: 0, state: "started", at: "t" }, { step: 0, state: "ok", at: "t" }] }, { id: 8, workflow_id: 1, status: "failed", step: 1, event: {}, attempts: 3, error: "No task with id 5.", started: "2026-11-20T10:00", finished: "2026-11-20T10:40", log: [] }] }],
   "/api/workflow-templates": [{ key: "weekly-review", name: "Sunday evening: week in numbers", trigger: { type: "schedule" }, steps: [{ notify: "hi" }], description: "When every sun at 20:00: 1. tell you: hi" }, { key: "interview-prep", name: "Interview: prepare", trigger: {}, steps: [], description: "x" }],
+  "/api/calendar": { start: "2026-11-23", end: "2026-11-29", today: "2026-11-24", calendar: "ok", calendar_error: null, events_truncated: false, workday: ["09:00", "21:00"],
+    overdue: [{ id: 2, title: "Old form", due: "2026-11-20" }],
+    days: ["2026-11-23", "2026-11-24", "2026-11-25", "2026-11-26", "2026-11-27", "2026-11-28", "2026-11-29"].map((date, i) => ({
+      date, weekday: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][i], is_today: i === 1, busy_minutes: i === 1 ? 90 : 0, free_minutes: i === 0 ? null : 565, work_due_minutes: 0,
+      warnings: i === 1 ? ["Double-booked: 1 pair(s) of events overlap."] : [],
+      items: i === 1 ? [{ kind: "event", title: "Supervisor <b>meeting</b>", all_day: false, start: "10:00", end: "11:00", location: "Room 4" }, { kind: "block", title: "Write intro", start: "14:00", end: "15:00", status: "planned", task_id: 1 }, { kind: "task", id: 1, title: "Write chapter 2", status: "todo" }]
+        : i === 3 ? [{ kind: "application", id: 1, title: "DAAD scholarship", status: "interested", type: "scholarship" }] : [],
+    })) },
+  "/api/services": [
+    { id: "model", name: "AI model", status: "connected", details: ["Groq · openai/gpt-oss-120b"], access: "Receives each chat message", setup: "GROQ_API_KEY", testable: false },
+    { id: "calendar", name: "Calendar", status: "connected", details: ["iCal feed from calendar.google.com"], access: "Read-only.", setup: "CALENDAR_ICS_URL", testable: true },
+    { id: "search", name: "Web search (Brave)", status: "not_set_up", details: [], access: "Sends your search query to Brave.", setup: "BRAVE_API_KEY", testable: false },
+  ],
+  "/api/services/calendar/test": { service: "calendar", ok: false, detail: "CalendarError: Calendar server returned HTTP 404.", checked_at: "2026-11-24T10:00:00" },
   "/api/memories/review": { stale: [{ id: 2, kind: "fact", category: "academic", topic: "supervisor", content: "Dr. Khan", importance: "medium", source: "user", created_at: "2025-01-01T00:00:00", updated_at: "2025-01-01T00:00:00", confirmed_at: "2025-01-01T00:00:00", last_used_at: null, needs_review: true }], conflicts: [] },
   "/api/analytics": { weeks: Array.from({ length: 8 }, (_, i) => week(i)), streak: { current_days: 4, longest_days: 9, window_days: 90 }, commitments: { done: 3, dropped: 1, overdue: 1, kept_rate: 0.6 }, estimates: { tasks_measured: 5, median_actual_vs_estimate: 1.4 }, postponement: { total: 6, avg_before_completion: 1.5, top_reasons: [{ reason: "too big", count: 3 }] }, completions_by_weekday: { Mon: 1, Tue: 2, Wed: 0, Thu: 3, Fri: 1, Sat: 0, Sun: 0 } },
   "/api/reminders": [{ id: 1, text: "Email Dr. Khan", fire_at: "2026-11-08T04:00:00", status: "pending", linked_type: null, linked_id: null, sent_at: null }],
@@ -154,6 +168,51 @@ describe("dashboard smoke tests", () => {
     expect(screen.getByRole("button", { name: "Added" })).toBeTruthy();  // the interview template is already in use
     await user.click(screen.getByRole("button", { name: "Add" }));
     await waitFor(() => expect(calls).toContainEqual({ method: "POST", path: "/api/workflows" }));
+    expect(errors).toEqual([]);
+  });
+
+  it("Calendar tab shows a week of events and Keel's dates, switches to month and moves between weeks", async () => {
+    const calls = mockFetch();
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Calendar" }));
+    expect(await screen.findByText("Supervisor <b>meeting</b>")).toBeTruthy();  // invite text is shown as text, never as HTML
+    expect(screen.getByText("Calendar · 10:00–11:00")).toBeTruthy();
+    expect(screen.getByText("Plan · 14:00–15:00")).toBeTruthy();
+    expect(screen.getByText("DAAD scholarship")).toBeTruthy();
+    expect(screen.getByText(/Double-booked/)).toBeTruthy();
+    expect(screen.getByText(/Overdue: Old form/)).toBeTruthy();
+    expect(screen.getByText(/1h 30m in meetings · 9h 25m free/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add plan to calendar" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Next week" }));
+    await waitFor(() => expect(calls.filter((c) => c.path === "/api/calendar").length).toBeGreaterThan(1));
+    await user.click(screen.getByRole("button", { name: "Month" }));
+    expect(await screen.findAllByRole("gridcell")).toHaveLength(7);
+    await user.click(screen.getByRole("gridcell", { name: /3 item\(s\)/ }));
+    expect(await screen.findAllByText("Write chapter 2")).toHaveLength(2);  // the cell chip and the day opened below
+    expect(errors).toEqual([]);
+  });
+
+  it("Calendar tab says when no calendar is connected", async () => {
+    mockFetch({ "/api/calendar": { ...(FIXTURES["/api/calendar"] as object), calendar: "off", overdue: [] } });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Calendar" }));
+    expect(await screen.findByText(/No calendar connected/)).toBeTruthy();
+    expect(errors).toEqual([]);
+  });
+
+  it("Services tab lists connections without secrets and runs a check", async () => {
+    const calls = mockFetch();
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Services" }));
+    expect(await screen.findByText("Groq · openai/gpt-oss-120b")).toBeTruthy();
+    expect(screen.getByText("BRAVE_API_KEY")).toBeTruthy();  // setup hint for what isn't connected
+    expect(screen.getAllByRole("button", { name: "Check connection" })).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: "Check connection" }));
+    await waitFor(() => expect(calls).toContainEqual({ method: "POST", path: "/api/services/calendar/test" }));
+    expect((await screen.findByRole("status")).textContent).toMatch(/Failed: CalendarError: Calendar server returned HTTP 404/);
     expect(errors).toEqual([]);
   });
 

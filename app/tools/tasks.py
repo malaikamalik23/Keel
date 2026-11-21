@@ -102,10 +102,10 @@ class CreateTaskInput(BaseModel):
     waiting_on: str | None = Field(None, max_length=120, description="Who/what the user waits for.")
     follow_up_date: date | None = Field(None, description="When to chase them.")
     project_id: int | None = None
-    before_event_uid: str | None = Field(None, max_length=255, description="read_calendar uid of an event this must be ready for.")
+    before_event_uid: str | None = Field(None, max_length=255, description="read_calendar uid")
     # Advertised as a plain string: Groq rejects "date-time" values without seconds (see test_reminder_time_schema...).
     before_event_start: Annotated[datetime | None, WithJsonSchema({"type": "string"})] = Field(
-        None, description="That event's start, from read_calendar, e.g. 2026-11-20T14:00.")
+        None, description="its start, e.g. 2026-11-20T14:00")
 
 
 def create_task(ctx: ToolContext, p: CreateTaskInput, calendar_source: Callable[[], str] | None = None) -> dict:
@@ -330,7 +330,7 @@ def register(registry: ToolRegistry, calendar_source: Callable[[], str] | None =
             description=(
                 "Create a task. Use when the user wants to add something to their to-do list or commits to doing "
                 "something concrete. Prefer one clear next action per task. Routines: repeats. Waiting on someone: "
-                "waiting_on (+ follow_up_date). Must be ready for a meeting: before_event_uid/start."
+                "waiting_on (+ follow_up_date). For a meeting: before_event_*."
             ),
             permission=Permission.WRITE,
             input_model=CreateTaskInput,

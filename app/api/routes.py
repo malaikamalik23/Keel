@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.api import schemas
 from app.container import Container
 from app.db.models import (
+    ApplicationDraft,
     AuditLog,
     Checkin,
     Commitment,
@@ -24,6 +25,7 @@ from app.db.models import (
     Memory,
     Message,
     Notification,
+    Opportunity,
     PendingAction,
     PlanItem,
     Project,
@@ -351,6 +353,50 @@ def briefing(db: Session = Depends(get_db), c: Container = Depends(get_container
     facts["calendar_warnings"] = calendar_warnings(db, c.calendar_source, today, tz, workday)
     events = calendar_events(c.calendar_source, today, tz)
     return {**facts, "calendar": events, "text": briefing_text(facts, events)}
+
+
+# ---------- applications (Keel prepares; the user submits)
+@router.get("/opportunities")
+def opportunities(status_filter: Literal["active", "all"] = Query("active", alias="status"), db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    from app.tools.applications import opportunity_dict
+
+    today = datetime.now(ZoneInfo(c.settings.agent_timezone)).date()
+    stmt = select(Opportunity)
+    if status_filter == "active":
+        stmt = stmt.where(Opportunity.status.notin_(("accepted", "rejected", "withdrawn")))
+    rows = sorted(db.scalars(stmt), key=lambda o: (o.deadline is None, o.deadline or date.max, o.id))
+    drafts: dict[int, list[dict]] = {}
+    for d in db.scalars(select(ApplicationDraft).order_by(ApplicationDraft.updated_at.desc())):
+        drafts.setdefault(d.opportunity_id or 0, []).append({"id": d.id, "kind": d.kind, "title": d.title, "content": d.content})
+    return [{**opportunity_dict(o, today), "eligibility": o.eligibility, "notes": o.notes, "drafts": drafts.get(o.id, [])} for o in rows]
+
+
+@router.post("/opportunities", status_code=status.HTTP_201_CREATED)
+def add_opportunity(body: dict, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    return _run_user_tool(c, db, "add_opportunity", body)
+
+
+@router.patch("/opportunities/{opportunity_id}")
+def update_opportunity(opportunity_id: int, body: dict, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    if db.get(Opportunity, opportunity_id) is None:
+        raise NotFoundError(f"No opportunity with id {opportunity_id}.")
+    return _run_user_tool(c, db, "update_opportunity", {**body, "opportunity_id": opportunity_id})
+
+
+@router.delete("/opportunities/{opportunity_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_opportunity(opportunity_id: int, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    if db.get(Opportunity, opportunity_id) is None:
+        raise NotFoundError(f"No opportunity with id {opportunity_id}.")
+    _run_user_tool(c, db, "delete_opportunity", {"opportunity_id": opportunity_id})
+
+
+@router.delete("/drafts/{draft_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_draft(draft_id: int, db: Session = Depends(get_db)):
+    d = db.get(ApplicationDraft, draft_id)
+    if d is None:
+        raise NotFoundError(f"No draft with id {draft_id}.")
+    db.delete(d)
+    db.commit()
 
 
 @router.get("/accountability")

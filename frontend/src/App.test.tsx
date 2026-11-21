@@ -18,6 +18,7 @@ const FIXTURES: Record<string, unknown> = {
     { id: 2, kind: "fact", category: "academic", topic: "supervisor", content: "Dr. Khan", importance: "medium", source: "user", created_at: "2025-01-01T00:00:00", updated_at: "2025-01-01T00:00:00", confirmed_at: "2025-01-01T00:00:00", last_used_at: null, needs_review: true },
   ],
   "/api/briefing": { date: "2026-11-18", weekday: "Wednesday", next_action: { id: 1, title: "Write FYP intro", priority: "high" }, plan: { exists: true, items_left: 1, items_total: 2 }, due_today: [], overdue: [], coming_up: [{ id: 4, title: "GRE set 4", priority: "medium", due: "2026-11-20" }], commitments_due_soon: [], follow_ups_due: [{ title: "Revise chapter 2", waiting_on: "Dr. Khan", since: "2026-11-18" }], waiting_count: 1, blocked_count: 0, slipping: [], calendar: [{ title: "Supervisor meeting", time: "10:00-10:30", minutes: 30 }], text: "", important_dates: [{ title: "GRE exam", date: "2026-11-21", days_left: 3 }], calendar_warnings: ["Tomorrow: 1 pair(s) of calendar events overlap. You can't be in both."] },
+  "/api/opportunities": [{ id: 1, kind: "internship", title: "Google STEP", organization: "Google", url: "javascript:alert(1)", location: null, deadline: "2026-12-15", status: "preparing", documents: [{ name: "CV", status: "ready" }, { name: "Recommendation letter", status: "requested", from: "Dr. Khan" }], missing: ["Recommendation letter (Dr. Khan)"], next_step: null, next_step_date: null, applied_on: null, days_left: 24, eligibility: null, notes: null, drafts: [{ id: 3, kind: "cover_letter", title: "Cover letter v1", content: "Dear team, [ADD: your CGPA]" }] }],
   "/api/memories/review": { stale: [{ id: 2, kind: "fact", category: "academic", topic: "supervisor", content: "Dr. Khan", importance: "medium", source: "user", created_at: "2025-01-01T00:00:00", updated_at: "2025-01-01T00:00:00", confirmed_at: "2025-01-01T00:00:00", last_used_at: null, needs_review: true }], conflicts: [] },
   "/api/analytics": { weeks: Array.from({ length: 8 }, (_, i) => week(i)), streak: { current_days: 4, longest_days: 9, window_days: 90 }, commitments: { done: 3, dropped: 1, overdue: 1, kept_rate: 0.6 }, estimates: { tasks_measured: 5, median_actual_vs_estimate: 1.4 }, postponement: { total: 6, avg_before_completion: 1.5, top_reasons: [{ reason: "too big", count: 3 }] }, completions_by_weekday: { Mon: 1, Tue: 2, Wed: 0, Thu: 3, Fri: 1, Sat: 0, Sun: 0 } },
   "/api/reminders": [{ id: 1, text: "Email Dr. Khan", fire_at: "2026-11-08T04:00:00", status: "pending", linked_type: null, linked_id: null, sent_at: null }],
@@ -62,7 +63,7 @@ describe("dashboard smoke tests", () => {
 
   it.each([
     ["Goals", /Web pentesting/], ["Projects", /Graduate/], ["Commitments", /Finish the GRE set/], ["Memory", /Focuses best in the morning/],
-    ["Insights", /day streak/], ["Activity", /Email Dr\. Khan/], ["Approvals", /Permanently delete task #1/],
+    ["Applications", /Google STEP/], ["Insights", /day streak/], ["Activity", /Email Dr\. Khan/], ["Approvals", /Permanently delete task #1/],
   ] as const)("renders the %s tab without errors", async (tab, text) => {
     mockFetch();
     const user = userEvent.setup();
@@ -85,6 +86,18 @@ describe("dashboard smoke tests", () => {
     await user.selectOptions(screen.getByLabelText("New memory kind"), "decision");
     await user.click(screen.getByRole("button", { name: "Add" }));
     await waitFor(() => expect(calls).toContainEqual({ method: "POST", path: "/api/memories" }));
+    expect(errors).toEqual([]);
+  });
+
+  it("Applications never turn a non-http link into a clickable one", async () => {
+    mockFetch();
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Applications" }));
+    expect(await screen.findByText(/Google STEP/)).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "posting" })).toBeNull();  // its url was javascript:alert(1)
+    expect(document.querySelector('a[href^="javascript"]')).toBeNull();
+    expect(await screen.findByText("Recommendation letter (Dr. Khan)")).toBeTruthy();
     expect(errors).toEqual([]);
   });
 

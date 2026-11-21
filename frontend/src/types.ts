@@ -15,6 +15,14 @@ export interface Briefing {
   calendar: { title: string; time: string; minutes: number }[] | null; text: string;
   important_dates?: { title: string; date: string; days_left: number }[]; calendar_warnings?: string[];
 }
+export interface AppDoc { name: string; status: string; from?: string; }
+export interface AppDraft { id: number; kind: string; title: string; content: string; }
+export interface Opportunity {
+  id: number; kind: string; title: string; organization: string | null; url: string | null; location: string | null;
+  deadline: string | null; status: string; documents: AppDoc[]; missing: string[]; next_step: string | null;
+  next_step_date: string | null; applied_on: string | null; days_left?: number; eligibility: string | null; notes: string | null;
+  drafts: AppDraft[];
+}
 export interface MemoryReview { stale: Memory[]; conflicts: Memory[][]; }
 export interface PendingAction { id: number; tool_name: string; summary: string; status: string; created_at: string; }
 export interface AuditEntry { id: number; created_at: string; actor: string; tool_name: string; permission: string; status: string; detail: string | null; }

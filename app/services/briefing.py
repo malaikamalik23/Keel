@@ -70,7 +70,18 @@ def build_briefing(db: Session, today: date) -> dict:
         "blocked_count": sum(1 for t in open_tasks if not t.waiting_on and open_blocker(db, t) is not None),
         "slipping": [{"title": t.title, "postponed": t.postponement_count} for t in open_tasks if t.postponement_count >= 2][:3],
         "important_dates": _upcoming_dates(db, today),
+        "applications_due_soon": _applications_due(db, today),
     }
+
+
+def _applications_due(db: Session, today: date) -> list[dict]:
+    from app.db.models import Opportunity
+    from app.tools.applications import missing_documents
+
+    rows = [o for o in db.scalars(select(Opportunity).where(Opportunity.status.in_(("interested", "preparing")), Opportunity.deadline.isnot(None)))
+            if 0 <= (o.deadline - today).days <= 7]
+    rows.sort(key=lambda o: o.deadline)
+    return [{"title": o.title, "deadline": o.deadline.isoformat(), "missing": len(missing_documents(o))} for o in rows][:5]
 
 
 def _upcoming_dates(db: Session, today: date) -> list[dict]:
@@ -157,6 +168,10 @@ def briefing_text(b: dict, events: list[dict] | None = None) -> str:
         lines.append("Coming up: " + ", ".join(f"{t['title']} ({t['due']})" for t in b["coming_up"][:3]) + ".")
     if b["follow_ups_due"]:
         lines.append("Time to follow up: " + ", ".join(f"{f['waiting_on']} about {f['title']}" for f in b["follow_ups_due"][:3]) + ".")
+    if b.get("applications_due_soon"):
+        lines.append("Applications closing soon: " + ", ".join(
+            f"{a['title']} ({a['deadline']}{', ' + str(a['missing']) + ' document(s) missing' if a['missing'] else ''})"
+            for a in b["applications_due_soon"][:3]) + ".")
     if b.get("important_dates"):
         lines.append("Dates: " + ", ".join(f"{d['title']} ({'today' if d['days_left'] == 0 else d['date']})" for d in b["important_dates"][:3]) + ".")
     for warning in b.get("calendar_warnings", [])[:2]:

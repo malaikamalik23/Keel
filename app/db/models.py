@@ -180,6 +180,47 @@ class ImportantDate(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+
+class Opportunity(Base):
+    """A job, internship, scholarship or programme the user is considering or applying to. Keel prepares; the user
+    submits. `documents` is the checklist: [{"name": "SOP", "status": "needed"|"drafting"|"ready"|"requested"|"received",
+    "from": "Dr. Khan" (recommendation letters)}]."""
+
+    __tablename__ = "opportunities"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16), default="job")  # job|internship|scholarship|program|other
+    title: Mapped[str] = mapped_column(String(200))
+    organization: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    location: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    deadline: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    # interested|preparing|applied|interview|offer|accepted|rejected|withdrawn
+    status: Mapped[str] = mapped_column(String(16), default="interested", index=True)
+    eligibility: Mapped[str | None] = mapped_column(Text, nullable=True)
+    documents: Mapped[Any] = mapped_column(JSON, default=list)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    next_step: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    next_step_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    applied_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class ApplicationDraft(Base):
+    """Text Keel helped write for an application: cover letter, statement of purpose, CV section, an answer, a follow-up."""
+
+    __tablename__ = "application_drafts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    opportunity_id: Mapped[int | None] = mapped_column(ForeignKey("opportunities.id", ondelete="CASCADE"), nullable=True, index=True)
+    kind: Mapped[str] = mapped_column(String(24))  # cover_letter|sop|cv|answer|follow_up|interview_prep|other
+    title: Mapped[str] = mapped_column(String(200))
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
 class Memory(Base):
     """A durable fact about the user that helps the agent help them (preferences, context, facts)."""
 

@@ -40,6 +40,7 @@ GROUP_INFO: dict[str, str] = {
     "web": "web: search the web, read a web page",
     "github": "github: repositories, READMEs, issues, recent commits",
     "notes": "notes: search and read the user's own notes and papers",
+    "applications": "applications: jobs, scholarships, SOPs",
 }
 
 TOOL_GROUP: dict[str, str] = {
@@ -50,6 +51,7 @@ TOOL_GROUP: dict[str, str] = {
     **dict.fromkeys(["create_goal", "list_goals", "update_goal", "add_milestones", "milestone_to_tasks", "create_project", "list_projects", "update_project"], "goals"),
     **dict.fromkeys(["save_memory", "search_memories", "review_memories", "update_memory", "delete_memory"], "memory"),
     **dict.fromkeys(["create_reminder", "list_reminders", "cancel_reminder", "add_important_date", "list_important_dates", "delete_important_date"], "reminders"),
+    **dict.fromkeys(["add_opportunity", "list_opportunities", "update_opportunity", "delete_opportunity", "prepare_application", "save_draft", "list_drafts"], "applications"),
     "read_calendar": "calendar",
     **dict.fromkeys(["web_fetch", "web_search"], "web"),
     **dict.fromkeys(["github_list_repos", "github_get_readme", "github_list_issues", "github_recent_commits"], "github"),
@@ -87,6 +89,7 @@ KEYWORDS: dict[str, re.Pattern[str]] = {
                   r"\bhow i (like|study|work|learn)\b", r"\bi (study|work|focus|learn|sleep|concentrate)( best| better| well)?\b", r"\bkeep in mind\b", r"\bfrom now on\b", r"\bdo you know\b",
                   r"\bfyi\b", r"\bmy (supervisor|advisor|mentor|teacher|manager|boss|roommate|sister|brother|mother|father) is\b", r"\b(tips|advice) (for|on)\b",
                   r"\byaad rakh\w*"),  # Roman Urdu: remember
+    "applications": _rx(r"\bjobs?\b", r"\binternships?\b", r"\bscholarships?\b", r"\bfellowships?\b", r"\badmissions?\b", r"\bappl(y|ied|ying|ications?)\b", r"\bcover letter\b", r"\bsop\b", r"\bstatement of purpose\b", r"\b(cv|resume|résumé)\b", r"\brecommendation letters?\b", r"\binterviews?\b", r"\bposting\b", r"\bvacanc(y|ies)\b", r"\beligib\w*"),
     "reminders": _rx(r"\bbirthday\w*", r"\banniversar\w*", r"\bimportant dates?\b", r"\bexam\b", r"\bremind\w*", r"\balarm\b", r"\bnotify me\b", r"\bping me\b", r"\bnudge me\b", r"\bwake me\b", r"\balert me\b", r"\bdon'?t let me forget\b",
                      r"\byaad dila\w*"),  # Roman Urdu: remind me
     "calendar": _rx(r"\bcalendar\b", r"\bmeetings?\b", r"\bappointments?\b", r"\bfree time\b", r"\bbusy\b", r"\bavailabilit\w*", r"\bam i free\b", r"\bany(thing| plans)? on (mon|tues|wednes|thurs|fri|satur|sun)day\b", r"\bnext (week|few days)\b", r"\bwhat'?s on (my )?(day|week|schedule)\b"),

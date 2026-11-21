@@ -71,6 +71,28 @@ def detect_nudges(db: Session, now_local: datetime, tz: ZoneInfo) -> list[Nudge]
                 f"{d['title']} is {when}.",
             ))
 
+    # Applications: a week, three days, one day before the deadline and on the day, saying what is still missing.
+    from app.db.models import Opportunity
+    from app.tools.applications import missing_documents
+
+    for o in db.scalars(select(Opportunity).where(Opportunity.status.in_(("interested", "preparing")), Opportunity.deadline.isnot(None))):
+        days = (o.deadline - today).days
+        if days in (7, 3, 1, 0):
+            missing = missing_documents(o)
+            when = "today" if days == 0 else f"in {days} day(s) ({o.deadline:%b %d})"
+            still = f" Still missing: {', '.join(missing[:4])}." if missing else " Everything on the checklist is ready."
+            out.append(Nudge(
+                "high" if days <= 1 else "normal", f"application-deadline:{o.id}:{o.deadline}:{days}",
+                {"what": "application_deadline", "title": o.title, "organization": o.organization, "days_left": days, "missing": missing[:6]},
+                f"The application “{o.title}”{' at ' + o.organization if o.organization else ''} closes {when}.{still}",
+            ))
+    for o in db.scalars(select(Opportunity).where(Opportunity.next_step_date == today, Opportunity.status.notin_(("accepted", "rejected", "withdrawn")))):
+        out.append(Nudge(
+            "normal", f"application-step:{o.id}:{today}",
+            {"what": "application_next_step", "title": o.title, "next_step": o.next_step},
+            f"Next step for “{o.title}”: {o.next_step or 'check where this application stands'}.",
+        ))
+
     # Heads-up: promises and high-priority tasks due tomorrow, so there is still a day to do them (one message a day).
     tomorrow = today + timedelta(days=1)
     due_tomorrow = [c.text for c in db.scalars(select(Commitment).where(Commitment.status == "open", Commitment.deadline == tomorrow))]

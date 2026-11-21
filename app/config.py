@@ -90,6 +90,13 @@ class Settings(BaseSettings):
     github_token: str | None = None  # optional: private repos and higher rate limits (read-only scope is enough)
     github_user: str | None = None  # default owner for github_list_repos
 
+    # ---- Gmail (your own Google OAuth client; connect once with `python -m scripts.gmail_connect`) ----
+    gmail_client_id: str | None = None
+    gmail_client_secret: str | None = None  # a "Desktop app" client's secret; Google treats it as not truly secret
+    gmail_token_path: str = "data/gmail_token.json"  # noqa: S105 # nosec B105 - a file path, not a secret; data/ is never committed
+    gmail_send_enabled: bool = True  # false = Keel can read and draft but never send (each send needs approval anyway)
+    gmail_max_sends_per_day: int = Field(20, ge=0, le=200)
+
     rate_limit_per_minute: int = 30  # per client, for endpoints that call the LLM (/api/chat, /api/scheduler/tick). 0 = off
 
     # Built dashboard (frontend/dist). Served at / when the directory exists; blank/None disables.

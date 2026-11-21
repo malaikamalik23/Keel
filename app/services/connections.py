@@ -34,7 +34,7 @@ def mask_email(addr: str | None) -> str | None:
 
 def secrets(s: Settings) -> list[str]:
     return [v for v in (s.anthropic_api_key, s.groq_api_key, s.brave_api_key, s.github_token, s.telegram_bot_token,
-                        s.calendar_ics_url, s.telegram_chat_id, s.smtp_password, s.api_key) if v and len(v) >= 4]
+                        s.calendar_ics_url, s.telegram_chat_id, s.smtp_password, s.api_key, s.gmail_client_secret) if v and len(v) >= 4]
 
 
 def scrub(message: str, s: Settings) -> str:
@@ -130,8 +130,25 @@ def check_model(s: Settings) -> str:
     return f"{s.ollama_model} is installed and can call tools"
 
 
+def gmail_connected(s: Settings) -> bool:
+    from app.integrations.gmail import load_token
+
+    return bool(s.gmail_client_id) and load_token(Path(s.gmail_token_path)) is not None
+
+
+def check_gmail(s: Settings) -> str:
+    from app.integrations.gmail import GmailClient
+
+    _need(s.gmail_client_id, "GMAIL_CLIENT_ID")
+    if not gmail_connected(s):
+        raise Skip("not connected yet: run `python -m scripts.gmail_connect`")
+    p = GmailClient(s.gmail_client_id, s.gmail_client_secret, Path(s.gmail_token_path)).profile()  # read-only
+    return f"signed in as {mask_email(p.get('emailAddress'))}; {p.get('messagesTotal', '?')} messages"
+
+
 CHECKS: dict[str, Callable[[Settings], str]] = {
     "model": check_model,
+    "gmail": check_gmail,
     "search": check_brave, "github": check_github, "notes": check_notes,
     "calendar": check_calendar, "telegram": check_telegram, "email": check_email,
 }
@@ -191,6 +208,15 @@ def describe(s: Settings, indexed_documents: int | None = None) -> list[dict]:
                     + (["Delivers your reminders and check-ins"] if channel == "email" else []),
          "access": "Sends plain-text mail to your own address only. Keel never reads your inbox.",
          "setup": "SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD and EMAIL_TO"},
+        {"id": "gmail", "name": "Gmail", "status": "not_set_up" if not s.gmail_client_id else "connected" if gmail_connected(s) else "partial",
+         "details": ([] if not s.gmail_client_id else
+                     (["Reads and searches your mail; saves drafts",
+                       f"Sends only after you approve each email (at most {s.gmail_max_sends_per_day} a day)" if s.gmail_send_enabled
+                       else "Sending is off (GMAIL_SEND_ENABLED=false)"]
+                      if gmail_connected(s) else ["Not signed in yet: run python -m scripts.gmail_connect"])),
+         "access": "Read your mail; create drafts; send only what you approve. Can't delete mail or change labels or filters. "
+                   "Emails are treated as untrusted text.",
+         "setup": "GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET, then python -m scripts.gmail_connect"},
         {"id": "calendar", "name": "Calendar", "status": "connected" if s.calendar_ics_url else "not_set_up",
          "details": [f"iCal feed from {_host(s.calendar_ics_url) or 'an unknown host'}"] if s.calendar_ics_url else [],
          "access": "Read-only. Keel never changes your calendar; plans download as a file you import yourself.",

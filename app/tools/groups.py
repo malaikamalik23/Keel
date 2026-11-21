@@ -43,6 +43,7 @@ GROUP_INFO: dict[str, str] = {
     "notes": "notes: search, read, compare documents; deadlines, action items",
     "applications": "applications: jobs, scholarships, SOPs",
     "workflows": "workflows: when X happens, do Y",
+    "email": "email: Gmail read, draft, send",
 }
 
 TOOL_GROUP: dict[str, str] = {
@@ -55,6 +56,7 @@ TOOL_GROUP: dict[str, str] = {
     **dict.fromkeys(["create_reminder", "list_reminders", "cancel_reminder", "add_important_date", "list_important_dates", "delete_important_date"], "reminders"),
     **dict.fromkeys(["add_opportunity", "list_opportunities", "update_opportunity", "delete_opportunity", "prepare_application", "save_draft", "list_drafts"], "applications"),
     **dict.fromkeys(["create_workflow", "list_workflows", "run_workflow", "set_workflow_enabled", "workflow_history"], "workflows"),
+    **dict.fromkeys(["gmail_search", "gmail_read", "gmail_triage", "gmail_extract", "gmail_draft", "gmail_send", "gmail_save_attachment"], "email"),
     "read_calendar": "calendar",
     **dict.fromkeys(["web_fetch", "web_search"], "web"),
     **dict.fromkeys(["github_list_repos", "github_get_readme", "github_list_issues", "github_list_pulls", "github_recent_commits"], "github"),
@@ -99,6 +101,9 @@ KEYWORDS: dict[str, re.Pattern[str]] = {
                       r"\bif .{1,60}\bthen\b", r"\bwhen(ever)? (i|a|an|my) [^?]{1,60}(,| then)"),
     "reminders": _rx(r"\bbirthday\w*", r"\banniversar\w*", r"\bimportant dates?\b", r"\bexam\b", r"\bremind\w*", r"\balarm\b", r"\bnotify me\b", r"\bping me\b", r"\bnudge me\b", r"\bwake me\b", r"\balert me\b", r"\bdon'?t let me forget\b",
                      r"\byaad dila\w*"),  # Roman Urdu: remind me
+    "email": _rx(r"\be-?mails?\b", r"\bmail\b", r"\bgmail\b", r"\binbox\b", r"\bmessages? from\b", r"\bwrote to me\b", r"\breply\b", r"\brepl(y|ied) to\b",
+                 r"\bdrafts?\b", r"\bsend (him|her|them|it|a|an|the)\b", r"\bforward\b", r"\bunread\b", r"\battachments?\b", r"\bfollow[- ]?ups?\b",
+                 r"\b[\w.+-]+@[\w-]+\.[\w.]+\b"),
     "calendar": _rx(r"\bcalendar\b", r"\bmeetings?\b", r"\bappointments?\b", r"\bfree time\b", r"\bbusy\b", r"\bavailabilit\w*", r"\bam i free\b", r"\bany(thing| plans)? on (mon|tues|wednes|thurs|fri|satur|sun)day\b", r"\bnext (week|few days)\b", r"\bwhat'?s on (my )?(day|week|schedule)\b"),
     "web": _rx(r"\bsearch\b", r"\bgoogle\b", r"\blook(ing)? up\b", r"\bonline\b", r"\bweb\b", r"\binternet\b", r"\blatest\b", r"\bnews\b", r"\bpapers?\b",
                r"\barticles?\b", r"\barxiv\b", r"https?://", r"\bwww\.", r"\bresearch\b", r"\bsurvey\b", r"\bwikipedia\b", r"\bsources?\b", r"\btechniques?\b", r"\bliterature\b", r"\bwhat'?s new\b", r"\bstate of the art\b", r"\bsota\b"),

@@ -41,7 +41,7 @@ ACTIVE = ("running", "retrying")
 WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 EVENTS = ("task_completed", "opportunity_added", "opportunity_status", "blocker_logged")
 # Tools a workflow may never use: the workflow tools themselves (no workflows that build or start workflows).
-NOT_IN_WORKFLOWS = {"load_tools", "create_workflow", "run_workflow", "set_workflow_enabled", "list_workflows", "workflow_history"}
+NOT_IN_WORKFLOWS = {"load_tools", "gmail_send", "create_workflow", "run_workflow", "set_workflow_enabled", "list_workflows", "workflow_history"}
 
 
 # ------------------------------------------------------------------ definitions

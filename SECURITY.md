@@ -102,6 +102,15 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
    failed check's message is scrubbed of every configured secret. Each check is one read-only request: Telegram uses
    `getMe`, email logs in and hangs up, and nothing is sent. The Calendar tab shows invite titles as plain text with
    links removed, and none of it is passed to the model.
+   Gmail is the biggest injection channel, because anyone can email you. So: every tool that reads mail is
+   `returns_untrusted` (fenced, sanitised, taints the turn, and HTML is reduced to visible text); a draft is a write, so
+   once mail has been read in a turn it waits for approval too; sending is high impact, and the approval shows the exact
+   recipients, subject, text and attachments (with a content fingerprint), warns about any address you have never
+   written to or heard from, and is re-checked at approval time, so an email changed after you approved it is not
+   sent. At most `GMAIL_MAX_SENDS_PER_DAY` sends a day; workflows can't send mail; addresses and subjects can't carry
+   extra headers. Keel asks Google only for read and compose access (no delete, labels or filters). The refresh token
+   stays in a local file under `data/` (never committed); access tokens live in memory only and no error message
+   contains a token. The red-team suite reads a poisoned inbox and tries to send and draft mail to the attacker.
    With `LLM_PROVIDER=ollama` the model runs on the user's own computer, so no chat, memory or document text goes to a
    model provider. Keel refuses a plain-`http` Ollama address on another machine (only `https` there), so chats are
    never sent unencrypted over a network. A local model gets the same tool permissions, taint rules and approvals.

@@ -128,7 +128,7 @@ def test_services_page_never_shows_a_secret():
     s = make_settings(**SECRETS, github_user="someone", notes_dir="C:/Users/x/Study notes", scheduler_enabled=True)
     rows = {r["id"]: r for r in connections.describe(s, indexed_documents=12)}
     dumped = json.dumps(rows)
-    for secret in ("SECRET", "987654321", "malaika@", "private-"):
+    for secret in [v for k, v in SECRETS.items() if k not in ("smtp_host", "smtp_username", "email_to")] + ["malaika@", "private-"]:
         assert secret not in dumped
     assert rows["model"]["status"] == "connected" and rows["model"]["details"] == [f"Groq · {s.agent_model}"]
     assert rows["telegram"]["status"] == "connected" and "Delivers your reminders and check-ins" in rows["telegram"]["details"]
@@ -159,7 +159,7 @@ def test_a_failing_check_is_scrubbed_and_never_raises():
         raise RuntimeError(f"GET {st.calendar_ics_url} failed with key {st.brave_api_key}")
 
     out = connections.run_check("calendar", s, leaky)
-    assert out["ok"] is False and "SECRET" not in out["detail"] and "***" in out["detail"]
+    assert out["ok"] is False and "BRAVE_SECRET_456" not in out["detail"] and "private-SECRETCAL" not in out["detail"] and "***" in out["detail"]
     assert connections.run_check("search", make_settings())["ok"] is None  # not set up: nothing to check
 
 
@@ -167,7 +167,7 @@ def test_services_endpoints(monkeypatch):
     app = create_app(make_settings(**{k: v for k, v in SECRETS.items() if k != "api_key"}), ScriptedLLM([]))
     client = local_client(app)
     body = client.get("/api/services").json()
-    assert [r["id"] for r in body][:3] == ["model", "telegram", "email"] and "SECRET" not in json.dumps(body)
+    assert [r["id"] for r in body][:3] == ["model", "telegram", "email"] and not any(v in json.dumps(body) for k, v in SECRETS.items() if k not in ("smtp_host", "smtp_username", "email_to", "api_key"))
 
     calls = []
     monkeypatch.setitem(connections.CHECKS, "telegram", lambda st: calls.append(1) or "token valid")

@@ -18,6 +18,7 @@ from app.tools import (
     workflows,
 )
 from app.tools import github as github_tools
+from app.tools import gmail as gmail_tools
 from app.tools import web as web_tools
 from app.tools.base import ToolRegistry
 
@@ -25,6 +26,7 @@ from app.tools.base import ToolRegistry
 def build_default_registry(
     calendar_source: Callable[[], str] | None = None, *, fetcher=None, search=None, github=None, github_user: str | None = None,
     notes_enabled: bool = False, workday: tuple[str, str] = ("09:00", "21:00"), workflow_engine: dict | None = None,
+    gmail=None, gmail_send: bool = True, gmail_max_sends: int = 20, notes_dir: str | None = None,
 ) -> ToolRegistry:
     """Tools that need configuration (calendar, web, notes, GitHub) are only advertised to the model when configured."""
     registry = ToolRegistry()
@@ -45,6 +47,9 @@ def build_default_registry(
         github_tools.register(registry, github, github_user)
     if notes_enabled:
         notes.register(registry)
+    if gmail is not None:
+        gmail_tools.register(registry, gmail, send_enabled=gmail_send, notes_dir=notes_dir if notes_enabled else None,
+                             max_sends_per_day=gmail_max_sends)
     workflows.register(registry, workflow_engine if workflow_engine is not None else {})  # after the tools its steps may use
     groups.register_load_tools(registry)
     return registry

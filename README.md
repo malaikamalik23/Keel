@@ -15,6 +15,7 @@ machine, with your data in one SQLite file.
 | | |
 |---|---|
 | **Chat** | Talk to it in the web dashboard or the terminal. It calls tools to read and change your data. Reminders and check-ins arrive by email. |
+| **Gmail** | Search and read your mail, summarize a thread, sort the inbox into deadlines, needs-a-reply, applications and newsletters, and pull out dates and action items. Keel drafts replies and follow-ups into your Gmail Drafts; it sends only after you approve the exact recipients, subject, text and attachments (with a warning for an address you've never written to), at most 20 a day. Attachments can be saved into your notes folder to search later. Emails are treated as untrusted text, so instructions inside one can't make Keel act. You connect your own Google account once; Keel can't delete mail or change labels. |
 | **Voice** | In the dashboard's chat, press the microphone and speak (English or Urdu): your words fill the message box and you press Send, so a misheard word never runs a command. Replies can be read aloud, by switching on "Read replies aloud" or with the Read aloud button on any reply. It uses your browser's own speech features, so there is no extra key or service to set up. Dictation works in Chrome, Edge and Safari; in Chrome and Edge the audio goes to the browser's own speech service (Google or Microsoft). Read-aloud works in every current browser. |
 | **Projects** | A progress report built from the database (tasks done, overdue and waiting, time worked), a log of updates, blockers and decisions with their reasons, attached notes and links, and the project's GitHub pull requests. A blocker still open after 3 and 7 days gets a nudge. Mentioning a project by name ("my FYP is stuck") is enough. |
 | **Goals → milestones → tasks** | "I want to get good at web pentesting" becomes a goal, ordered milestones, and concrete first tasks. |
@@ -72,7 +73,7 @@ pip install -r requirements-dev.txt
 cp .env.example .env                                      # Windows: copy .env.example .env
 #   then edit .env: set ANTHROPIC_API_KEY (or GROQ_API_KEY) and AGENT_TIMEZONE
 
-pytest -q                                                 # ~680 tests, no key or network needed
+pytest -q                                                 # ~700 tests, no key or network needed
 
 (cd frontend && npm ci && npm run build)                  # build the dashboard once
 uvicorn app.api.main:create_app --factory                 # dashboard + API at http://127.0.0.1:8000
@@ -117,6 +118,7 @@ The ones you'll touch first:
 | Setting | Why |
 |---|---|
 | `ANTHROPIC_API_KEY` / `GROQ_API_KEY`, `AGENT_MODEL` | The LLM. Groq models must support tool calling (`openai/gpt-oss-120b` works on Groq's free tier; set `HISTORY_MESSAGE_LIMIT=12` there). |
+| `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET` | Gmail, with an OAuth client from your own Google Cloud project; then run `python -m scripts.gmail_connect` once. See [Connect Gmail](docs/INSTALL.md#connect-gmail). |
 | `LLM_PROVIDER=ollama`, `OLLAMA_MODEL` | Or run a model on your own computer with [Ollama](https://ollama.com): no key, and chats never leave the machine. Slower and less accurate than a hosted model; see [the install guide](docs/INSTALL.md#run-on-a-local-model-ollama). |
 | `AGENT_TIMEZONE` | "Today", check-in times and quiet hours use it. |
 | `API_KEY` | **Not needed on your own laptop.** Leave it unset and only this computer can use Keel (not other devices, and not websites open in your browser). Set it for Docker, or before reaching Keel from another device; the dashboard then asks for it once per tab. |
@@ -138,8 +140,8 @@ Scheduler ──▶ detectors (SQL) ──▶ notification budget ──▶ LLM 
 ```
 
 - **One agent, native tool calling**, bounded loop (`MAX_AGENT_STEPS`), atomic history (a `tool_use` is never saved without its result).
-- **70 tools** in three permission tiers (one is the small `load_tools` helper); see the generated **[docs/TOOLS.md](docs/TOOLS.md)**.
-- **Lean tool profile (default).** A request that carries all 69 tool definitions is ~8,300 tokens before the conversation starts. Keel sends the core task tools plus only the groups the message needs (keywords, groups used recently, or a `load_tools` call), about 2.6-3.2k tokens. That is cheaper everywhere and is what makes it usable on Groq's free tier (8,000 tokens/minute). `TOOL_PROFILE=full` restores everything.
+- **77 tools** in three permission tiers (one is the small `load_tools` helper); see the generated **[docs/TOOLS.md](docs/TOOLS.md)**.
+- **Lean tool profile (default).** A request that carries all 76 tool definitions is ~9,000 tokens before the conversation starts. Keel sends the core task tools plus only the groups the message needs (keywords, groups used recently, or a `load_tools` call), about 2.6-3.2k tokens. That is cheaper everywhere and is what makes it usable on Groq's free tier (8,000 tokens/minute). `TOOL_PROFILE=full` restores everything.
 - **Proactivity = detectors + budget.** SQL decides *whether* something is overdue or neglected; the model only decides *how to say it*, and a deterministic fallback text is sent if the LLM is down.
 - Full design: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
@@ -154,7 +156,7 @@ python -m evals.run_routing        # how often does the model pick the right too
 ```
 
 - Agent logic is tested against a scripted fake LLM, and all network calls (email, Brave, GitHub, web pages, calendar) against mocks, so CI needs no keys and no network.
-- `evals/` holds 203 routing cases (69 with argument checks, tagged for natural-language deadlines, ambiguity, multi-step, safety, Roman Urdu and regressions), scored per category and tag, with history in `evals/history.jsonl` and a generated [dashboard](evals/dashboard.html) of scores over time, plus latency and token use per run. [More](evals/README.md).
+- `evals/` holds 215 routing cases (75 with argument checks, tagged for natural-language deadlines, ambiguity, multi-step, safety, Roman Urdu and regressions), scored per category and tag, with history in `evals/history.jsonl` and a generated [dashboard](evals/dashboard.html) of scores over time, plus latency and token use per run. [More](evals/README.md).
 - CI (GitHub Actions): lint, tests on Python 3.11 and 3.12, red-team suite, dashboard tests + build, real-Chromium end-to-end tests, dependency audit, secret scan, static analysis (Bandit and Semgrep's python, security-audit and secrets rules), Docker build plus the deployment guide's backup and restore.
 
 ## Honest status

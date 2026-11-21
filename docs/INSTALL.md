@@ -101,6 +101,28 @@ python -m scripts.smoke_integrations
 
 The dashboard's Services tab runs the same checks with its "Check connection" buttons.
 
+### Connect Gmail
+
+Keel uses your own Google Cloud project, so no one else's app ever holds access to your mail. About 10 minutes, once:
+
+1. Open [console.cloud.google.com](https://console.cloud.google.com), create a project (any name, e.g. "Keel"), and in
+   **APIs & Services → Library** enable the **Gmail API**.
+2. **APIs & Services → OAuth consent screen**: choose **External**, fill in an app name and your email, and add
+   yourself under **Test users**. Add the scopes `gmail.readonly` and `gmail.compose`.
+3. **APIs & Services → Credentials → Create credentials → OAuth client ID**, type **Desktop app**. Copy the client ID
+   and secret into `.env` as `GMAIL_CLIENT_ID` and `GMAIL_CLIENT_SECRET`.
+4. Run `python -m scripts.gmail_connect`. Your browser opens Google's sign-in; tick both permissions. Google warns the
+   app isn't verified: that's expected for your own app (choose *Continue*). The sign-in is saved in
+   `data/gmail_token.json`; keep it private. Restart Keel; the Services tab shows Gmail as connected.
+
+While the consent screen is in *Testing*, Google expires the sign-in after 7 days and you run step 4 again. To avoid
+that, press **Publish app** on the consent screen (it stays unverified and only you use it).
+
+What Keel can do: read and search mail, save drafts, and send only the emails you approve in Keel (recipients, subject,
+text and attachments exactly as shown; at most `GMAIL_MAX_SENDS_PER_DAY`). `GMAIL_SEND_ENABLED=false` makes it read
+and draft only. It can't delete mail or change labels or filters. To disconnect: `python -m scripts.gmail_connect
+--disconnect`, and remove Keel at [myaccount.google.com/permissions](https://myaccount.google.com/permissions).
+
 ### Run on a local model (Ollama)
 
 Keel can use a model on your own computer instead of Anthropic or Groq. No key is needed and your chats, tasks and

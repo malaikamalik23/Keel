@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 
 from app.agent.prompts import build_system_prompt
 from app.integrations.github import GitHubClient
+from app.integrations.gmail import GmailClient
 from app.integrations.safe_http import SafeFetcher
 from app.integrations.websearch import BraveSearch
 from app.llm.base import LLMClient
@@ -29,7 +30,8 @@ def full_registry():
     """A registry with every optional integration switched on. Only the specs matter: nothing is ever executed."""
     return build_default_registry(
         calendar_source=lambda: "", fetcher=SafeFetcher(), search=BraveSearch("unused"), github=GitHubClient(),
-        github_user="me", notes_enabled=True,
+        github_user="me", notes_enabled=True, notes_dir="notes",
+        gmail=GmailClient("unused.apps.googleusercontent.com", None, Path("unused-token.json")),
     )
 
 

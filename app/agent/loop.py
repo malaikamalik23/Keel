@@ -80,7 +80,10 @@ class Agent:
         lean = self.settings.tool_profile == "lean"
         available = registry.available_groups()
         if lean:  # advertise only the tools this message plausibly needs (see app/tools/groups.py)
-            ctx.active_groups = select_groups(message, recent_groups(history), available)
+            from app.db.models import Project
+
+            names = db.scalars(select(Project.name).where(Project.status.in_(("active", "paused")))).all()
+            ctx.active_groups = select_groups(message, recent_groups(history), available, names)
 
         result = ChatResult(conversation_id=conv.id, reply="")
         for _ in range(self.settings.max_agent_steps):

@@ -12,7 +12,8 @@ const FIXTURES: Record<string, unknown> = {
   "/api/commitments": [{ id: 1, text: "Finish the GRE set", deadline: "2026-11-09", importance: "high", status: "open", postponement_count: 1, completed_at: null }],
   "/api/accountability": { window: { start: "2026-11-01", end: "2026-11-07", days: 7 }, tasks: { created: 3, completed: 1, open_now: 2, overdue: 1, overdue_titles: ["Write FYP intro"] }, plan_adherence: { planned_items: 4, done: 2, skipped: 1, rate: 0.5 }, most_postponed: [{ task_id: 1, title: "Write FYP intro", postponement_count: 3, reasons_given: ["too big"] }], avoided_tasks: [], overdue_commitments: [], neglected_goals: [{ goal_id: 1, title: "Pentesting", days_since_activity: 21 }], work: { total_minutes: 120, sessions: 3, minutes_by_project: {} } },
   "/api/goals": [{ id: 1, title: "Web pentesting", description: "Get good", horizon: "long", category: "skills", status: "active", priority: "high", target_date: null, milestones: [{ id: 1, title: "HTTP basics", position: 0, status: "done", target_date: null }, { id: 2, title: "Auth", position: 1, status: "todo", target_date: null }] }],
-  "/api/projects": [{ id: 1, name: "FYP", description: null, purpose: "Graduate", status: "active", priority: "high", deadline: "2027-03-01", goal_id: null }],
+  "/api/projects": [{ id: 1, name: "FYP", description: null, purpose: "Graduate", status: "active", priority: "high", deadline: "2027-03-01", goal_id: null, repo: "malaikamalik23/Keel", progress: { tasks_total: 4, done: 1, open: 3, percent: 25 }, open_blockers: 1 }],
+  "/api/projects/1/report": { project: { id: 1, name: "FYP", status: "active", purpose: "Graduate", deadline: "2027-03-01", repo: "malaikamalik23/Keel" }, progress: { tasks_total: 4, done: 1, open: 3, percent: 25 }, done_in_period: ["Lit review"], overdue: [], stuck: [{ id: 2, title: "Ethics form", waiting_on: "Dr. Khan" }], minutes_worked: 90, open_blockers: [{ id: 5, kind: "blocker", text: "No GPU quota", date: "2026-11-18", resolved: false, days_open: 3 }], resolved_blockers: [], decisions: [{ id: 6, kind: "decision", text: "Use PyTorch", why: "Lab code", date: "2026-11-19" }], updates: [], links: [{ id: 1, kind: "url", target: "javascript:alert(1)", title: "Bad link" }, { id: 2, kind: "note", target: "fyp/proposal.md", title: "Proposal" }] },
   "/api/memories": [
     { id: 1, kind: "preference", category: "general", topic: null, content: "Focuses best in the morning.", importance: "high", source: "chat", created_at: "2026-11-01T00:00:00", updated_at: "2026-11-01T00:00:00", confirmed_at: "2026-11-01T00:00:00", last_used_at: null, needs_review: false },
     { id: 2, kind: "fact", category: "academic", topic: "supervisor", content: "Dr. Khan", importance: "medium", source: "user", created_at: "2025-01-01T00:00:00", updated_at: "2025-01-01T00:00:00", confirmed_at: "2025-01-01T00:00:00", last_used_at: null, needs_review: true },
@@ -98,6 +99,24 @@ describe("dashboard smoke tests", () => {
     expect(screen.queryByRole("link", { name: "posting" })).toBeNull();  // its url was javascript:alert(1)
     expect(document.querySelector('a[href^="javascript"]')).toBeNull();
     expect(await screen.findByText("Recommendation letter (Dr. Khan)")).toBeTruthy();
+    expect(errors).toEqual([]);
+  });
+
+  it("Projects show progress, blockers and decisions, and resolving a blocker calls the API", async () => {
+    const calls = mockFetch();
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: /^Projects/ }));
+    expect(await screen.findByText("1/4 tasks done")).toBeTruthy();
+    expect(screen.getByText("1 blocker(s)")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Details" }));
+    expect(await screen.findByText(/No GPU quota/)).toBeTruthy();
+    expect(screen.getByText(/Use PyTorch \(why: Lab code\)/)).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Bad link" })).toBeNull();  // javascript: stays text
+    expect(document.querySelector('a[href^="javascript"]')).toBeNull();
+    expect(screen.getByRole("link", { name: "malaikamalik23/Keel pull requests" }).getAttribute("href")).toBe("https://github.com/malaikamalik23/Keel/pulls");
+    await user.click(screen.getByRole("button", { name: "Resolved" }));
+    await waitFor(() => expect(calls).toContainEqual({ method: "POST", path: "/api/project-entries/5/resolve" }));
     expect(errors).toEqual([]);
   });
 

@@ -82,6 +82,9 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
    Applications: Keel never submits anything. Fields copied from a posting are stored as plain text (no invisible
    characters; titles as one line), links must be plain http(s), and the dashboard only makes http(s) links clickable.
    Drafts are written only from the user's own profile; missing facts are left as [ADD: ...], never invented.
+   Projects: log entries are stored as plain text with untrusted-content tags neutralised, so a stored entry can't fake a
+   fence later. Attached notes must already be indexed (no arbitrary paths), links must be http(s), and a repo must be a
+   valid `owner/name`; GitHub stays read-only (pull requests are listed, never changed).
 10. **API hardening.** `X-API-Key` (constant-time compare) or, without one, local-only access with Host and
     cross-site checks (see Scope), a per-client rate limit on LLM-calling endpoints,
     security headers (CSP `default-src 'self'`, `frame-ancestors 'none'`, `nosniff`), `Cache-Control: no-store` on API

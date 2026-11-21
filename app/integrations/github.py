@@ -91,6 +91,16 @@ class GitHubClient:
             for r in rows
         ]
 
+    def list_pulls(self, repo: str, state: str = "open", limit: int = 15) -> list[dict]:
+        owner, name = validate_repo(repo)
+        rows: Any = self._get(f"/repos/{owner}/{name}/pulls", {"state": state, "per_page": min(limit, 50), "sort": "updated", "direction": "desc"}).json()
+        return [
+            {"number": r["number"], "title": r["title"][:200], "state": r["state"], "draft": bool(r.get("draft")),
+             "merged": bool(r.get("merged_at")), "author": (r.get("user") or {}).get("login"),
+             "reviewers_requested": len(r.get("requested_reviewers") or []), "updated_at": r.get("updated_at")}
+            for r in rows[:limit]
+        ]
+
     def recent_commits(self, repo: str, limit: int = 10) -> list[dict]:
         owner, name = validate_repo(repo)
         rows: Any = self._get(f"/repos/{owner}/{name}/commits", {"per_page": min(limit, 50)}).json()

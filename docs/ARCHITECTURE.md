@@ -119,7 +119,7 @@ The JSON schema the model sees is generated from the pydantic input model that a
 
 Tools that need configuration (calendar, web, notes, GitHub) are only advertised to the model when configured.
 
-**Lean tool profile** (`app/tools/groups.py`, default). Tool definitions are ~5,800 tokens, sent with every LLM request. Tools are therefore split into 11 groups; a request carries the always-on `tasks` group plus groups chosen by keyword rules on the user's message, groups the model called recently (so "yes" keeps working), and any it requests with the `load_tools` meta-tool (the system prompt lists the unloaded groups). Result: ~2.6-3.2k tokens of overhead instead of ~7.1k. This is a *size* optimisation, not a security boundary: the executor enforces permissions, confirmation and taint on every call, advertised or not (tested).
+**Lean tool profile** (`app/tools/groups.py`, default). Tool definitions are ~6,300 tokens, sent with every LLM request. Tools are therefore split into 12 groups; a request carries the always-on `tasks` group plus groups chosen by keyword rules on the user's message, groups the model called recently (so "yes" keeps working), and any it requests with the `load_tools` meta-tool (the system prompt lists the unloaded groups). Result: ~2.6-3.3k tokens of overhead instead of ~7.6k. This is a *size* optimisation, not a security boundary: the executor enforces permissions, confirmation and taint on every call, advertised or not (tested).
 
 ## 5. Memory
 

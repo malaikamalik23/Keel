@@ -194,7 +194,7 @@ def run_eval(
         latency_ms = tokens_in = tokens_out = None
         try:
             if profile == "lean":
-                active = select_groups(case["prompt"], set(), available)
+                active = select_groups(case["prompt"], set(), available, case.get("projects", ()))
                 system, tools = build_system_prompt(FIXED_NOW, more_tools=not_loaded(active, available)), registry.specs(active)
             else:
                 system, tools = build_system_prompt(FIXED_NOW), registry.specs()

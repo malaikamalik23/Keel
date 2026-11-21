@@ -77,6 +77,9 @@ class ProjectOut(BaseModel):
     priority: str
     deadline: date | None
     goal_id: int | None
+    repo: str | None = None
+    progress: dict | None = None
+    open_blockers: int = 0
 
 
 class CommitmentOut(BaseModel):

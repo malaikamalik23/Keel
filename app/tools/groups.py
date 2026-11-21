@@ -16,6 +16,7 @@ whether or not the tool was advertised in that request.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
@@ -33,12 +34,12 @@ GROUP_INFO: dict[str, str] = {
     "plan": "plan: today's briefing, build/show today's plan, skip plan items, log time worked",
     "accountability": "accountability: what slipped or was avoided, weekly review, history of a task",
     "commitments": "commitments: promises with deadlines (propose, confirm, list, update, complete)",
-    "goals": "goals: goals, milestones and projects",
+    "goals": "goals: goals, milestones, projects (reports, blockers, decisions)",
     "memory": "memory: save, search, review, edit or forget facts, preferences and decisions about the user",
     "reminders": "reminders: schedule, list or cancel a reminder; important dates (exams, birthdays)",
     "calendar": "calendar: read calendar events and free time",
     "web": "web: search the web, read a web page",
-    "github": "github: repositories, READMEs, issues, recent commits",
+    "github": "github: repos, READMEs, issues, PRs, commits",
     "notes": "notes: search and read the user's own notes and papers",
     "applications": "applications: jobs, scholarships, SOPs",
 }
@@ -48,13 +49,13 @@ TOOL_GROUP: dict[str, str] = {
     **dict.fromkeys(["get_briefing", "get_week_overview", "plan_week", "create_daily_plan", "get_daily_plan", "update_plan_item", "log_work_session", "list_work_sessions"], "plan"),
     **dict.fromkeys(["accountability_report", "task_history"], "accountability"),
     **dict.fromkeys(["propose_commitment", "confirm_commitment", "list_commitments", "update_commitment", "complete_commitment"], "commitments"),
-    **dict.fromkeys(["create_goal", "list_goals", "update_goal", "add_milestones", "milestone_to_tasks", "create_project", "list_projects", "update_project"], "goals"),
+    **dict.fromkeys(["create_goal", "list_goals", "update_goal", "add_milestones", "milestone_to_tasks", "create_project", "list_projects", "update_project", "project_report", "log_project_entry", "resolve_blocker", "link_project"], "goals"),
     **dict.fromkeys(["save_memory", "search_memories", "review_memories", "update_memory", "delete_memory"], "memory"),
     **dict.fromkeys(["create_reminder", "list_reminders", "cancel_reminder", "add_important_date", "list_important_dates", "delete_important_date"], "reminders"),
     **dict.fromkeys(["add_opportunity", "list_opportunities", "update_opportunity", "delete_opportunity", "prepare_application", "save_draft", "list_drafts"], "applications"),
     "read_calendar": "calendar",
     **dict.fromkeys(["web_fetch", "web_search"], "web"),
-    **dict.fromkeys(["github_list_repos", "github_get_readme", "github_list_issues", "github_recent_commits"], "github"),
+    **dict.fromkeys(["github_list_repos", "github_get_readme", "github_list_issues", "github_list_pulls", "github_recent_commits"], "github"),
     **dict.fromkeys(["notes_search", "read_note"], "notes"),
 }
 
@@ -84,6 +85,7 @@ KEYWORDS: dict[str, re.Pattern[str]] = {
                        r"\bby (mon|tues|wednes|thurs|fri|satur|sun)day\b", r"\bdeadline\b", r"\bi owe\b", r"\bi committed\b"),
     "goals": _rx(r"\bgoals?\b", r"\bambition\w*", r"\bmilestone\w*", r"\bprojects?\b", r"\bwant to (learn|get good|become|master|build|improve|be)\b",
                  r"\bget good at\b", r"\blong[- ]term\b", r"\broadmap\b", r"\bcurriculum\b", r"\bdecompose\b", r"\bbreak (it|this|that|my \w+) (down|into)\b",
+                 r"\bblock(er|ers|ed|ing)\b", r"\bdecision log\b", r"\b(we|i) decided\b", r"\b(status|progress) (report|update)\b",
                  r"\bseekh\w*", r"\bsikh\w*"),  # Roman Urdu: learn
     "memory": _rx(r"\bremember\b", r"\bforget\b", r"\bmemor(y|ies)\b", r"\bprefer\w*", r"\bi (like|love|hate|usually|always|never)\b", r"\babout me\b",
                   r"\bhow i (like|study|work|learn)\b", r"\bi (study|work|focus|learn|sleep|concentrate)( best| better| well)?\b", r"\bkeep in mind\b", r"\bfrom now on\b", r"\bdo you know\b",
@@ -101,12 +103,27 @@ KEYWORDS: dict[str, re.Pattern[str]] = {
 }
 
 
-def select_groups(message: str, recent: set[str], available: set[str]) -> set[str]:
-    """Groups to advertise for this message: core + keyword matches + recently used, limited to what exists."""
+def name_variants(name: str) -> set[str]:
+    """'FYP: intrusion detection' -> {'fyp: intrusion detection', 'fyp'}: how people refer to a project in chat."""
+    full = " ".join(name.casefold().split())
+    short = re.split(r"\s*[:(\[]|\s+[-–—]\s+", full, maxsplit=1)[0].strip()
+    return {v for v in (full, short) if len(v) >= 3}
+
+
+def mentions_project(message: str, project_names: Iterable[str]) -> bool:
+    text = message.casefold()
+    return any(re.search(rf"(?<!\w){re.escape(v)}(?!\w)", text) for name in project_names for v in name_variants(name))
+
+
+def select_groups(message: str, recent: set[str], available: set[str], project_names: Iterable[str] = ()) -> set[str]:
+    """Groups to advertise for this message: core + keyword matches + recently used, limited to what exists.
+    Naming one of the user's projects ("my FYP is stuck") counts as talking about projects."""
     chosen = {CORE} | set(recent)
     for group, rx in KEYWORDS.items():
         if rx.search(message):
             chosen.add(group)
+    if mentions_project(message, project_names):
+        chosen.add("goals")
     return chosen & available
 
 

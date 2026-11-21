@@ -186,10 +186,63 @@ def projects(
     status: Literal["active", "paused", "completed", "archived", "all"] = "active",
     db: Session = Depends(get_db),
 ):
+    from app.services.project_report import open_blockers, task_progress
+
     stmt = select(Project).order_by(Project.deadline.is_(None), Project.deadline, Project.id)
     if status != "all":
         stmt = stmt.where(Project.status == status)
-    return db.scalars(stmt).all()
+    blocked: dict[int, int] = {}
+    for e in open_blockers(db):
+        blocked[e.project_id] = blocked.get(e.project_id, 0) + 1
+    out = []
+    for p in db.scalars(stmt):
+        row = schemas.ProjectOut.model_validate(p)
+        row.progress, row.open_blockers = task_progress(db, p.id), blocked.get(p.id, 0)
+        out.append(row)
+    return out
+
+
+def _project_or_404(db: Session, project_id: int) -> Project:
+    p = db.get(Project, project_id)
+    if p is None:
+        raise NotFoundError(f"No project with id {project_id}.")
+    return p
+
+
+@router.get("/projects/{project_id}/report")
+def project_report(project_id: int, days: int = Query(7, ge=1, le=90), db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    from app.services.project_report import build_report
+
+    tz = ZoneInfo(c.settings.agent_timezone)
+    return build_report(db, _project_or_404(db, project_id), datetime.now(tz).date(), tz, days)
+
+
+@router.post("/projects/{project_id}/entries", status_code=status.HTTP_201_CREATED)
+def add_project_entry(project_id: int, body: dict, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    _project_or_404(db, project_id)
+    return _run_user_tool(c, db, "log_project_entry", {**body, "project_id": project_id})
+
+
+@router.post("/project-entries/{entry_id}/resolve")
+def resolve_project_blocker(entry_id: int, body: dict | None = None, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    return _run_user_tool(c, db, "resolve_blocker", {**(body or {}), "entry_id": entry_id})
+
+
+@router.post("/projects/{project_id}/links", status_code=status.HTTP_201_CREATED)
+def add_project_link(project_id: int, body: dict, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    _project_or_404(db, project_id)
+    return _run_user_tool(c, db, "link_project", {**body, "project_id": project_id})
+
+
+@router.delete("/project-links/{link_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_project_link(link_id: int, db: Session = Depends(get_db)):
+    from app.db.models import ProjectLink
+
+    link = db.get(ProjectLink, link_id)
+    if link is None:
+        raise NotFoundError(f"No link with id {link_id}.")
+    db.delete(link)
+    db.commit()
 
 
 @router.get("/commitments", response_model=list[schemas.CommitmentOut])

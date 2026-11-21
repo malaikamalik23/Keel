@@ -1,12 +1,12 @@
 # Tool-routing eval
 
 Keel's model decides which tool to call from the tool descriptions and the system prompt. This eval **measures** that
-instead of guessing: `routing_cases.json` holds 183 realistic user messages, the tool(s) that are acceptable as the
+instead of guessing: `routing_cases.json` holds 190 realistic user messages, the tool(s) that are acceptable as the
 model's first call (or "no tool" for small talk and for questions the agent should ask back, like "plan my day" with
-no time given), and for 64 of them what the call's **arguments** must be.
+no time given), and for 66 of them what the call's **arguments** must be.
 
 ```bash
-python -m evals.run_routing --sleep 20         # all 183 cases (183 API calls; the pause keeps Groq's free tier under its TPM limit)
+python -m evals.run_routing --sleep 20         # all 190 cases (190 API calls; the pause keeps Groq's free tier under its TPM limit)
 python -m evals.run_routing --tag regression   # only cases that have failed in a real run before
 python -m evals.run_routing --rerun-errors results/<run>.json   # finish a run that hit a daily rate limit
 python -m evals.run_routing --category web     # one category
@@ -45,6 +45,8 @@ requests) and never includes provider error text. Download it and open it in a b
   "in 2 hours" have exact answers.
 - `expect`: acceptable first tools. Include sensible look-ups (e.g. `list_tasks` before `update_task`, which needs an id).
   `allow_none: true` makes a text answer acceptable too.
+- `projects` (optional): names of the user's projects for this case. The app loads the project tools when a message names
+  one ("my FYP is stuck"), so a case that relies on that says which projects exist.
 - `args` (optional): checks per acceptable tool, applied only when the model's first call is that tool. Matchers: a plain value
   (strings case-insensitive), `{"any": [...]}`, `{"contains": "x"}` or a list of alternatives, `{"date": ...}`, `{"datetime": ...}`
   (local time; offsets are converted), `{"min": n, "max": n}`, `{"absent": true}`.

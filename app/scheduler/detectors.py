@@ -93,6 +93,21 @@ def detect_nudges(db: Session, now_local: datetime, tz: ZoneInfo) -> list[Nudge]
             f"Next step for “{o.title}”: {o.next_step or 'check where this application stands'}.",
         ))
 
+    # A project blocker still open after 3 days, and again after a week: ask what would unblock it.
+    from app.db.models import Project
+    from app.services.project_report import open_blockers
+    from app.services.timeutil import to_local_date
+
+    for e in open_blockers(db):
+        days = (today - to_local_date(e.created_at, tz)).days
+        project = db.get(Project, e.project_id)
+        if days in (3, 7) and project is not None and project.status == "active":
+            out.append(Nudge(
+                "normal", f"project-blocker:{e.id}:{days}",
+                {"what": "project_blocker", "project": project.name, "blocker": e.text[:200], "days_open": days},
+                f"“{project.name}” has been blocked for {days} days: {e.text[:120]}. What would unblock it, or who can you ask?",
+            ))
+
     # Heads-up: promises and high-priority tasks due tomorrow, so there is still a day to do them (one message a day).
     tomorrow = today + timedelta(days=1)
     due_tomorrow = [c.text for c in db.scalars(select(Commitment).where(Commitment.status == "open", Commitment.deadline == tomorrow))]

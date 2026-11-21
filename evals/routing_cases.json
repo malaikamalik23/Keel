@@ -36,6 +36,13 @@
  {"id":"goal-achieved","category":"goals","prompt":"I achieved my goal of running 5k!","expect":["update_goal","list_goals"]},
  {"id":"goal-milestone-tasks","category":"goals","prompt":"Turn the 'HTTP basics' milestone into tasks","expect":["milestone_to_tasks","list_goals"]},
  {"id":"goal-progress","category":"goals","prompt":"Am I making progress on my goals?","expect":["accountability_report","list_goals"]},
+ {"id":"proj-report","category":"projects","prompt":"How is my FYP going? Give me a progress report","expect":["project_report","list_projects"],"projects":["FYP"]},
+ {"id":"proj-blocker","category":"projects","prompt":"I'm stuck on my FYP, the GPU quota ran out and I can't train anything","expect":["log_project_entry","list_projects"],"args":{"log_project_entry":{"kind":"blocker"}},"projects":["FYP"],"tags":["regression"]},
+ {"id":"proj-decision","category":"projects","prompt":"For the FYP we decided to use PyTorch instead of TensorFlow because the lab's code is in PyTorch","expect":["log_project_entry","list_projects"],"args":{"log_project_entry":{"kind":"decision"}},"projects":["FYP"]},
+ {"id":"proj-blockers","category":"projects","prompt":"What's blocking my FYP right now?","expect":["project_report","list_projects"],"projects":["FYP"]},
+ {"id":"proj-link-note","category":"projects","prompt":"Attach my proposal notes to the FYP project","expect":["notes_search","link_project","list_projects"],"projects":["FYP"]},
+ {"id":"proj-unblocked","category":"projects","prompt":"The GPU blocker on my FYP is solved, the lab gave me a second account","expect":["resolve_blocker","project_report","list_projects"],"projects":["FYP"]},
+ {"id":"proj-prs","category":"github","prompt":"Any open pull requests on malaikamalik23/Keel?","expect":["github_list_pulls","github_list_issues"]},
 
  {"id":"project-create","category":"projects","prompt":"Start a project for my FYP: the purpose is to graduate with a strong IDS thesis","expect":["create_project"]},
  {"id":"project-list","category":"projects","prompt":"Show my active projects","expect":["list_projects"]},

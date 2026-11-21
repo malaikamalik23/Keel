@@ -15,6 +15,7 @@ machine, with your data in one SQLite file.
 | | |
 |---|---|
 | **Chat** | Talk to it in the web dashboard or the terminal. It calls tools to read and change your data. Reminders and check-ins arrive by email. |
+| **Projects** | A progress report built from the database (tasks done, overdue and waiting, time worked), a log of updates, blockers and decisions with their reasons, attached notes and links, and the project's GitHub pull requests. A blocker still open after 3 and 7 days gets a nudge. Mentioning a project by name ("my FYP is stuck") is enough. |
 | **Goals → milestones → tasks** | "I want to get good at web pentesting" becomes a goal, ordered milestones, and concrete first tasks. |
 | **Commitments** | Notices "I'll finish the GRE set by Friday", asks you to confirm, tracks it, counts postponements. Give a promise a check-in date and Keel asks how it's going before it is late. |
 | **Routines and waiting** | Tasks can repeat (daily, weekdays, weekly, monthly; finishing one creates the next), wait for another task to be done first, or wait on someone else with a follow-up date. Waiting and blocked tasks stay off the plan, and you get a nudge on the day to chase the reply. |
@@ -66,7 +67,7 @@ pip install -r requirements-dev.txt
 cp .env.example .env                                      # Windows: copy .env.example .env
 #   then edit .env: set ANTHROPIC_API_KEY (or GROQ_API_KEY) and AGENT_TIMEZONE
 
-pytest -q                                                 # ~560 tests, no key or network needed
+pytest -q                                                 # ~570 tests, no key or network needed
 
 (cd frontend && npm ci && npm run build)                  # build the dashboard once
 uvicorn app.api.main:create_app --factory                 # dashboard + API at http://127.0.0.1:8000
@@ -131,8 +132,8 @@ Scheduler ──▶ detectors (SQL) ──▶ notification budget ──▶ LLM 
 ```
 
 - **One agent, native tool calling**, bounded loop (`MAX_AGENT_STEPS`), atomic history (a `tool_use` is never saved without its result).
-- **57 tools** in three permission tiers (one is the small `load_tools` helper); see the generated **[docs/TOOLS.md](docs/TOOLS.md)**.
-- **Lean tool profile (default).** A request that carries all 56 tool definitions is ~7,000 tokens before the conversation starts. Keel sends the core task tools plus only the groups the message needs (keywords, groups used recently, or a `load_tools` call), about 2.6-3.2k tokens. That is cheaper everywhere and is what makes it usable on Groq's free tier (8,000 tokens/minute). `TOOL_PROFILE=full` restores everything.
+- **62 tools** in three permission tiers (one is the small `load_tools` helper); see the generated **[docs/TOOLS.md](docs/TOOLS.md)**.
+- **Lean tool profile (default).** A request that carries all 61 tool definitions is ~7,500 tokens before the conversation starts. Keel sends the core task tools plus only the groups the message needs (keywords, groups used recently, or a `load_tools` call), about 2.6-3.2k tokens. That is cheaper everywhere and is what makes it usable on Groq's free tier (8,000 tokens/minute). `TOOL_PROFILE=full` restores everything.
 - **Proactivity = detectors + budget.** SQL decides *whether* something is overdue or neglected; the model only decides *how to say it*, and a deterministic fallback text is sent if the LLM is down.
 - Full design: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
@@ -147,7 +148,7 @@ python -m evals.run_routing        # how often does the model pick the right too
 ```
 
 - Agent logic is tested against a scripted fake LLM, and all network calls (email, Brave, GitHub, web pages, calendar) against mocks, so CI needs no keys and no network.
-- `evals/` holds 183 routing cases (64 with argument checks, tagged for natural-language deadlines, ambiguity, multi-step, safety, Roman Urdu and regressions), scored per category and tag, with history in `evals/history.jsonl` and a generated [dashboard](evals/dashboard.html) of scores over time, plus latency and token use per run. [More](evals/README.md).
+- `evals/` holds 190 routing cases (66 with argument checks, tagged for natural-language deadlines, ambiguity, multi-step, safety, Roman Urdu and regressions), scored per category and tag, with history in `evals/history.jsonl` and a generated [dashboard](evals/dashboard.html) of scores over time, plus latency and token use per run. [More](evals/README.md).
 - CI (GitHub Actions): lint, tests on Python 3.11 and 3.12, red-team suite, dashboard tests + build, real-Chromium end-to-end tests, dependency audit, secret scan, static analysis (Bandit and Semgrep's python, security-audit and secrets rules), Docker build plus the deployment guide's backup and restore.
 
 ## Honest status

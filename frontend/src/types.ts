@@ -1,7 +1,16 @@
 export interface Task { id: number; title: string; description: string | null; status: string; priority: string; due_date: string | null; estimated_minutes: number | null; postponement_count: number; recurrence?: string | null; blocked_by_id?: number | null; waiting_on?: string | null; follow_up_date?: string | null; event_start?: string | null; }
 export interface Milestone { id: number; title: string; position: number; status: string; target_date: string | null; }
 export interface Goal { id: number; title: string; description: string | null; horizon: string; category: string; status: string; priority: string; target_date: string | null; milestones: Milestone[]; }
-export interface Project { id: number; name: string; description: string | null; purpose: string | null; status: string; priority: string; deadline: string | null; goal_id: number | null; }
+export interface Project { id: number; name: string; description: string | null; purpose: string | null; status: string; priority: string; deadline: string | null; goal_id: number | null; repo?: string | null; progress?: { tasks_total: number; done: number; open: number; percent: number | null } | null; open_blockers: number; }
+export interface ProjectEntry { id: number; kind: string; text: string; date: string; why?: string; resolved?: boolean; resolution?: string; days_open?: number; }
+export interface ProjectReport {
+  project: { id: number; name: string; status: string; purpose: string | null; deadline: string | null; repo: string | null };
+  progress: { tasks_total: number; done: number; open: number; percent: number | null };
+  done_in_period: string[]; overdue: { id: number; title: string; due: string }[];
+  stuck: { id: number; title: string; waiting_for_task?: string; waiting_on?: string }[]; minutes_worked: number;
+  open_blockers: ProjectEntry[]; resolved_blockers: ProjectEntry[]; decisions: ProjectEntry[]; updates: ProjectEntry[];
+  links: { id: number; kind: string; target: string; title: string | null }[]; days_to_deadline?: number;
+}
 export interface Commitment { id: number; text: string; deadline: string | null; importance: string; status: string; postponement_count: number; completed_at: string | null; }
 export interface Memory { id: number; kind: string; category: string; topic: string | null; content: string; importance: string; source: string; created_at: string; updated_at: string; confirmed_at: string | null; last_used_at: string | null; needs_review: boolean; }
 export interface BriefTask { id: number; title: string; priority: string; due?: string; minutes?: number; }

@@ -136,8 +136,37 @@ class Project(Base):
     priority: Mapped[str] = mapped_column(String(8), default="medium")
     deadline: Mapped[date | None] = mapped_column(Date, nullable=True)
     goal_id: Mapped[int | None] = mapped_column(ForeignKey("goals.id", ondelete="SET NULL"), nullable=True, index=True)
+    repo: Mapped[str | None] = mapped_column(String(140), nullable=True)  # GitHub 'owner/name'
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class ProjectEntry(Base):
+    """The project's log: a progress update, a blocker (open until resolved) or a decision (with why it was made)."""
+
+    __tablename__ = "project_entries"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(12))  # update|blocker|decision
+    text: Mapped[str] = mapped_column(Text)
+    rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    resolution: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class ProjectLink(Base):
+    """A document attached to a project: an indexed note (path relative to NOTES_DIR) or a web link."""
+
+    __tablename__ = "project_links"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(8))  # note|url
+    target: Mapped[str] = mapped_column(String(500))
+    title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class Commitment(Base):

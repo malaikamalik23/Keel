@@ -14,7 +14,7 @@ from __future__ import annotations
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from xml.etree import ElementTree as ET
+from typing import Any
 
 from defusedxml import DefusedXmlException
 from defusedxml import ElementTree as SafeET
@@ -54,7 +54,7 @@ def read_pages(path: Path) -> Pages:
     return Pages([(None, path.read_bytes().decode("utf-8", errors="replace"))])
 
 
-def _run_hidden(run: ET.Element) -> bool:
+def _run_hidden(run: Any) -> bool:
     props = run.find(f"{W}rPr")
     if props is None:
         return False
@@ -75,7 +75,7 @@ def read_docx(path: Path) -> Pages:
         raise UnreadableDocument("document declares a DOCTYPE")
     try:
         root = SafeET.fromstring(data)
-    except (ET.ParseError, DefusedXmlException) as exc:
+    except (SafeET.ParseError, DefusedXmlException) as exc:
         raise UnreadableDocument("broken XML") from exc
     body = root.find(f"{W}body")
     if body is None:
@@ -90,7 +90,7 @@ def read_docx(path: Path) -> Pages:
             out.pages.append((page, "\n\n".join(current)))
             current.clear()
 
-    def paragraph(p: ET.Element) -> str:
+    def paragraph(p: Any) -> str:
         nonlocal page, saw_break
         style = p.find(f"{W}pPr/{W}pStyle")
         parts: list[str] = []

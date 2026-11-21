@@ -14,7 +14,13 @@ class Settings(BaseSettings):
     groq_api_key: str | None = None
     # "auto" picks Anthropic if ANTHROPIC_API_KEY is set, else Groq if GROQ_API_KEY is set.
     # "ollama" runs a model on your own computer (no key; chats never leave it). Never picked automatically.
-    llm_provider: Literal["auto", "anthropic", "groq", "ollama"] = "auto"
+    llm_provider: Literal["auto", "anthropic", "groq", "gemini", "ollama"] = "auto"
+    # A second model that answers only while the main one is busy (rate limit, overload, unreachable), e.g. Groq's
+    # free tier running out of daily tokens. "none" = no fallback.
+    llm_fallback: Literal["none", "anthropic", "groq", "gemini", "ollama"] = "none"
+    # Google AI Studio key. On Google's free tier, what you send is used to improve Google's products (not on paid).
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-3.6-flash"  # stable and free; gemini-4-hydrogen was overloaded and rate-limited when tested (Nov 2026)
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen2.5:7b"  # must support tools: `ollama show <model>` lists them under Capabilities
     ollama_num_ctx: int = Field(16384, ge=4096, le=131072)  # context window; Keel's prompt plus tools need ~6-9k tokens

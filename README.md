@@ -120,6 +120,7 @@ The ones you'll touch first:
 |---|---|
 | `ANTHROPIC_API_KEY` / `GROQ_API_KEY`, `AGENT_MODEL` | The LLM. Groq models must support tool calling (`openai/gpt-oss-120b` works on Groq's free tier; set `HISTORY_MESSAGE_LIMIT=12` there). |
 | `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GOOGLE_CALENDAR_ENABLED` | Gmail (and Google Calendar, if switched on), with an OAuth client from your own Google Cloud project; then run `python -m scripts.gmail_connect` once. See [Connect Gmail](docs/INSTALL.md#connect-gmail). |
+| `GEMINI_API_KEY`, `LLM_FALLBACK=gemini` | Google AI Studio's free Gemini key as a second model that answers while Groq is rate-limited (or as the main one with `LLM_PROVIDER=gemini`). On Google's free tier, what you send is used to improve Google's products; see [Use two models](docs/INSTALL.md#use-two-models-groq-and-gemini). |
 | `LLM_PROVIDER=ollama`, `OLLAMA_MODEL` | Or run a model on your own computer with [Ollama](https://ollama.com): no key, and chats never leave the machine. Slower and less accurate than a hosted model; see [the install guide](docs/INSTALL.md#run-on-a-local-model-ollama). |
 | `AGENT_TIMEZONE` | "Today", check-in times and quiet hours use it. |
 | `API_KEY` | **Not needed on your own laptop.** Leave it unset and only this computer can use Keel (not other devices, and not websites open in your browser). Set it for Docker, or before reaching Keel from another device; the dashboard then asks for it once per tab. |

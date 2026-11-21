@@ -105,9 +105,9 @@ class OllamaClient:
         try:
             resp = self._client.post(f"{self._url}/api/chat", json=body)
         except httpx.TimeoutException:
-            raise LLMError(f"The local model took too long to answer. A smaller model than {self._model} may help.") from None
+            raise LLMError(f"The local model took too long to answer. A smaller model than {self._model} may help.", retryable=True) from None
         except httpx.HTTPError:
-            raise LLMError(f"Can't reach Ollama at {self._url}. Is it running? Start the Ollama app or run `ollama serve`.") from None
+            raise LLMError(f"Can't reach Ollama at {self._url}. Is it running? Start the Ollama app or run `ollama serve`.", retryable=True) from None
         if resp.status_code != 200:
             raise LLMError(self._explain(resp))
         try:

@@ -34,7 +34,8 @@ def mask_email(addr: str | None) -> str | None:
 
 def secrets(s: Settings) -> list[str]:
     return [v for v in (s.anthropic_api_key, s.groq_api_key, s.brave_api_key, s.github_token, s.telegram_bot_token,
-                        s.calendar_ics_url, s.telegram_chat_id, s.smtp_password, s.api_key, s.gmail_client_secret) if v and len(v) >= 4]
+                        s.calendar_ics_url, s.telegram_chat_id, s.smtp_password, s.api_key, s.gmail_client_secret, s.gemini_api_key)
+            if v and len(v) >= 4]
 
 
 def scrub(message: str, s: Settings) -> str:
@@ -108,10 +109,22 @@ def check_email(s: Settings, send: bool = False) -> str:
     return f"connected ({s.smtp_security}), logged in; nothing sent"
 
 
+def check_gemini(s: Settings) -> str:
+    from app.llm.gemini_client import list_models
+
+    models = list_models(_need(s.gemini_api_key, "GEMINI_API_KEY"))
+    if s.gemini_model not in models:
+        near = [m for m in models if "flash" in m or "hydrogen" in m][:6]
+        raise RuntimeError(f"key works, but there's no model {s.gemini_model}; try one of: {', '.join(near) or 'see AI Studio'}")
+    return f"key works and {s.gemini_model} is available ({len(models)} models; nothing was sent)"
+
+
 def check_model(s: Settings) -> str:
-    """Only for a local model: asks Ollama which models it has. Never sends a prompt, so it costs nothing."""
+    """Free checks only: Ollama lists its models; Gemini lists the key's models. Never sends a prompt."""
+    if "gemini" in (_provider(s), s.llm_fallback) and s.gemini_api_key:
+        return check_gemini(s)
     if s.llm_provider != "ollama":
-        raise Skip("only a local (Ollama) model has a free check")
+        raise Skip("only a local (Ollama) model or Gemini has a free check")
     import httpx
 
     from app.llm.ollama_client import check_base_url
@@ -191,11 +204,21 @@ def run_check(service: str, s: Settings, check: Callable[[Settings], str] | None
 # ---------- what is connected
 
 def _provider(s: Settings) -> str | None:
-    if s.llm_provider == "ollama":
-        return "ollama"
-    if s.llm_provider != "auto":
-        return s.llm_provider if getattr(s, f"{s.llm_provider}_api_key") else None
-    return "anthropic" if s.anthropic_api_key else "groq" if s.groq_api_key else None
+    from app.llm.factory import resolve_provider
+
+    p = resolve_provider(s)
+    if p in (None, "ollama"):
+        return p
+    return p if getattr(s, f"{p}_api_key") else None
+
+
+def _model_label(s: Settings, provider: str) -> str:
+    return {"ollama": f"Ollama on {_host(s.ollama_base_url) or 'this computer'} · {s.ollama_model}",
+            "gemini": f"Google Gemini · {s.gemini_model}", "anthropic": f"Anthropic · {s.agent_model}",
+            "groq": f"Groq · {s.agent_model}"}[provider]
+
+
+GEMINI_DATA_NOTE = "Gemini free tier: Google says what you send is used to improve its products (not on the paid tier)"
 
 
 def _host(url: str | None) -> str | None:
@@ -213,12 +236,12 @@ def describe(s: Settings, indexed_documents: int | None = None) -> list[dict]:
     channel = "telegram" if telegram else "email" if email else None
     rows = [
         {"id": "model", "name": "AI model", "status": "connected" if provider else "not_set_up",
-         "details": ([f"Ollama on {_host(s.ollama_base_url) or 'this computer'} · {s.ollama_model}"]
-                     + (["Local: chats stay on this computer"] if _host(s.ollama_base_url) in ("127.0.0.1", "localhost", "::1") else [])
-                     if provider == "ollama" else
-                     [f"{'Anthropic' if provider == 'anthropic' else 'Groq'} · {s.agent_model}"] if provider else []),
+         "details": ([_model_label(s, provider)] if provider else [])
+                    + (["Local: chats stay on this computer"] if provider == "ollama" and _host(s.ollama_base_url) in ("127.0.0.1", "localhost", "::1") else [])
+                    + ([f"When busy, falls back to {_model_label(s, s.llm_fallback)}"] if provider and s.llm_fallback not in ("none", provider) else [])
+                    + ([GEMINI_DATA_NOTE] if "gemini" in (provider, s.llm_fallback) and s.gemini_api_key else []),
          "access": "Receives each chat message, the facts Keel looked up to answer it, and the tool list.",
-         "setup": "ANTHROPIC_API_KEY or GROQ_API_KEY, or LLM_PROVIDER=ollama for a model on this computer"},
+         "setup": "ANTHROPIC_API_KEY, GROQ_API_KEY or GEMINI_API_KEY, or LLM_PROVIDER=ollama for a model on this computer; LLM_FALLBACK for a second one"},
         {"id": "telegram", "name": "Telegram", "status": "connected" if telegram else "partial" if s.telegram_bot_token else "not_set_up",
          "details": ([("Delivers your reminders and check-ins" if channel == "telegram" else "")]
                      + (["You can chat with Keel through the bot (only from your chat)"] if telegram and s.telegram_inbound else [])
@@ -285,5 +308,5 @@ def describe(s: Settings, indexed_documents: int | None = None) -> list[dict]:
         if r["id"] == "github":
             r["testable"] = r["testable"] and bool(s.github_token)  # the check needs a token; public access needs none
         if r["id"] == "model":
-            r["testable"] = provider == "ollama"  # a hosted model's only check would spend tokens
+            r["testable"] = provider == "ollama" or ("gemini" in (provider, s.llm_fallback) and bool(s.gemini_api_key))  # others would spend tokens
     return rows

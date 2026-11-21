@@ -118,6 +118,11 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
    you approve, nothing happens; the write itself is conditional on that version (If-Match). Guests are never emailed
    (sendUpdates=none). A day's plan is never added twice. The red-team suite reads a poisoned invite and tries to
    create, move and delete events.
+   Model providers see what Keel sends them. With `LLM_FALLBACK=gemini` on Google AI Studio's free tier, Google states
+   that content is used to improve its products; the Services tab shows that note whenever Gemini is configured, and
+   the install guide recommends the paid tier or a local fallback for sensitive data. The fallback only switches on a
+   busy or unreachable provider (never hides a real error), and both models run under the same tool permissions,
+   taint rules and approvals.
    With `LLM_PROVIDER=ollama` the model runs on the user's own computer, so no chat, memory or document text goes to a
    model provider. Keel refuses a plain-`http` Ollama address on another machine (only `https` there), so chats are
    never sent unencrypted over a network. A local model gets the same tool permissions, taint rules and approvals.

@@ -222,7 +222,7 @@ def test_temperature_setting_reaches_both_providers_and_is_validated():
         Settings(_env_file=None, llm_temperature=1.5)
 
 
-def test_anthropic_client_sends_temperature_only_when_set():
+def test_anthropic_client_never_sends_temperature():
     from types import SimpleNamespace
 
     from app.llm.anthropic_client import AnthropicClient
@@ -233,4 +233,4 @@ def test_anthropic_client_sends_temperature_only_when_set():
         client = AnthropicClient("sk-test", "m", temperature=temperature)
         client._client = SimpleNamespace(messages=SimpleNamespace(create=lambda **kw: calls.append(kw) or reply))
         client.complete(system="s", messages=[], tools=[])
-    assert calls[0]["temperature"] == 0.2 and "temperature" not in calls[1]
+    assert all("temperature" not in kw for kw in calls)  # current Claude models reject sampling parameters with a 400

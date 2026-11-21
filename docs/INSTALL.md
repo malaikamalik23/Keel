@@ -139,6 +139,24 @@ Uses the same Google project and sign-in as Gmail (do "Connect Gmail" first).
 Keel can then list, add, move, edit and delete events in that calendar, and add a day's plan to it; every change
 waits for your approval in Keel. It never emails guests and can't change calendar settings or sharing.
 
+### Use two models (Groq and Gemini)
+
+Groq's free tier allows about 200,000 tokens a day, which a long day of chatting can use up. A free Google AI Studio
+key gives Keel a second model that answers only while Groq is busy:
+
+1. Create a key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey) (the "Default Gemini Project" is fine).
+2. In `.env`: `GEMINI_API_KEY=...` and `LLM_FALLBACK=gemini`. Keep `GROQ_API_KEY` as it is.
+3. Restart Keel. The Services tab shows both models, and "Check connection" confirms the key and model by listing
+   models (nothing is sent). If `GEMINI_MODEL` isn't available to your key, the check names ones that are.
+
+When Groq says it's rate-limited, Keel waits as long as Groq asked (up to 15 minutes) before trying it again, and
+Gemini answers meanwhile. A real error, such as a wrong key, still shows instead of being hidden.
+
+**Privacy:** on Google's free tier, Google says the content you send is used to improve its products. That is
+everything Keel sends the model: your messages, tasks, saved memories, and anything it just read (emails, documents,
+calendar events). On Google's paid tier it isn't. If that matters for your data, leave `LLM_FALLBACK=none`, use the
+paid tier, or use a local model (below) as the fallback: `LLM_FALLBACK=ollama`.
+
 ### Run on a local model (Ollama)
 
 Keel can use a model on your own computer instead of Anthropic or Groq. No key is needed and your chats, tasks and

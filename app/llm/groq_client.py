@@ -85,6 +85,12 @@ def _rejected_tool_call(exc: Exception) -> str | None:
     return str(err.get("message") or "the arguments did not match the tool's schema.")[:300]
 
 
+def _busy(exc: Exception) -> bool:
+    """Rate limit (incl. the free tier's daily tokens), overload, timeout or no connection: worth asking another model."""
+    status = getattr(exc, "status_code", None)
+    return isinstance(exc, (groq.APIConnectionError, groq.APITimeoutError)) or status == 429 or (status is not None and status >= 500)
+
+
 class GroqClient:
     def __init__(self, api_key: str, model: str, max_tokens: int = 1500, temperature: float | None = None):
         self._client = groq.Groq(api_key=api_key, max_retries=4)  # honours Retry-After on 429s (free tier is token-per-minute limited)
@@ -107,14 +113,14 @@ class GroqClient:
         except groq.APIError as exc:
             reason = _rejected_tool_call(exc)
             if reason is None:
-                raise LLMError(f"LLM request failed: {exc}") from exc
+                raise LLMError(f"LLM request failed: {exc}", retryable=_busy(exc)) from exc
             # Groq validates tool arguments against the schema server-side and fails the whole request when the model
             # gets one wrong. Give the model one chance to correct itself instead of ending the user's turn with an error.
             retry = {**kwargs, "messages": [*kwargs["messages"], {"role": "user", "content": _RETRY_NOTE.format(reason=reason)}]}
             try:
                 resp = self._client.chat.completions.create(**retry)
             except groq.APIError as exc2:
-                raise LLMError(f"LLM request failed: {exc2}") from exc2
+                raise LLMError(f"LLM request failed: {exc2}", retryable=_busy(exc2)) from exc2
 
         choice = resp.choices[0]
         out = _response_from_groq(choice.message, choice.finish_reason)

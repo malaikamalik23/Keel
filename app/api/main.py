@@ -44,6 +44,8 @@ def create_app(settings: Settings | None = None, llm: LLMClient | None = None, n
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "no-referrer")
+        # Only Keel's own page may ask for the microphone (chat dictation); nothing may use the camera, location or payments.
+        response.headers.setdefault("Permissions-Policy", "microphone=(self), camera=(), geolocation=(), payment=(), usb=()")
         response.headers.setdefault("Cache-Control", "no-store") if request.url.path.startswith("/api") else None
         return response
     app.include_router(router)

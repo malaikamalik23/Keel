@@ -166,3 +166,4 @@ def test_security_headers_present():
     assert r.headers["x-content-type-options"] == "nosniff" and r.headers["x-frame-options"] == "DENY"
     assert "default-src 'self'" in r.headers["content-security-policy"] and "frame-ancestors 'none'" in r.headers["content-security-policy"]
     assert client_with([]).get("/api/tasks").headers["cache-control"] == "no-store"
+    assert r.headers["permissions-policy"].startswith("microphone=(self), camera=()")  # dictation on Keel's own page only

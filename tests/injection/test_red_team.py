@@ -95,7 +95,7 @@ def test_model_has_no_tool_that_can_approve_or_reject_anything(make_container, t
 def test_every_external_data_tool_is_fenced_and_gated(make_container, tmp_path):
     """Guard against someone adding a new reader tool and forgetting the untrusted flag."""
     world = build_world(make_container, tmp_path, "x")
-    external = {"web_fetch", "web_search", "github_list_repos", "github_get_readme", "github_list_issues", "github_recent_commits", "notes_search", "read_note", "read_calendar"}
+    external = {"web_fetch", "web_search", "github_list_repos", "github_get_readme", "github_list_issues", "github_recent_commits", "notes_search", "read_note", "note_outline", "extract_from_note", "compare_notes", "read_calendar", "github_list_pulls"}
     reg = {t.name: t for t in world.executor.registry.all()}
     assert external <= set(reg)
     for name in external:

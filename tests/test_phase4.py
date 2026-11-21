@@ -426,7 +426,8 @@ def test_reminder_and_notification_endpoints_and_manual_tick():
     tick = client.post("/api/scheduler/tick").json()
     assert set(tick) == {"reminders_sent", "checkins_sent", "nudges_sent", "blocked"}
     assert isinstance(client.get("/api/notifications").json(), list)
-    assert client.get("/api/checkins").json() == []
+    checkins = client.get("/api/checkins").json()
+    assert [x["kind"] for x in checkins] == tick["checkins_sent"]  # a check-in is due or not depending on the time of day the test runs
     assert client.post("/api/checkins/5/response", json={"text": "x"}).status_code == 404
 
 

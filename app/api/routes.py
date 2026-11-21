@@ -540,6 +540,64 @@ def index_documents(c: Container = Depends(get_container)):
         raise ConflictError(str(exc)) from None
 
 
+@router.post("/documents/upload", status_code=status.HTTP_201_CREATED)
+async def upload_document(request: Request, name: str = Query(min_length=1, max_length=255), c: Container = Depends(get_container)):
+    """Upload a PDF, Word (.docx) or text file (raw body, file name in ?name=). It is saved in NOTES_DIR/uploads and indexed."""
+    from pathlib import Path
+
+    from app.services.documents import MAX_FILE_BYTES, NotesUnavailable
+    from app.services.uploads import UploadRejected, save_upload
+
+    if not c.settings.notes_dir:
+        raise ConflictError("Set NOTES_DIR to choose where uploaded documents are kept.")
+    data = bytearray()
+    async for part in request.stream():
+        data += part
+        if len(data) > MAX_FILE_BYTES:
+            raise HTTPException(status_code=413, detail=f"The file is larger than {MAX_FILE_BYTES // 1_000_000} MB.")
+    from starlette.concurrency import run_in_threadpool
+
+    def store() -> tuple[str, dict]:  # disk and database work off the event loop
+        rel = save_upload(Path(c.settings.notes_dir), name, bytes(data))
+        return rel, c.index_notes()
+
+    try:
+        rel, report = await run_in_threadpool(store)
+    except UploadRejected as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except NotesUnavailable as exc:
+        raise ConflictError(str(exc)) from None
+    with c.session_factory() as db:
+        doc = db.scalar(select(Document).where(Document.path == rel))
+        if doc is None:  # saved but the indexer couldn't read it
+            from app.services.uploads import delete_upload
+
+            delete_upload(Path(c.settings.notes_dir), rel)
+            raise HTTPException(status_code=422, detail="The file could not be read: " + "; ".join(report.get("skipped", [])[:3]))
+        return schemas.DocumentOut.model_validate(doc)
+
+
+@router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_document(document_id: int, c: Container = Depends(get_container)):
+    """Remove a document you uploaded from the dashboard (files you put in NOTES_DIR yourself stay yours to manage)."""
+    from pathlib import Path
+
+    from app.services.uploads import UploadRejected, delete_upload
+
+    with c.session_factory() as db:
+        doc = db.get(Document, document_id)
+        if doc is None:
+            raise NotFoundError(f"No document with id {document_id}.")
+        path = doc.path
+    if not c.settings.notes_dir:
+        raise ConflictError("NOTES_DIR is not set.")
+    try:
+        delete_upload(Path(c.settings.notes_dir), path)
+    except UploadRejected as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    c.index_notes()
+
+
 @router.get("/analytics")
 def analytics(weeks: int = Query(8, ge=2, le=26), db: Session = Depends(get_db), c: Container = Depends(get_container)):
     tz = ZoneInfo(c.settings.agent_timezone)

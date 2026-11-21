@@ -33,7 +33,7 @@ through something Keel reads, hoping the model treats it as instructions:
 | Web pages / search results | A poisoned page, or an SEO-poisoned search snippet |
 | GitHub | A malicious README, issue title or commit message in a repo you ask about |
 | Calendar | An invite from a stranger (titles are attacker-controlled) |
-| Notes / PDFs | A downloaded paper or pasted web text in your notes folder |
+| Notes / PDFs / Word | A downloaded paper, a .docx someone sent you, or pasted web text in your notes folder |
 
 The attacker's goals: make Keel **change or delete your data**, **leak your data** (memories, tasks, plans) to a server
 they control, or **reach into your private network** (your own API, cloud metadata) through the agent's fetch tool.
@@ -85,6 +85,15 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
    Projects: log entries are stored as plain text with untrusted-content tags neutralised, so a stored entry can't fake a
    fence later. Attached notes must already be indexed (no arbitrary paths), links must be http(s), and a repo must be a
    valid `owner/name`; GitHub stays read-only (pull requests are listed, never changed).
+   Documents: Word files are parsed with `defusedxml`, refused if they declare a DOCTYPE or unzip to more than 20 MB,
+   and text Word marks as hidden is left out (and counted) because hidden text is a way to show the model what the
+   reader can't see. Every tool that returns document text (read, outline, compare, deadlines) is fenced as untrusted,
+   and the deadlines and action items it finds are suggestions: making them tasks is a write after reading external
+   content, so it waits for the user's approval.
+   Uploads from the dashboard go only to `NOTES_DIR/uploads/`: the name is reduced to a plain file name with an
+   allowed extension (no folders, hidden files or Word lock files), the content must match it (PDF header, readable
+   .docx, UTF-8 text), the 2 MB limit is enforced while the body streams in, nothing is overwritten, and the dashboard
+   can delete only files in `uploads/`, never the user's own notes.
 10. **API hardening.** `X-API-Key` (constant-time compare) or, without one, local-only access with Host and
     cross-site checks (see Scope), a per-client rate limit on LLM-calling endpoints,
     security headers (CSP `default-src 'self'`, `frame-ancestors 'none'`, `nosniff`), `Cache-Control: no-store` on API
@@ -110,7 +119,7 @@ Tool *advertising* is not part of this model: in the default lean profile each r
 ## How this is tested
 
 `tests/injection/` runs on every push. It builds a world where **web pages, search results, GitHub READMEs and issues,
-notes and calendar events all contain attack text** (7 payload styles: plain override, fence breakout, fake tool JSON,
+notes, Word documents and calendar events all contain attack text** (7 payload styles: plain override, fence breakout, fake tool JSON,
 fake user consent, Urdu/Roman Urdu, invisible Unicode, Markdown-image exfiltration), then drives a *fully compromised*
 model that tries 17 harmful calls: deletes, writes, memory poisoning, exfiltration URLs, requests to `127.0.0.1` and
 cloud metadata. It asserts that nothing executed, the database is byte-for-byte unchanged, no forbidden request was

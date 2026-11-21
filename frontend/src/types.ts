@@ -11,6 +11,7 @@ export interface ProjectReport {
   open_blockers: ProjectEntry[]; resolved_blockers: ProjectEntry[]; decisions: ProjectEntry[]; updates: ProjectEntry[];
   links: { id: number; kind: string; target: string; title: string | null }[]; days_to_deadline?: number;
 }
+export interface DocumentRow { id: number; path: string; size: number; chunk_count: number; indexed_at: string; pages: number | null; pages_estimated: boolean; hidden_skipped: number; }
 export interface Commitment { id: number; text: string; deadline: string | null; importance: string; status: string; postponement_count: number; completed_at: string | null; }
 export interface Memory { id: number; kind: string; category: string; topic: string | null; content: string; importance: string; source: string; created_at: string; updated_at: string; confirmed_at: string | null; last_used_at: string | null; needs_review: boolean; }
 export interface BriefTask { id: number; title: string; priority: string; due?: string; minutes?: number; }

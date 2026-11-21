@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, api, getApiKey, setApiKey } from "./api";
 import Activity from "./views/Activity";
 import Applications from "./views/Applications";
+import Documents from "./views/Documents";
 import Approvals from "./views/Approvals";
 import ErrorBoundary from "./ErrorBoundary";
 import Chat from "./views/Chat";
@@ -13,7 +14,7 @@ import Projects from "./views/Projects";
 import Today from "./views/Today";
 import type { PendingAction } from "./types";
 
-const TABS = ["Today", "Goals", "Projects", "Commitments", "Applications", "Memory", "Chat", "Insights", "Activity", "Approvals"] as const;
+const TABS = ["Today", "Goals", "Projects", "Commitments", "Applications", "Documents", "Memory", "Chat", "Insights", "Activity", "Approvals"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function App() {
@@ -62,6 +63,7 @@ export default function App() {
         {tab === "Projects" && <Projects />}
         {tab === "Commitments" && <Commitments />}
         {tab === "Applications" && <Applications />}
+        {tab === "Documents" && <Documents />}
         {tab === "Memory" && <MemoryView />}
         {tab === "Insights" && <Insights />}
         {tab === "Activity" && <Activity />}

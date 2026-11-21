@@ -25,6 +25,7 @@ machine, with your data in one SQLite file.
 | **Accountability from facts** | "What have I been avoiding?" is answered from the event history: postponements with your reasons, old tasks never touched, neglected goals, time per project. No invented patterns. |
 | **Memory you control** | A profile (university, supervisor, career goal...), preferences, background and the decisions you made, sorted into personal, academic, professional and project. One answer per profile topic: a contradicting fact makes it ask you which is right. Old memories come up for review. Every memory shows where it came from, and is visible, editable and deletable. When a search shares no words with any memory ("where do I study?"), the model is shown your memories and judges by meaning; saving a memory shows it the others in that category so it can catch a contradiction. |
 | **Proactive, within a budget** | A morning briefing by email: the best next task, what is due or overdue, promises due soon, who to follow up with, and today's calendar. A heads-up the day before a promise or important task is due, an evening check-in and a weekly review that looks ahead. All limited by a daily budget, quiet hours and de-duplication. Ask "brief me" any time, or see it on the Today tab. |
+| **Documents** | Your notes folder can hold Markdown, text, PDF and Word (.docx) files, and the Documents tab uploads them into it. Answers cite pages ("proposal.pdf, p. 4"; Word files saved without page breaks get estimated pages, cited as "p. ~4"), long documents are read in parts before summarising, and code can outline a document, compare two versions (added, removed, changed paragraphs) and find deadlines, dates and action items with their pages. Nothing becomes a task without your OK. |
 | **Research** | Web search and page reading, search over your own notes and papers (including Urdu), read-only GitHub and calendar access. |
 | **Insights** | Weekly trends, streaks, promises kept, how long things really take versus your estimates. |
 
@@ -67,7 +68,7 @@ pip install -r requirements-dev.txt
 cp .env.example .env                                      # Windows: copy .env.example .env
 #   then edit .env: set ANTHROPIC_API_KEY (or GROQ_API_KEY) and AGENT_TIMEZONE
 
-pytest -q                                                 # ~570 tests, no key or network needed
+pytest -q                                                 # ~650 tests, no key or network needed
 
 (cd frontend && npm ci && npm run build)                  # build the dashboard once
 uvicorn app.api.main:create_app --factory                 # dashboard + API at http://127.0.0.1:8000
@@ -116,7 +117,7 @@ The ones you'll touch first:
 | `API_KEY` | **Not needed on your own laptop.** Leave it unset and only this computer can use Keel (not other devices, and not websites open in your browser). Set it for Docker, or before reaching Keel from another device; the dashboard then asks for it once per tab. |
 | `SCHEDULER_ENABLED=true` | Turns on check-ins, reminders and nudges (run one process only). |
 | `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `EMAIL_TO` | Receive reminders and check-ins by email ([setup](docs/INSTALL.md#reminders-and-check-ins-by-email)). |
-| `NOTES_DIR` | A folder of notes/papers for `notes_search`. |
+| `NOTES_DIR` | A folder of notes, papers and Word/PDF documents for the notes tools. |
 | `BRAVE_API_KEY` | Enables `web_search`. |
 | `WEB_ALLOWED_DOMAINS` | Restrict the web fetcher to a short allow-list. |
 | `CALENDAR_ICS_URL`, `GITHUB_USER`/`GITHUB_TOKEN` | Calendar and GitHub (both read-only). |
@@ -132,8 +133,8 @@ Scheduler ──▶ detectors (SQL) ──▶ notification budget ──▶ LLM 
 ```
 
 - **One agent, native tool calling**, bounded loop (`MAX_AGENT_STEPS`), atomic history (a `tool_use` is never saved without its result).
-- **62 tools** in three permission tiers (one is the small `load_tools` helper); see the generated **[docs/TOOLS.md](docs/TOOLS.md)**.
-- **Lean tool profile (default).** A request that carries all 61 tool definitions is ~7,500 tokens before the conversation starts. Keel sends the core task tools plus only the groups the message needs (keywords, groups used recently, or a `load_tools` call), about 2.6-3.2k tokens. That is cheaper everywhere and is what makes it usable on Groq's free tier (8,000 tokens/minute). `TOOL_PROFILE=full` restores everything.
+- **65 tools** in three permission tiers (one is the small `load_tools` helper); see the generated **[docs/TOOLS.md](docs/TOOLS.md)**.
+- **Lean tool profile (default).** A request that carries all 64 tool definitions is ~7,800 tokens before the conversation starts. Keel sends the core task tools plus only the groups the message needs (keywords, groups used recently, or a `load_tools` call), about 2.6-3.2k tokens. That is cheaper everywhere and is what makes it usable on Groq's free tier (8,000 tokens/minute). `TOOL_PROFILE=full` restores everything.
 - **Proactivity = detectors + budget.** SQL decides *whether* something is overdue or neglected; the model only decides *how to say it*, and a deterministic fallback text is sent if the LLM is down.
 - Full design: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
@@ -148,7 +149,7 @@ python -m evals.run_routing        # how often does the model pick the right too
 ```
 
 - Agent logic is tested against a scripted fake LLM, and all network calls (email, Brave, GitHub, web pages, calendar) against mocks, so CI needs no keys and no network.
-- `evals/` holds 190 routing cases (66 with argument checks, tagged for natural-language deadlines, ambiguity, multi-step, safety, Roman Urdu and regressions), scored per category and tag, with history in `evals/history.jsonl` and a generated [dashboard](evals/dashboard.html) of scores over time, plus latency and token use per run. [More](evals/README.md).
+- `evals/` holds 196 routing cases (69 with argument checks, tagged for natural-language deadlines, ambiguity, multi-step, safety, Roman Urdu and regressions), scored per category and tag, with history in `evals/history.jsonl` and a generated [dashboard](evals/dashboard.html) of scores over time, plus latency and token use per run. [More](evals/README.md).
 - CI (GitHub Actions): lint, tests on Python 3.11 and 3.12, red-team suite, dashboard tests + build, real-Chromium end-to-end tests, dependency audit, secret scan, static analysis (Bandit and Semgrep's python, security-audit and secrets rules), Docker build plus the deployment guide's backup and restore.
 
 ## Honest status

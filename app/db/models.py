@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Date, DateTime, ForeignKey, Integer, MetaData, String, Text
+from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Integer, MetaData, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -432,6 +432,9 @@ class Document(Base):
     size: Mapped[int] = mapped_column(Integer)
     mtime: Mapped[float] = mapped_column()
     chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+    pages: Mapped[int | None] = mapped_column(Integer, nullable=True)  # PDF/Word page count, when known
+    hidden_skipped: Mapped[int] = mapped_column(Integer, default=0)  # Word text marked hidden, left out
+    pages_estimated: Mapped[bool] = mapped_column(Boolean, default=False)  # Word file with no saved page breaks
     indexed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     chunks: Mapped[list[Chunk]] = relationship(back_populates="document", cascade="all, delete-orphan", order_by="Chunk.position")
@@ -446,5 +449,6 @@ class Chunk(Base):
     document_id: Mapped[int] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), index=True)
     position: Mapped[int] = mapped_column(Integer)
     text: Mapped[str] = mapped_column(Text)
+    page: Mapped[int | None] = mapped_column(Integer, nullable=True)  # for citations; None for plain text files
 
     document: Mapped[Document] = relationship(back_populates="chunks")

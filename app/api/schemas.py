@@ -271,3 +271,6 @@ class DocumentOut(BaseModel):
     size: int
     chunk_count: int
     indexed_at: datetime
+    pages: int | None = None
+    pages_estimated: bool = False
+    hidden_skipped: int = 0

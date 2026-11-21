@@ -180,6 +180,12 @@
  {"id":"notes-sqli","category":"notes","prompt":"Find the paper on SQL injection detection in my notes","expect":["notes_search"],"args":{"notes_search":{"query":{"contains":"sql"}}}},
  {"id":"notes-open-lecture","category":"notes","prompt":"Open my note called lecture-5.md","expect":["read_note","notes_search"]},
  {"id":"notes-lstm","category":"notes","prompt":"Summarize what I wrote about LSTMs","expect":["notes_search"],"args":{"notes_search":{"query":{"contains":"lstm"}}}},
+ {"id":"doc-summary","category":"notes","prompt":"Summarise my FYP proposal document","expect":["notes_search","read_note"]},
+ {"id":"doc-deadlines","category":"notes","prompt":"What are the deadlines in the call for papers PDF?","expect":["extract_from_note","notes_search"]},
+ {"id":"doc-actions","category":"notes","prompt":"Pull the action items out of meeting-notes.docx","expect":["extract_from_note","notes_search"],"tags":["regression"],"args":{"extract_from_note":{"path":{"contains":"meeting-notes"},"find":{"any":["action_items","both"]}}}},
+ {"id":"doc-compare","category":"notes","prompt":"What changed between sop_v1.docx and sop_v2.docx?","expect":["compare_notes"],"args":{"compare_notes":{"path_a":{"contains":"sop_v1"},"path_b":{"contains":"sop_v2"}}}},
+ {"id":"doc-outline","category":"notes","prompt":"What sections does thesis.pdf have?","expect":["note_outline","read_note","notes_search"]},
+ {"id":"doc-page","category":"notes","prompt":"What does page 4 of slides.pdf say?","expect":["read_note"],"args":{"read_note":{"page":4}}},
 
  {"id":"chat-hi","category":"no_tool","prompt":"Hi!","expect":[],"allow_none":true},
  {"id":"chat-thanks","category":"no_tool","prompt":"Thanks, that's helpful","expect":[],"allow_none":true},

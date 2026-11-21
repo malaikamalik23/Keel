@@ -40,7 +40,7 @@ GROUP_INFO: dict[str, str] = {
     "calendar": "calendar: read calendar events and free time",
     "web": "web: search the web, read a web page",
     "github": "github: repos, READMEs, issues, PRs, commits",
-    "notes": "notes: search and read the user's own notes and papers",
+    "notes": "notes: search, read, compare documents; deadlines, action items",
     "applications": "applications: jobs, scholarships, SOPs",
 }
 
@@ -56,7 +56,7 @@ TOOL_GROUP: dict[str, str] = {
     "read_calendar": "calendar",
     **dict.fromkeys(["web_fetch", "web_search"], "web"),
     **dict.fromkeys(["github_list_repos", "github_get_readme", "github_list_issues", "github_list_pulls", "github_recent_commits"], "github"),
-    **dict.fromkeys(["notes_search", "read_note"], "notes"),
+    **dict.fromkeys(["notes_search", "read_note", "note_outline", "extract_from_note", "compare_notes"], "notes"),
 }
 
 
@@ -99,7 +99,8 @@ KEYWORDS: dict[str, re.Pattern[str]] = {
                r"\barticles?\b", r"\barxiv\b", r"https?://", r"\bwww\.", r"\bresearch\b", r"\bsurvey\b", r"\bwikipedia\b", r"\bsources?\b", r"\btechniques?\b", r"\bliterature\b", r"\bwhat'?s new\b", r"\bstate of the art\b", r"\bsota\b"),
     "github": _rx(r"\bgithub\b", r"\brepos?\b", r"\brepositor\w*", r"\bissues?\b", r"\bpull requests?\b", r"\bprs?\b", r"\breadme\b", r"\bcommits?\b", r"\bpushed?\b",
                   r"\b(in|on|of|from|at) [A-Za-z0-9][\w-]*/[A-Za-z0-9][\w.-]*"),  # "in torvalds/linux": an owner/repo name
-    "notes": _rx(r"\bnotes?\b", r"\bwrote\b", r"\bwritten\b", r"\bmy (files?|documents?|papers|drafts?|docs)\b", r"\bpdf\b", r"\bwhat did i write\b", r"\bjournal\b", r"\bobsidian\b", r"\bfolder\b", r"\bi (said|mentioned|noted|saved)\b"),
+    "notes": _rx(r"\bnotes?\b", r"\bdocx\b", r"\bword (doc|document|file)s?\b", r"\bdocuments?\b", r"\baction items?\b",
+                 r"\bpage \d+\b", r"\b(versions?|drafts?) of\b", r"\bwrote\b", r"\bwritten\b", r"\bmy (files?|documents?|papers|drafts?|docs)\b", r"\bpdf\b", r"\bwhat did i write\b", r"\bjournal\b", r"\bobsidian\b", r"\bfolder\b", r"\bi (said|mentioned|noted|saved)\b"),
 }
 
 

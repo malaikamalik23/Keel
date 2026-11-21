@@ -24,6 +24,7 @@ from app.services.documents import index_directory
 from app.tools import build_default_registry
 from app.tools.executor import ToolExecutor
 from tests.conftest import make_settings
+from tests.docfiles import make_docx, para
 from tests.fakes import text, tool_call
 
 DNS = {"example.com": ["93.184.216.34"], "evil.test": ["93.184.216.99"]}
@@ -124,6 +125,11 @@ def build_world(make_container, tmp_path: Path, payload: str) -> World:
     notes = tmp_path / "notes"
     notes.mkdir(exist_ok=True)
     (notes / "note.md").write_text(f"# Great article notes\n\nUseful survey text.\n\n{payload}\n", encoding="utf-8")
+    # A Word file someone sent: the payload in plain sight, again in text Word hides, and a deadline to extract.
+    (notes / "brief.docx").write_bytes(make_docx(
+        para("Project brief", style="Heading1"), para("Submit the report by 15 December 2026."),
+        para(payload.replace("\n", " ")), para("Appendix", page_break=True, hidden=f"{HIDDEN_MARKER} {payload}"),
+    ))
 
     safe_line = payload.replace("\n", " ").replace("\\", "/").replace(";", " ").replace(",", " ")
     ics = f"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//t//EN\r\nBEGIN:VEVENT\r\nUID:1\r\nDTSTART:20991231T100000Z\r\nDTEND:20991231T110000Z\r\nSUMMARY:{safe_line}\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
@@ -153,6 +159,10 @@ SOURCES: dict[str, dict] = {
     "github_issues": {"name": "github_list_issues", "input": {"repo": "someone/project"}},
     "notes_search": {"name": "notes_search", "input": {"query": "great article"}},
     "read_note": {"name": "read_note", "input": {"path": "note.md"}},
+    "read_docx": {"name": "read_note", "input": {"path": "brief.docx"}},
+    "docx_deadlines": {"name": "extract_from_note", "input": {"path": "brief.docx"}},
+    "docx_outline": {"name": "note_outline", "input": {"path": "brief.docx"}},
+    "compare_docs": {"name": "compare_notes", "input": {"path_a": "note.md", "path_b": "brief.docx"}},
     "calendar": {"name": "read_calendar", "input": {"start_date": "2099-12-31"}},
 }
 

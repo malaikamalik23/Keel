@@ -1,12 +1,12 @@
 # Tool-routing eval
 
 Keel's model decides which tool to call from the tool descriptions and the system prompt. This eval **measures** that
-instead of guessing: `routing_cases.json` holds 190 realistic user messages, the tool(s) that are acceptable as the
+instead of guessing: `routing_cases.json` holds 196 realistic user messages, the tool(s) that are acceptable as the
 model's first call (or "no tool" for small talk and for questions the agent should ask back, like "plan my day" with
-no time given), and for 66 of them what the call's **arguments** must be.
+no time given), and for 69 of them what the call's **arguments** must be.
 
 ```bash
-python -m evals.run_routing --sleep 20         # all 190 cases (190 API calls; the pause keeps Groq's free tier under its TPM limit)
+python -m evals.run_routing --sleep 20         # all 196 cases (196 API calls; the pause keeps Groq's free tier under its TPM limit)
 python -m evals.run_routing --tag regression   # only cases that have failed in a real run before
 python -m evals.run_routing --rerun-errors results/<run>.json   # finish a run that hit a daily rate limit
 python -m evals.run_routing --category web     # one category

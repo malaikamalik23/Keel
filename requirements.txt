@@ -8,6 +8,7 @@ pydantic>=2.6
 pydantic-settings>=2.2
 tzdata
 pypdf>=4.0
+defusedxml>=0.7
 httpx>=0.27
 apscheduler>=3.10,<4
 icalendar>=5.0

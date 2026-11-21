@@ -19,12 +19,10 @@ from sqlalchemy import text as sql
 from sqlalchemy.orm import Session
 
 from app.db.models import Chunk, Document, utcnow
+from app.services.doc_formats import DOCX_EXT, PDF_EXT, TEXT_EXT, UnreadableDocument, read_pages
 
-TEXT_EXT = {".md", ".markdown", ".txt", ".rst", ".tex", ".org"}
-PDF_EXT = ".pdf"
 SKIP_DIRS = {"node_modules", "__pycache__", "venv", ".venv", "site-packages"}
 MAX_FILE_BYTES = 2_000_000
-MAX_PDF_PAGES = 300
 CHUNK_CHARS = 900
 
 
@@ -57,7 +55,7 @@ def iter_files(root: Path):
         for name in filenames:
             p = Path(dirpath) / name
             ext = p.suffix.lower()
-            if ext not in TEXT_EXT and ext != PDF_EXT:
+            if ext not in TEXT_EXT and ext not in (PDF_EXT, DOCX_EXT) or name.startswith("~$"):  # ~$x.docx: Word's lock file
                 continue
             real = p.resolve()
             if not real.is_relative_to(root):  # symlink pointing outside the notes folder
@@ -66,12 +64,7 @@ def iter_files(root: Path):
 
 
 def read_file_text(path: Path) -> str:
-    if path.suffix.lower() == PDF_EXT:
-        from pypdf import PdfReader
-
-        reader = PdfReader(str(path))
-        return "\n\n".join((page.extract_text() or "") for page in reader.pages[:MAX_PDF_PAGES])
-    return path.read_bytes().decode("utf-8", errors="replace")
+    return "\n\n".join(text for _, text in read_pages(path).pages)
 
 
 def chunk_text(text: str, limit: int = CHUNK_CHARS) -> list[str]:
@@ -126,9 +119,13 @@ def index_directory(db: Session, root: Path) -> IndexReport:
             report.unchanged += 1
             continue
         try:
-            chunks = chunk_text(read_file_text(real))
+            read = read_pages(real)
+            chunks = [(page, t) for page, text in read.pages for t in chunk_text(text)]
         except ImportError:
             report.skipped.append(f"{rel} (install pypdf for PDFs)")
+            continue
+        except UnreadableDocument as exc:
+            report.skipped.append(f"{rel} (unreadable: {exc})")
             continue
         except Exception:  # noqa: BLE001 - a corrupt file must not abort indexing
             report.skipped.append(f"{rel} (unreadable)")
@@ -139,8 +136,9 @@ def index_directory(db: Session, root: Path) -> IndexReport:
             report.updated += 1
         else:
             report.added += 1
-        new = Document(path=rel, sha256=digest, size=stat.st_size, mtime=stat.st_mtime, chunk_count=len(chunks), indexed_at=utcnow())
-        new.chunks = [Chunk(position=i, text=t) for i, t in enumerate(chunks)]
+        new = Document(path=rel, sha256=digest, size=stat.st_size, mtime=stat.st_mtime, chunk_count=len(chunks), indexed_at=utcnow(),
+                       pages=read.page_count, hidden_skipped=read.hidden_skipped, pages_estimated=read.estimated)
+        new.chunks = [Chunk(position=i, text=t, page=page) for i, (page, t) in enumerate(chunks)]
         db.add(new)
         db.flush()
         for c in new.chunks:
@@ -167,7 +165,7 @@ def search_documents(db: Session, query: str, limit: int = 5) -> list[dict]:
             return []
         rows = db.execute(
             sql(
-                "SELECT d.path AS path, c.position AS position, "
+                "SELECT d.path AS path, c.position AS position, c.page AS page, d.pages_estimated AS estimated, "
                 "snippet(chunk_fts, 0, '[', ']', '…', 28) AS snip, bm25(chunk_fts) AS score "
                 "FROM chunk_fts JOIN chunks c ON c.id = chunk_fts.rowid JOIN documents d ON d.id = c.document_id "
                 "WHERE chunk_fts MATCH :q ORDER BY score LIMIT :n"
@@ -177,14 +175,49 @@ def search_documents(db: Session, query: str, limit: int = 5) -> list[dict]:
         if rows:
             best: dict[str, dict] = {}
             for r in rows:  # one result per file: its best-scoring chunk
-                best.setdefault(r.path, {"path": r.path, "chunk": r.position, "snippet": r.snip})
+                hit = {"path": r.path, "chunk": r.position, "snippet": r.snip}
+                if r.page is not None:
+                    hit["page"] = r.page
+                    if r.estimated:
+                        hit["page_estimated"] = True
+                best.setdefault(r.path, hit)
             return list(best.values())[:limit]
     return []
 
 
-def read_indexed_note(db: Session, path: str, max_chars: int = 8000) -> dict:
-    doc = db.scalars(select(Document).where(Document.path == path)).first()
+def get_document(db: Session, path: str) -> Document | None:
+    return db.scalars(select(Document).where(Document.path == path)).first()
+
+
+def with_page_marks(chunks: list[Chunk], estimated: bool = False) -> str:
+    """Join chunks, marking where each page starts ([page 3], or [page ~3] when estimated) so answers can cite pages."""
+    out, last = [], object()
+    for c in chunks:
+        if c.page is not None and c.page != last:
+            out.append(f"[page {'~' if estimated else ''}{c.page}]")
+        last = c.page
+        out.append(c.text)
+    return "\n\n".join(out)
+
+
+def read_indexed_note(db: Session, path: str, max_chars: int = 8000, page: int | None = None, start_chunk: int = 0) -> dict:
+    doc = get_document(db, path)
     if doc is None:
         return {}
-    body = "\n\n".join(c.text for c in doc.chunks)
-    return {"path": doc.path, "text": body[:max_chars], "truncated": len(body) > max_chars}
+    chunks = [c for c in doc.chunks if c.position >= start_chunk and (page is None or c.page == page)]
+    taken, size = [], 0
+    for c in chunks:
+        if taken and size + len(c.text) > max_chars:
+            break
+        taken.append(c)
+        size += len(c.text) + 2
+    out = {"path": doc.path, "text": with_page_marks(taken, doc.pages_estimated)[:max_chars], "truncated": len(taken) < len(chunks)}
+    if doc.pages:
+        out["pages"] = doc.pages
+        if doc.pages_estimated:
+            out["pages_estimated"] = "No page breaks saved in this Word file: pages are estimated from the word count. Cite as p. ~N."
+    if out["truncated"]:
+        out["next_start_chunk"] = chunks[len(taken)].position
+    if doc.hidden_skipped:
+        out["hidden_text_left_out"] = doc.hidden_skipped
+    return out

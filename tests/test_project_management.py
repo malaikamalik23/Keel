@@ -63,11 +63,16 @@ def test_blockers_decisions_and_updates(make_container):
         _run(c, db, "log_project_entry", {"project_id": pid, "kind": "decision", "text": "Use PyTorch, not TensorFlow",
                                           "why": "Supervisor's lab code is PyTorch"})
         _run(c, db, "log_project_entry", {"project_id": pid, "kind": "update", "text": "Baseline reaches 81% accuracy"})
+        for e in db.query(ProjectEntry).filter_by(project_id=pid):
+            e.created_at = datetime(2026, 11, 21, 7, 0)  # noon in Karachi on the pinned TODAY, not the real clock
+        db.commit()
         r = _run(c, db, "project_report", {"project_id": pid}).result
         assert [x["text"] for x in r["open_blockers"]] == ["GPU quota exhausted"] and r["open_blockers"][0]["days_open"] == 0
         assert r["decisions"][0]["why"] == "Supervisor's lab code is PyTorch"
         assert r["updates"][0]["text"] == "Baseline reaches 81% accuracy"
         _run(c, db, "resolve_blocker", {"entry_id": b["id"], "resolution": "Lab gave a second account"})
+        db.get(ProjectEntry, b["id"]).resolved_at = datetime(2026, 11, 21, 8, 0)
+        db.commit()
         r = _run(c, db, "project_report", {"project_id": pid}).result
         assert r["open_blockers"] == [] and r["resolved_blockers"][0]["resolution"] == "Lab gave a second account"
         assert _run(c, db, "resolve_blocker", {"entry_id": r["decisions"][0]["id"]}).status == "error"  # a decision isn't a blocker

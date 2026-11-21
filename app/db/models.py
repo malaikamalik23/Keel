@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Integer, MetaData, String, Text
+from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Integer, MetaData, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -167,6 +167,42 @@ class ProjectLink(Base):
     target: Mapped[str] = mapped_column(String(500))
     title: Mapped[str | None] = mapped_column(String(200), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class Workflow(Base):
+    """A standing rule: when the trigger happens, run these steps (see app/services/workflows.py)."""
+
+    __tablename__ = "workflows"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    trigger: Mapped[dict] = mapped_column(JSON)  # {"type": "schedule"|"event"|"manual", ...}
+    steps: Mapped[list] = mapped_column(JSON)  # [{"tool": ..., "args": {...}, "approve": bool} | {"notify": "..."}]
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    checked_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)  # events after this are new
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class WorkflowRun(Base):
+    """One run of a workflow. `log` records every step (started, ok, error) so a run can be inspected and resumed."""
+
+    __tablename__ = "workflow_runs"
+    __table_args__ = (UniqueConstraint("workflow_id", "dedupe_key"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workflow_id: Mapped[int] = mapped_column(ForeignKey("workflows.id", ondelete="CASCADE"), index=True)
+    dedupe_key: Mapped[str] = mapped_column(String(200))  # one run per event / scheduled day
+    event: Mapped[dict] = mapped_column(JSON)  # what triggered it (fields usable as {{event.x}})
+    status: Mapped[str] = mapped_column(String(20), index=True)  # running|retrying|waiting_approval|done|failed|cancelled
+    step_index: Mapped[int] = mapped_column(Integer, default=0)
+    approved_step: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    log: Mapped[list] = mapped_column(JSON, default=list)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class Commitment(Base):

@@ -424,7 +424,7 @@ def test_reminder_and_notification_endpoints_and_manual_tick():
     assert client.post(f"/api/reminders/{r[0]['id']}/cancel").status_code == 422
     assert client.post("/api/reminders/99/cancel").status_code == 404
     tick = client.post("/api/scheduler/tick").json()
-    assert set(tick) == {"reminders_sent", "checkins_sent", "nudges_sent", "blocked"}
+    assert set(tick) == {"reminders_sent", "checkins_sent", "nudges_sent", "blocked", "workflows"}
     assert isinstance(client.get("/api/notifications").json(), list)
     checkins = client.get("/api/checkins").json()
     assert [x["kind"] for x in checkins] == tick["checkins_sent"]  # a check-in is due or not depending on the time of day the test runs

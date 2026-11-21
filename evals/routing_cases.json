@@ -186,6 +186,13 @@
  {"id":"doc-compare","category":"notes","prompt":"What changed between sop_v1.docx and sop_v2.docx?","expect":["compare_notes"],"args":{"compare_notes":{"path_a":{"contains":"sop_v1"},"path_b":{"contains":"sop_v2"}}}},
  {"id":"doc-outline","category":"notes","prompt":"What sections does thesis.pdf have?","expect":["note_outline","read_note","notes_search"]},
  {"id":"doc-page","category":"notes","prompt":"What does page 4 of slides.pdf say?","expect":["read_note"],"args":{"read_note":{"page":4}}},
+ {"id":"wf-create-event","category":"workflows","tags":["regression"],"prompt":"Whenever I add a new scholarship, create a task to gather its documents","expect":["create_workflow"]},
+ {"id":"wf-create-schedule","category":"workflows","prompt":"Every Sunday at 8pm, send me a summary of how my week went","expect":["create_workflow","list_workflows"]},
+ {"id":"wf-list","category":"workflows","prompt":"What automations do I have set up?","expect":["list_workflows"]},
+ {"id":"wf-run","category":"workflows","prompt":"Run my weekly review workflow now","expect":["run_workflow","list_workflows"]},
+ {"id":"wf-pause","category":"workflows","prompt":"Pause the interview prep workflow","expect":["set_workflow_enabled","list_workflows"]},
+ {"id":"wf-history","category":"workflows","prompt":"Did my workflows run OK? Any failures?","expect":["workflow_history","list_workflows"]},
+ {"id":"wf-chain","category":"workflows","tags":["multi-step"],"prompt":"Find my Google STEP application, check which documents are still missing, and remind me tomorrow at 9am to finish them","expect":["list_opportunities","prepare_application"]},
 
  {"id":"chat-hi","category":"no_tool","prompt":"Hi!","expect":[],"allow_none":true},
  {"id":"chat-thanks","category":"no_tool","prompt":"Thanks, that's helpful","expect":[],"allow_none":true},

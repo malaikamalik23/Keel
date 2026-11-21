@@ -33,7 +33,7 @@ GROUP_INFO: dict[str, str] = {
     "tasks": "tasks: create, list, update, complete, delete (always loaded)",
     "plan": "plan: today's briefing, build/show today's plan, skip plan items, log time worked",
     "accountability": "accountability: what slipped or was avoided, weekly review, history of a task",
-    "commitments": "commitments: promises with deadlines (propose, confirm, list, update, complete)",
+    "commitments": "commitments: promises with deadlines, check-ins",
     "goals": "goals: goals, milestones, projects (reports, blockers, decisions)",
     "memory": "memory: save, search, review, edit or forget facts, preferences and decisions about the user",
     "reminders": "reminders: schedule, list or cancel a reminder; important dates (exams, birthdays)",
@@ -42,6 +42,7 @@ GROUP_INFO: dict[str, str] = {
     "github": "github: repos, READMEs, issues, PRs, commits",
     "notes": "notes: search, read, compare documents; deadlines, action items",
     "applications": "applications: jobs, scholarships, SOPs",
+    "workflows": "workflows: when X happens, do Y",
 }
 
 TOOL_GROUP: dict[str, str] = {
@@ -53,6 +54,7 @@ TOOL_GROUP: dict[str, str] = {
     **dict.fromkeys(["save_memory", "search_memories", "review_memories", "update_memory", "delete_memory"], "memory"),
     **dict.fromkeys(["create_reminder", "list_reminders", "cancel_reminder", "add_important_date", "list_important_dates", "delete_important_date"], "reminders"),
     **dict.fromkeys(["add_opportunity", "list_opportunities", "update_opportunity", "delete_opportunity", "prepare_application", "save_draft", "list_drafts"], "applications"),
+    **dict.fromkeys(["create_workflow", "list_workflows", "run_workflow", "set_workflow_enabled", "workflow_history"], "workflows"),
     "read_calendar": "calendar",
     **dict.fromkeys(["web_fetch", "web_search"], "web"),
     **dict.fromkeys(["github_list_repos", "github_get_readme", "github_list_issues", "github_list_pulls", "github_recent_commits"], "github"),
@@ -92,6 +94,9 @@ KEYWORDS: dict[str, re.Pattern[str]] = {
                   r"\bfyi\b", r"\bmy (supervisor|advisor|mentor|teacher|manager|boss|roommate|sister|brother|mother|father) is\b", r"\b(tips|advice) (for|on)\b",
                   r"\byaad rakh\w*"),  # Roman Urdu: remember
     "applications": _rx(r"\bjobs?\b", r"\binternships?\b", r"\bscholarships?\b", r"\bfellowships?\b", r"\badmissions?\b", r"\bappl(y|ied|ying|ications?)\b", r"\bcover letter\b", r"\bsop\b", r"\bstatement of purpose\b", r"\b(cv|resume|résumé)\b", r"\brecommendation letters?\b", r"\binterviews?\b", r"\bposting\b", r"\bvacanc(y|ies)\b", r"\beligib\w*"),
+    "workflows": _rx(r"\bworkflows?\b", r"\bautomat\w*", r"\bwhenever\b", r"\b(every|each) time\b", r"\bstanding rules?\b", r"\broutines?\b",
+                      r"\bevery (day|morning|evening|night|week|weekday|monday|tuesday|wednesday|thursday|friday|saturday|sunday)s?\b",
+                      r"\bif .{1,60}\bthen\b", r"\bwhen(ever)? (i|a|an|my) [^?]{1,60}(,| then)"),
     "reminders": _rx(r"\bbirthday\w*", r"\banniversar\w*", r"\bimportant dates?\b", r"\bexam\b", r"\bremind\w*", r"\balarm\b", r"\bnotify me\b", r"\bping me\b", r"\bnudge me\b", r"\bwake me\b", r"\balert me\b", r"\bdon'?t let me forget\b",
                      r"\byaad dila\w*"),  # Roman Urdu: remind me
     "calendar": _rx(r"\bcalendar\b", r"\bmeetings?\b", r"\bappointments?\b", r"\bfree time\b", r"\bbusy\b", r"\bavailabilit\w*", r"\bam i free\b", r"\bany(thing| plans)? on (mon|tues|wednes|thurs|fri|satur|sun)day\b", r"\bnext (week|few days)\b", r"\bwhat'?s on (my )?(day|week|schedule)\b"),

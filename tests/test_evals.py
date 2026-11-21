@@ -111,7 +111,7 @@ def test_cli_runs_saves_results_and_enforces_min_score(tmp_path, monkeypatch, ca
     saved = list(out.glob("*.json"))
     assert len(saved) == 1 and json.loads(saved[0].read_text())["score"] == 1.0
     assert json.loads((tmp_path / "history.jsonl").read_text().splitlines()[-1])["score"] == 1.0
-    assert main(["--out", str(out), "--no-save", "--min-score", "0.9"], llm=RoutingStub(cases, wrong={c["id"] for c in cases[:20]})) == 1
+    assert main(["--out", str(out), "--no-save", "--min-score", "0.9"], llm=RoutingStub(cases, wrong={c["id"] for c in cases[: len(cases) // 5]})) == 1
     assert "FAILED" in capsys.readouterr().out
     assert main(["--category", "nonexistent", "--no-save"], llm=RoutingStub(cases)) == 2
 

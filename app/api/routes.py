@@ -598,6 +598,87 @@ def delete_document(document_id: int, c: Container = Depends(get_container)):
     c.index_notes()
 
 
+# ---------- workflows ("when X, do Y"); approving a paused run is only possible here, never from the model
+def _wf_now(c: Container) -> datetime:
+    return datetime.now(ZoneInfo(c.settings.agent_timezone))
+
+
+@router.get("/workflows")
+def list_workflows(db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    from app.db.models import Workflow, WorkflowRun
+    from app.services.workflows import run_dict, workflow_dict
+
+    tz = ZoneInfo(c.settings.agent_timezone)
+    runs = db.scalars(select(WorkflowRun).order_by(WorkflowRun.id.desc()).limit(100)).all()
+    out = []
+    for wf in db.scalars(select(Workflow).order_by(Workflow.id)):
+        out.append({**workflow_dict(wf), "runs": [run_dict(r, tz) for r in runs if r.workflow_id == wf.id][:10]})
+    return out
+
+
+@router.get("/workflow-templates")
+def workflow_templates():
+    from app.services.workflows import TEMPLATES, describe
+
+    return [{**t, "description": describe(t["trigger"], t["steps"])} for t in TEMPLATES]
+
+
+@router.post("/workflows", status_code=status.HTTP_201_CREATED)
+def create_workflow(body: dict, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    """The user creating a workflow from the dashboard (same validation as the chat tool; no approval needed: it's them)."""
+    return _run_user_tool(c, db, "create_workflow", body)
+
+
+@router.patch("/workflows/{workflow_id}")
+def update_workflow(workflow_id: int, body: dict, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    from app.db.models import Workflow
+
+    if db.get(Workflow, workflow_id) is None:
+        raise NotFoundError(f"No workflow with id {workflow_id}.")
+    return _run_user_tool(c, db, "set_workflow_enabled", {"workflow_id": workflow_id, "enabled": bool(body.get("enabled"))})
+
+
+@router.delete("/workflows/{workflow_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_workflow(workflow_id: int, db: Session = Depends(get_db)):
+    from app.db.models import Workflow
+
+    wf = db.get(Workflow, workflow_id)
+    if wf is None:
+        raise NotFoundError(f"No workflow with id {workflow_id}.")
+    db.delete(wf)
+    db.commit()
+
+
+@router.post("/workflows/{workflow_id}/run")
+def run_workflow_now(workflow_id: int, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    from app.db.models import Workflow
+
+    if db.get(Workflow, workflow_id) is None:
+        raise NotFoundError(f"No workflow with id {workflow_id}.")
+    return _run_user_tool(c, db, "run_workflow", {"workflow_id": workflow_id})
+
+
+@router.post("/workflow-runs/{run_id}/{decision}")
+def decide_workflow_run(run_id: int, decision: Literal["approve", "cancel", "retry"], db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    from app.db.models import WorkflowRun
+    from app.services.workflows import run_dict
+
+    run = db.get(WorkflowRun, run_id)
+    if run is None:
+        raise NotFoundError(f"No workflow run with id {run_id}.")
+    eng, now = c.workflows, _wf_now(c)
+    try:
+        if decision == "approve":
+            eng.approve(db, run, now)
+        elif decision == "cancel":
+            eng.cancel(db, run)
+        else:
+            eng.retry(db, run, now)
+    except ValueError as exc:
+        raise ConflictError(str(exc)) from None
+    return run_dict(run, ZoneInfo(c.settings.agent_timezone))
+
+
 @router.get("/analytics")
 def analytics(weeks: int = Query(8, ge=2, le=26), db: Session = Depends(get_db), c: Container = Depends(get_container)):
     tz = ZoneInfo(c.settings.agent_timezone)

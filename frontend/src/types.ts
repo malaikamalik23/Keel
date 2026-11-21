@@ -12,6 +12,10 @@ export interface ProjectReport {
   links: { id: number; kind: string; target: string; title: string | null }[]; days_to_deadline?: number;
 }
 export interface DocumentRow { id: number; path: string; size: number; chunk_count: number; indexed_at: string; pages: number | null; pages_estimated: boolean; hidden_skipped: number; }
+export interface WorkflowStep { tool?: string; args?: Record<string, unknown>; notify?: string; approve?: boolean; }
+export interface WorkflowRun { id: number; workflow_id: number; status: string; step: number; event: Record<string, unknown>; attempts: number; error: string | null; started: string; finished: string | null; log: { step: number; state: string; at: string; error?: string; attempt?: number }[]; }
+export interface WorkflowRow { id: number; name: string; enabled: boolean; trigger: Record<string, unknown>; steps: WorkflowStep[]; description: string; runs: WorkflowRun[]; }
+export interface WorkflowTemplate { key: string; name: string; trigger: Record<string, unknown>; steps: WorkflowStep[]; description: string; }
 export interface Commitment { id: number; text: string; deadline: string | null; importance: string; status: string; postponement_count: number; completed_at: string | null; }
 export interface Memory { id: number; kind: string; category: string; topic: string | null; content: string; importance: string; source: string; created_at: string; updated_at: string; confirmed_at: string | null; last_used_at: string | null; needs_review: boolean; }
 export interface BriefTask { id: number; title: string; priority: string; due?: string; minutes?: number; }

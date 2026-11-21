@@ -1,7 +1,22 @@
 from collections.abc import Callable
 
 from app.services.notifications import parse_hhmm
-from app.tools import applications, calendar, commitments, dates, goals, groups, memory, notes, planning, projects, reminders, system, tasks
+from app.tools import (
+    applications,
+    calendar,
+    commitments,
+    dates,
+    goals,
+    groups,
+    memory,
+    notes,
+    planning,
+    projects,
+    reminders,
+    system,
+    tasks,
+    workflows,
+)
 from app.tools import github as github_tools
 from app.tools import web as web_tools
 from app.tools.base import ToolRegistry
@@ -9,7 +24,7 @@ from app.tools.base import ToolRegistry
 
 def build_default_registry(
     calendar_source: Callable[[], str] | None = None, *, fetcher=None, search=None, github=None, github_user: str | None = None,
-    notes_enabled: bool = False, workday: tuple[str, str] = ("09:00", "21:00"),
+    notes_enabled: bool = False, workday: tuple[str, str] = ("09:00", "21:00"), workflow_engine: dict | None = None,
 ) -> ToolRegistry:
     """Tools that need configuration (calendar, web, notes, GitHub) are only advertised to the model when configured."""
     registry = ToolRegistry()
@@ -30,5 +45,6 @@ def build_default_registry(
         github_tools.register(registry, github, github_user)
     if notes_enabled:
         notes.register(registry)
+    workflows.register(registry, workflow_engine if workflow_engine is not None else {})  # after the tools its steps may use
     groups.register_load_tools(registry)
     return registry

@@ -15,7 +15,7 @@ from app.errors import ConflictError, NotFoundError
 from app.security.audit import record_audit
 from app.security.permissions import Decision, PermissionPolicy
 from app.security.untrusted import wrap_untrusted
-from app.tools.base import Tool, ToolContext, ToolError, ToolRegistry
+from app.tools.base import Permission, Tool, ToolContext, ToolError, ToolRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +114,24 @@ class ToolExecutor:
         except ValidationError as exc:
             return self._error(ctx, name, tool.permission.value, raw_input, _format_validation_error(exc))
         return self._execute(ctx, tool, params, actor="user")
+
+    def run_as_workflow(self, ctx: ToolContext, name: str, raw_input: dict | None, *, approved: bool) -> ToolOutcome:
+        """Run one step of a workflow the user set up (and approved creating). Never reachable from the model.
+
+        Steps can't read external content (nothing a run reads can steer it), and a high-impact step runs only
+        after the user approved that step of that run (`approved`)."""
+        tool = self.registry.get(name)
+        if tool is None:
+            return self._error(ctx, name, "unknown", raw_input, f"Unknown tool '{name}'.")
+        if tool.returns_untrusted:
+            return self._error(ctx, name, tool.permission.value, raw_input, f"'{name}' reads external content, which workflows can't use.")
+        if tool.permission is Permission.HIGH_IMPACT and not approved:
+            return self._error(ctx, name, tool.permission.value, raw_input, f"'{name}' needs your approval in this run.")
+        try:
+            params = tool.input_model.model_validate(raw_input or {})
+        except ValidationError as exc:
+            return self._error(ctx, name, tool.permission.value, raw_input, _format_validation_error(exc))
+        return self._execute(ctx, tool, params, actor="workflow")
 
     def reject(self, ctx: ToolContext, pending_id: int) -> PendingAction:
         pa = self._get_pending(ctx, pending_id)

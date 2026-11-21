@@ -38,9 +38,10 @@ def latest_conversation_id(db: Session) -> int | None:
 
 class Scheduler:
     def __init__(self, *, settings: Settings, session_factory: sessionmaker[Session], agent: Agent,
-                 notifications: NotificationService, notifier: Notifier, calendar_source=None):
+                 notifications: NotificationService, notifier: Notifier, calendar_source=None, workflows=None):
         self.settings = settings
         self.calendar_source = calendar_source  # () -> iCal text, or None when no calendar is configured
+        self.workflows = workflows  # app.services.workflows.Engine
         self.session_factory = session_factory
         self.agent = agent
         self.notifications = notifications
@@ -56,7 +57,7 @@ class Scheduler:
         now_local = now.astimezone(self.tz) if now and now.tzinfo else (now.replace(tzinfo=self.tz) if now else datetime.now(self.tz))
         report: dict = {"reminders_sent": 0, "checkins_sent": [], "nudges_sent": 0, "blocked": {}}
         with self.session_factory() as db:
-            for step in (self._reminders, self._calendar, self._checkins, self._nudges):
+            for step in (self._reminders, self._calendar, self._workflows, self._checkins, self._nudges):
                 try:
                     step(db, now_local, report)
                 except Exception:  # noqa: BLE001 - one failing step must not stop the others
@@ -102,6 +103,11 @@ class Scheduler:
                 text="A meeting now overlaps your plan, so the rest of today moved: " + "; ".join(lines) + ".",
             )
         db.commit()
+
+    def _workflows(self, db: Session, now_local: datetime, report: dict) -> None:
+        """Start runs whose trigger happened (including while the app was off) and advance running ones."""
+        if self.workflows is not None:
+            report["workflows"] = self.workflows.tick(db, now_local)
 
     def _block(self, report: dict, reason: str | None) -> None:
         if reason:

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -37,6 +38,7 @@ class Container:
     notifications: NotificationService
     scheduler: Scheduler
     calendar_source: Callable[[], str] | None = None  # () -> iCal text, for the briefing; None when not configured
+    workflows: Any = None  # app.services.workflows.Engine
 
     def index_notes(self) -> dict:
         """Incrementally (re)index NOTES_DIR. Cheap when nothing changed."""
@@ -67,6 +69,7 @@ def build_container(
         github_user=settings.github_user,
         notes_enabled=bool(settings.notes_dir) and settings.database_url.startswith("sqlite"),
         workday=(settings.workday_start, settings.workday_end),
+        workflow_engine=(workflow_holder := {}),
     )
     executor = ToolExecutor(
         registry,
@@ -77,10 +80,16 @@ def build_container(
     session_factory = make_session_factory(engine)
     notifier = notifier or build_notifier(settings)
     notifications = NotificationService(notifier, settings)
+    from zoneinfo import ZoneInfo
+
+    from app.services.workflows import Engine as WorkflowEngine
+
+    workflow_holder["engine"] = workflows = WorkflowEngine(executor, notifications, ZoneInfo(settings.agent_timezone))
     scheduler = Scheduler(
         settings=settings, session_factory=session_factory, agent=agent, notifications=notifications, notifier=notifier,
-        calendar_source=calendar_source,
+        calendar_source=calendar_source, workflows=workflows,
     )
     container = Container(settings, engine, session_factory, registry, executor, agent, notifier, notifications, scheduler)
     container.calendar_source = calendar_source
+    container.workflows = workflows
     return container

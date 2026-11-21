@@ -90,6 +90,13 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
    reader can't see. Every tool that returns document text (read, outline, compare, deadlines) is fenced as untrusted,
    and the deadlines and action items it finds are suggestions: making them tasks is a write after reading external
    content, so it waits for the user's approval.
+   Workflows (standing "when X, do Y" rules) act later without the user present, so: creating one is high impact
+   (the user approves the exact trigger and steps); steps may only use Keel's own tools, never one that reads
+   external content, so nothing a run reads can steer it; high-impact steps always pause for the user's approval of
+   that run, and the model has no tool that approves; runs use a clean, untainted context and are audited with
+   actor `workflow`; templates are plain lookups ({{event.title}}), not an expression language; and a step that may
+   have been cut off by a restart is not repeated without the user's OK. The red-team suite tries to create and run
+   workflows from injected text.
    Uploads from the dashboard go only to `NOTES_DIR/uploads/`: the name is reduced to a plain file name with an
    allowed extension (no folders, hidden files or Word lock files), the content must match it (PDF header, readable
    .docx, UTF-8 text), the 2 MB limit is enforced while the body streams in, nothing is overwritten, and the dashboard

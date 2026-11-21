@@ -22,6 +22,8 @@ const FIXTURES: Record<string, unknown> = {
   "/api/opportunities": [{ id: 1, kind: "internship", title: "Google STEP", organization: "Google", url: "javascript:alert(1)", location: null, deadline: "2026-12-15", status: "preparing", documents: [{ name: "CV", status: "ready" }, { name: "Recommendation letter", status: "requested", from: "Dr. Khan" }], missing: ["Recommendation letter (Dr. Khan)"], next_step: null, next_step_date: null, applied_on: null, days_left: 24, eligibility: null, notes: null, drafts: [{ id: 3, kind: "cover_letter", title: "Cover letter v1", content: "Dear team, [ADD: your CGPA]" }] }],
   "/api/documents": [{ id: 1, path: "uploads/cfp.docx", size: 12000, chunk_count: 4, indexed_at: "2026-11-21T10:00:00", pages: 3, pages_estimated: true, hidden_skipped: 0 }, { id: 2, path: "papers/fl.pdf", size: 400000, chunk_count: 30, indexed_at: "2026-11-21T10:00:00", pages: 12, pages_estimated: false, hidden_skipped: 0 }],
   "/api/documents/upload": { id: 3, path: "uploads/brief.docx", size: 9000, chunk_count: 2, indexed_at: "2026-11-21T10:00:00", pages: 1, pages_estimated: false, hidden_skipped: 1 },
+  "/api/workflows": [{ id: 1, name: "Interview: prepare", enabled: true, trigger: { type: "event", event: "opportunity_status", status: "interview" }, steps: [{ tool: "create_task", args: {} }, { tool: "delete_task", args: { task_id: 1 }, approve: true }], description: "When an application moves to 'interview': 1. create_task {} 2. delete_task {\"task_id\": 1} [waits for your approval]", runs: [{ id: 9, workflow_id: 1, status: "waiting_approval", step: 2, event: {}, attempts: 0, error: null, started: "2026-11-21T10:00", finished: null, log: [{ step: 0, state: "started", at: "t" }, { step: 0, state: "ok", at: "t" }] }, { id: 8, workflow_id: 1, status: "failed", step: 1, event: {}, attempts: 3, error: "No task with id 5.", started: "2026-11-20T10:00", finished: "2026-11-20T10:40", log: [] }] }],
+  "/api/workflow-templates": [{ key: "weekly-review", name: "Sunday evening: week in numbers", trigger: { type: "schedule" }, steps: [{ notify: "hi" }], description: "When every sun at 20:00: 1. tell you: hi" }, { key: "interview-prep", name: "Interview: prepare", trigger: {}, steps: [], description: "x" }],
   "/api/memories/review": { stale: [{ id: 2, kind: "fact", category: "academic", topic: "supervisor", content: "Dr. Khan", importance: "medium", source: "user", created_at: "2025-01-01T00:00:00", updated_at: "2025-01-01T00:00:00", confirmed_at: "2025-01-01T00:00:00", last_used_at: null, needs_review: true }], conflicts: [] },
   "/api/analytics": { weeks: Array.from({ length: 8 }, (_, i) => week(i)), streak: { current_days: 4, longest_days: 9, window_days: 90 }, commitments: { done: 3, dropped: 1, overdue: 1, kept_rate: 0.6 }, estimates: { tasks_measured: 5, median_actual_vs_estimate: 1.4 }, postponement: { total: 6, avg_before_completion: 1.5, top_reasons: [{ reason: "too big", count: 3 }] }, completions_by_weekday: { Mon: 1, Tue: 2, Wed: 0, Thu: 3, Fri: 1, Sat: 0, Sun: 0 } },
   "/api/reminders": [{ id: 1, text: "Email Dr. Khan", fire_at: "2026-11-08T04:00:00", status: "pending", linked_type: null, linked_id: null, sent_at: null }],
@@ -136,6 +138,22 @@ describe("dashboard smoke tests", () => {
     const sent = (fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls.find(([u]) => String(u).startsWith("/api/documents/upload"))!;
     expect(sent[0]).toBe("/api/documents/upload?name=brief.docx");
     expect((sent[1].headers as Record<string, string>)["Content-Type"]).toBe("application/octet-stream");
+    expect(errors).toEqual([]);
+  });
+
+  it("Workflows tab approves a paused step, retries a failed run and adds a template", async () => {
+    const calls = mockFetch();
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Workflows" }));
+    expect(await screen.findByText(/step 2: delete_task/)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Approve step 2" }));
+    await waitFor(() => expect(calls).toContainEqual({ method: "POST", path: "/api/workflow-runs/9/approve" }));
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(calls).toContainEqual({ method: "POST", path: "/api/workflow-runs/8/retry" }));
+    expect(screen.getByRole("button", { name: "Added" })).toBeTruthy();  // the interview template is already in use
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(calls).toContainEqual({ method: "POST", path: "/api/workflows" }));
     expect(errors).toEqual([]);
   });
 

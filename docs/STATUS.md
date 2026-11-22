@@ -1,0 +1,77 @@
+# Feature status
+
+What exists, and how far each part has been checked. "Tested" below means automated tests that run in CI with every
+outside service replaced by a mock or a local fixture; that proves Keel's own logic, not that a real service behaves
+the same way. "Live" means it was run against the real service with a real account.
+
+| Mark | Meaning |
+|---|---|
+| ✅ Live | Run against the real service (and covered by automated tests) |
+| 🧪 Tested | Automated tests only, against mocks or local fixtures; not yet tried against the real service |
+| ⏳ Needs you | Built and tested, but checking it for real needs your account, device or an action only you should take |
+| 🔬 Experimental | Works, with known gaps in quality |
+
+Last updated: 23 November 2026.
+
+## Core
+
+| Feature | Status | Evidence / what's missing |
+|---|---|---|
+| Chat (dashboard, CLI), tool loop, approvals, audit log | ✅ Live | Daily use; every eval run; `tests/test_agent.py`, e2e chat → delete → approve |
+| Tasks, goals, milestones, projects, commitments, routines, waiting on others | ✅ Live | Routing eval (242 cases) on Groq and Gemini; unit tests |
+| Daily and weekly planning, accountability, insights | ✅ Live | Planner guarantees unit-tested; eval cases |
+| Memory: profile, preferences, decisions, review, contradictions | ✅ Live | Eval cases; red-team memory-poisoning tests |
+| Applications: tracking, drafts, eligibility, readiness | ✅ Live | Eval cases on Groq and qwen2.5:3b; unit tests |
+| Workflows ("whenever X, do Y"), retries, approval steps | 🧪 Tested | `tests/test_workflows.py`; not yet run for days on a real schedule |
+| Documents: PDF/Word/text, pages, deadlines, compare | ✅ Live | Real notes folder indexed and searched |
+| File management: link, move, create, edit notes | 🧪 Tested | `tests/test_files.py`; 7/7 eval cases on Groq |
+| Voice: dictation and read-aloud | ⏳ Needs you | jsdom tests with a fake speech API; needs a real microphone in Chrome or Edge |
+
+## Models
+
+| Feature | Status | Evidence / what's missing |
+|---|---|---|
+| Groq (`openai/gpt-oss-120b`) | ✅ Live | Routing eval, 94-98% across runs (see the README's Honest status) |
+| Gemini (AI Studio key), as main model or fallback | ✅ Live | Eval: 17/18 answered on `gemini-3.6-flash`; a live fallback continued a Groq-started tool call |
+| Ollama (local) | ✅ Live | `qwen2.5:3b` on a laptop CPU: 22/25 routing cases; slow (5 s median, a minute cold) |
+| Anthropic | 🧪 Tested | Adapter tests only; no Anthropic key has been used yet |
+| Switching provider when one is rate-limited | ✅ Live | Groq's daily limit → Gemini answered; cooldown parsed from Groq's message |
+| Expired or wrong key, no internet | 🧪 Tested | Error paths unit-tested; not yet in a release checklist |
+
+## Integrations
+
+| Feature | Status | Evidence / what's missing |
+|---|---|---|
+| Gmail: search, read, triage, extract dates and action items | ✅ Live | Read-only checks against a real inbox (counts only were printed) |
+| Gmail: drafts and sending (approved) | ⏳ Needs you | Mocked Google API tests incl. attachment fingerprint and daily cap; a first real draft and send need your approval |
+| Google sign-in (OAuth): connect, scopes, refresh | ✅ Live | Connected with your own Desktop client; expiry and revocation are only mocked so far |
+| Google Calendar: list events | ✅ Live | Read-only check against your calendar |
+| Google Calendar: add, move, edit, delete (approved) | ⏳ Needs you | Mocked API tests; a first real change needs your approval |
+| iCal calendar feed (read-only) | ✅ Live | `scripts/smoke_integrations` |
+| Keel's browser: open, read, click, fill, attach, submit, download | 🧪 Tested | Real Chromium against local fixture pages (`tests/test_browser_rules.py`, `tests/e2e`), including a red-team page; not yet on a real website |
+| Application portals (scholarships, internships) | ⏳ Needs you | Fill plans are tested on fixture forms; real portals vary, need your login, and every submit needs your approval |
+| Email reminders and check-ins (SMTP) | ✅ Live | A reminder set in chat arrived on time by Gmail SMTP |
+| Telegram (messages and chat) | 🧪 Tested | Mocked Bot API; not yet run with a real bot |
+| GitHub (incl. private repos) | ✅ Live | `scripts/smoke_integrations` |
+| Brave web search | 🧪 Tested | Mocked API only |
+| Reading web pages (SSRF-guarded fetcher) | ✅ Live | Real pages in eval and demo; SSRF and redirect rules unit-tested |
+
+## Data and security
+
+| Feature | Status | Evidence / what's missing |
+|---|---|---|
+| Permission tiers, taint, URL gate, fencing | ✅ Live | Red-team suite (15 channels × 7 payloads, 268 tests); `scripts/security_demo` (12 attacks) |
+| Encrypted backups, verify, restore | ✅ Live | A copy of the real database backed up, verified and restored; CI does the same inside Docker |
+| Retention rules | 🧪 Tested | `tests/test_switches_retention.py`; the migration was run on a copy of real data |
+| Per-integration switches | 🧪 Tested | Same tests; refusals of already-queued approvals included |
+| Docker deployment (non-root, read-only, API key) | ✅ Live | CI builds and runs it, including backup and restore |
+| Database encryption at rest | Not built | By design: use full-disk encryption (see SECURITY.md) |
+| Multiple users | Not built | Single-user by design: one optional API key, no accounts |
+
+## Dashboard
+
+| Feature | Status | Evidence / what's missing |
+|---|---|---|
+| All 14 tabs (Today, Calendar, Goals, Projects, Commitments, Applications, Documents, Workflows, Memory, Chat, Insights, Activity, Services, Approvals) | ✅ Live | 35 jsdom tests, 11 real-Chromium e2e tests, used locally |
+| Phone layout | 🔬 Experimental | Responsive CSS checked at phone width in a desktop browser; not tested on a real phone |
+| Install on phone (PWA), access from other devices | Not built | See [ROADMAP.md](ROADMAP.md) |

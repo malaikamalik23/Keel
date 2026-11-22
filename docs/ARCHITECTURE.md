@@ -10,38 +10,39 @@ database and in code, not in the prompt.
 ## 1. System overview
 
 ```
-                 ┌──────────────────────── Clients ────────────────────────┐
-                 │  Dashboard (React)  ·  CLI  ·  Telegram (inbound + push)  │
-                 └──────────────┬───────────────────────────────────────────┘
-                                │ HTTP/JSON
-┌───────────────────────────────▼──────────────────────────────────────────────────────────┐
-│ FastAPI (app/api): validation, auth (X-API-Key), rate limit, security headers. No logic.   │
-└───────┬─────────────────────────────────────────────────────────────┬────────────────────┘
-        │ chat                                                         │ CRUD · approve · stats
-┌───────▼───────────────┐   tool calls    ┌────────────────────────────▼────────────────────┐
-│ Agent (app/agent)     │────────────────▶│ ToolExecutor (app/tools/executor.py)             │
-│  system prompt        │◀────────────────│  validate → permission policy → taint gate →     │
-│  + context pack       │   tool results  │  run → audit.  EVERY call passes through here.   │
-│  bounded tool loop    │                 └───────┬──────────────────────────────────────────┘
-└───────┬───────────────┘                         │
-        │                          ┌──────────────▼──────────────┐   ┌───────────────────────┐
-┌───────▼───────────────┐          │ Tools (app/tools) +          │   │ Security (app/security)│
-│ LLM client (app/llm)  │          │ services (app/services)      │   │ permissions · audit ·  │
-│ Anthropic·Groq·Ollama │          │ tasks goals projects         │   │ untrusted fencing ·    │
-└───────────────────────┘          │ commitments memory planning  │   │ sanitising             │
-                                   │ reminders calendar web notes │   └───────────────────────┘
-                                   │ github                       │
-                                   └──────────────┬───────────────┘
-                                                  │
-                              ┌───────────────────▼────────────────────┐
-                              │ SQLite (SQLAlchemy 2, Alembic) + FTS5   │
-                              └───────────────────▲────────────────────┘
-                                                  │ same services, same tools
-┌─────────────────────────────────────────────────┴──────────────────────────────────────┐
-│ Scheduler (APScheduler, app/scheduler): tick() → reminders · check-ins · detectors       │
-│   → NotificationService (dedupe, priority, quiet hours, daily budget) → Telegram / log   │
-│   → LLM is asked only to *word* the message (no tools; deterministic fallback text)      │
-└──────────────────────────────────────────────────────────────────────────────────────────┘
+      ┌──────────────────────────────── Clients ─────────────────────────────────┐
+      │ Dashboard (React; voice in/out) · CLI · Telegram (chat + push) · email push │
+      └───────────────────────────────────┬───────────────────────────────────────┘
+                                          │ HTTP/JSON
+┌─────────────────────────────────────────▼────────────────────────────────────────────────────┐
+│ FastAPI (app/api): auth (X-API-Key / local-only), rate limit, security headers. No logic.      │
+└──────┬──────────────────────────────────────────────────────────────────┬────────────────────┘
+       │ chat                                                             │ CRUD · approve · switches ·
+┌──────▼────────────────┐  tool calls  ┌──────────────────────────────────▼───────────────────┐ retention · backups
+│ Agent (app/agent)     │─────────────▶│ ToolExecutor (app/tools/executor.py)                   │
+│  prompt + context pack│◀─────────────│  switch → validate → permission → taint gate → run →   │
+│  lean tool groups     │ tool results │  audit.  EVERY call (agent, user, workflow) goes here.  │
+└──────┬────────────────┘              └──────┬─────────────────────────────────────────────────┘
+       │                                      │
+┌──────▼──────────────────────────┐  ┌────────▼───────────────────────────┐  ┌────────────────────────┐
+│ LLM (app/llm)                   │  │ Tools (app/tools, 100) + services  │  │ Security (app/security) │
+│ Groq · Gemini · Anthropic ·     │  │ (app/services): tasks goals plans  │  │ permissions · audit ·   │
+│ Ollama, with FallbackLLM when   │  │ memory commitments applications    │  │ untrusted fencing ·     │
+│ the main one is rate-limited    │  │ documents files workflows backups  │  │ sanitising              │
+└─────────────────────────────────┘  │ retention switches                 │  └────────────────────────┘
+                                     └────────┬───────────────────────────┘
+                     ┌────────────────────────┼──────────────────────────────────────────┐
+┌────────────────────▼──────────────┐  ┌──────▼─────────────────────────────────────────────────────┐
+│ SQLite (SQLAlchemy 2, Alembic      │  │ Integrations (app/integrations): Gmail · Google Calendar ·   │
+│ 0001-0019) + FTS5 notes index      │  │ Google OAuth · iCal · Keel's browser (Playwright) · safe     │
+└────────────────────▲──────────────┘  │ HTTP fetcher · Brave · GitHub · Telegram · SMTP              │
+                     │ same services    └─────────────────────────────────────────────────────────────┘
+┌────────────────────┴──────────────────────────────────────────────────────────────────────────┐
+│ Scheduler (APScheduler, app/scheduler): tick() → reminders · calendar follow-up · workflows ·    │
+│   check-ins · nudges · retention rules;  daily encrypted backup (BACKUP_DAILY)                   │
+│   → NotificationService (switch, dedupe, priority, quiet hours, daily budget) → Telegram / email │
+│   → the LLM only *words* the message (no tools; deterministic fallback text)                     │
+└───────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Key decisions
@@ -55,13 +56,14 @@ database and in code, not in the prompt.
 | Messages stored in provider block format | Replay tool exchanges exactly; a new provider needs one adapter (`app/llm`). |
 | Same `Container` for API, CLI and scheduler | One code path, identical behaviour, one place to test. |
 | `tick()` is idempotent and catches up | Scheduling by *state* (due items, windows, dedupe keys), not exact timers: a sleeping laptop or a double run can't lose or duplicate a message. |
-| Single process | The scheduler and rate limiter are in-process. Scale-out would need a worker/queue (see §10). |
+| Single process | The scheduler and rate limiter are in-process. Scale-out would need a worker/queue (see §11). |
+| Integration switches checked in the executor | One place refuses a switched-off integration for the agent, workflows and queued approvals alike; hiding its tools from the model is only a convenience on top. |
 
 ---
 
 ## 2. Data model
 
-Hand-written Alembic migrations `0001`–`0006`; SQLite today, SQLAlchemy keeps PostgreSQL a URL change (notes search needs FTS5, so it is SQLite-only).
+Hand-written Alembic migrations `0001`–`0019`; SQLite today, SQLAlchemy keeps PostgreSQL a URL change (notes search needs FTS5, so it is SQLite-only).
 
 | Table | Purpose |
 |---|---|
@@ -76,6 +78,12 @@ Hand-written Alembic migrations `0001`–`0006`; SQLite today, SQLAlchemy keeps 
 | `reminders`, `checkins`, `notifications` | Scheduler state. `notifications` *is* the budget: counts and dedupe keys are read from it, so limits survive restarts |
 | `documents`, `chunks`, `chunk_fts` | Notes index (FTS5 virtual table, rowid = chunk id) |
 | `pending_actions`, `audit_log` | The approval queue and the record of every tool call |
+| `important_dates` | Exams, birthdays, application windows, with reminders ahead of them |
+| `opportunities`, `application_drafts` | Jobs, internships and scholarships with requirements and a document checklist; drafts Keel wrote for them |
+| `project_entries`, `project_links` | A project's updates, blockers and decisions; its notes and links |
+| `document_links` | A file in `NOTES_DIR` connected to an application, task or email, keyed by path so it survives re-indexing |
+| `workflows`, `workflow_runs` | "When X, do these steps" rules and each run's step log, approvals and retries (one run per event: a dedupe key) |
+| `user_settings` | Set from the dashboard: integration switches and retention rules (key-value) |
 
 **Why `task_events` matters:** `postponement_count` is a cache. The event history (when, how far, *why*) is what lets the
 accountability layer say "you've postponed GRE four times, citing 'too big' twice" without inventing anything.
@@ -108,7 +116,7 @@ Tool(name, description, permission, input_model, handler(ctx, params) -> dict,
      summarize=..., returns_untrusted=False, taint_gate=None)
 ```
 
-The JSON schema the model sees is generated from the pydantic input model that also validates the call. All 43 tools (42 domain tools plus `load_tools`) are listed in
+The JSON schema the model sees is generated from the pydantic input model that also validates the call. All 100 tools (99 domain tools plus `load_tools`) are listed in
 [TOOLS.md](TOOLS.md) (generated from the registry; a test fails if it goes stale).
 
 | Tier | Behaviour |
@@ -117,7 +125,9 @@ The JSON schema the model sees is generated from the pydantic input model that a
 | WRITE | Runs immediately and is audited. **Needs approval when the session is tainted**, or always with `CONFIRM_WRITES=true` |
 | HIGH_IMPACT | Never runs from the model; queued as a `pending_action` that only you can approve (API/CLI/UI), executed once, in one transaction |
 
-Tools that need configuration (calendar, web, notes, GitHub) are only advertised to the model when configured.
+Tools that need configuration (Gmail, calendars, the browser, web search, notes, GitHub) are only advertised to the model when
+configured, and not while their integration is switched off on the Services tab (`app/services/switches.py`). The executor
+refuses a switched-off tool on every path, including an approval queued before the switch was turned off.
 
 **Lean tool profile** (`app/tools/groups.py`, default). Tool definitions are ~9,300 tokens, sent with every LLM request. Tools are therefore split into 15 groups; a request carries the always-on `tasks` group plus groups chosen by keyword rules on the user's message, groups the model called recently (so "yes" keeps working), and any it requests with the `load_tools` meta-tool (the system prompt lists the unloaded groups). Result: ~2.6-3.3k tokens of overhead instead of ~10.6k. This is a *size* optimisation, not a security boundary: the executor enforces permissions, confirmation and taint on every call, advertised or not (tested).
 
@@ -154,39 +164,47 @@ streaks, promises kept, estimate accuracy and postponement reasons for the Insig
 `Scheduler.tick()` runs every minute and is safe to run twice:
 
 1. **Reminders** due now are sent (exempt from budget/quiet hours; retried with backoff; dropped if >24h late).
+1. **Calendar follow-up**: a meeting a task was linked to moved or vanished; today's plan blocks hit by a new meeting are refitted.
+1. **Workflows**: due scheduled runs, retries after a failure, and steps waiting for your approval.
 2. **Check-ins** (morning, evening, weekly-replaces-evening) are sent if their time has passed, they're inside the grace window and none
    was sent today. Facts come from SQL; the LLM, with **no tools**, only words the message; if it fails, a deterministic text is sent.
 3. **Detectors** (overdue commitments, overdue tasks, tasks slipping ≥3×, stalled plan after 14:00, neglected goals) produce nudges with
    stable dedupe keys. At most one nudge per tick.
 
 `NotificationService` decides whether anything is sent: duplicate → priority threshold → quiet hours (high priority may interrupt) →
-daily budget. Nudges draw from their own pool so they can never crowd out the check-ins. Delivery is a `Notifier` (Telegram or log).
+daily budget. Nudges draw from their own pool so they can never crowd out the check-ins. Delivery is a `Notifier` (Telegram,
+email or log). With "messages" switched off on the Services tab, nothing is sent.
+
+After those, your **retention rules** run at most once a day (nothing is deleted until you set one), and with `BACKUP_DAILY=true`
+an encrypted backup is taken at `BACKUP_TIME` (`app/services/backups.py`: scrypt + AES-256-GCM in authenticated chunks).
 
 ## 8. Research tools and the injection defences
 
-`web_fetch`, `web_search`, `github_*`, `notes_search`, `read_note` and `read_calendar` all return text written by third parties, so
+`web_fetch`, `web_search`, `github_*`, the notes and document tools, `read_calendar`, the `gmail_*` readers, `gcal_list_events` and the
+`browser_*` readers all return text written by third parties, so
 they are `returns_untrusted`: output is sanitised, fenced in `<untrusted_content>`, and taints the conversation (WRITE tools then need approval until a new chat).
-`web_fetch` additionally has an SSRF-hardened fetcher and an exfiltration `taint_gate`. The full threat model, the 14 enforced controls, how
+`web_fetch` and `browser_open` additionally have an SSRF guard (private addresses refused, every redirect checked) and an exfiltration
+`taint_gate`; the browser also refuses consequential clicks and never types passwords, payment or ID numbers. The full threat model, the 14 enforced controls, how
 they are tested (the red-team suite, mutation-checked) and the known limitations are in **[SECURITY.md](../SECURITY.md)**.
 
 ## 9. Quality gates
 
 | Gate | What it covers |
 |---|---|
-| `pytest` + `npm test` (31 dashboard tests) + `tests/e2e` (real Chromium) | Tools, executor, agent loop, planner, scheduler, API, notes search, SSRF, GitHub/Brave/Telegram clients (all HTTP mocked, LLM scripted) |
-| `tests/injection` | The red-team suite, a compromised model against 7 channels × 7 payloads |
-| `evals/` | Tool-routing eval (160 cases, 55 with argument checks; reports missed, wrong and unsafe calls), scored per category and tag, history tracked; the dataset itself is validated offline |
-| CI | ruff, Python 3.11/3.12, dashboard type-check + build, real-Chromium e2e, dependency audit, gitleaks secret scan, Docker build + `/health` |
+| `pytest` (~860) + `npm test` (35 dashboard tests) + `tests/e2e` (11, real Chromium) | Tools, executor, agent loop, planner, scheduler, workflows, API, notes, SSRF, backups, retention, switches; Gmail, Google, Brave, GitHub, Telegram and model clients against mocked HTTP; the browser against local fixture pages; the LLM scripted |
+| `tests/injection` | The red-team suite (268 tests): a compromised model against 15 channels (web, search, GitHub, notes, Word documents, both calendars, Gmail) × 7 payloads, plus memory poisoning, link choice and summary taint |
+| `evals/` | Tool-routing eval (242 cases, 89 with argument checks; reports missed, wrong and unsafe calls, latency and tokens), scored per category and tag, history and a dashboard tracked; the dataset itself is validated offline |
+| CI | ruff, Python 3.11/3.12, red-team suite, dashboard type-check + build, real-Chromium e2e, dependency audit, gitleaks secret scan, Bandit + Semgrep, Docker build + `/health`, the deployment guide's backup and restore (plain and encrypted) |
 
 ## 10. Folder structure
 
 ```
 app/{agent,api,db,integrations,llm,scheduler,security,services,tools}/   backend
 frontend/         React + Vite + TypeScript dashboard (served by FastAPI from frontend/dist)
-migrations/       hand-written Alembic migrations 0001-0006
+migrations/       hand-written Alembic migrations 0001-0019
 tests/            unit/API tests; tests/injection = red team
-evals/            tool-routing eval        scripts/   doc generators
-docs/             ARCHITECTURE.md · TOOLS.md (generated) · DEMO.md
+evals/            tool-routing eval        scripts/   backup, Gmail connect, smoke checks, doc generators
+docs/             ARCHITECTURE · TOOLS (generated) · INSTALL · DEPLOY · DEMO · API · STATUS · ROADMAP
 ```
 
 ## 11. Known limitations and ideas
@@ -196,9 +214,10 @@ docs/             ARCHITECTURE.md · TOOLS.md (generated) · DEMO.md
 - **Coarse, sticky taint**: it lasts for the rest of the conversation (see SECURITY.md). A finer-grained scheme (track which values came from where) would reduce approval prompts.
 - **Keyword memory relevance.** Fine at this scale; embeddings are the upgrade if memories grow into the thousands.
 - **Notes search is SQLite-only** (FTS5). A Postgres deployment would need `tsvector` instead.
-- **Calendar is read-only and doesn't yet reduce planning capacity automatically**; `read_calendar` returns `busy_minutes` and the agent is
-  told to subtract them.
-- **Browser coverage is narrow**: two Chromium end-to-end tests (main flow, crash recovery) plus jsdom render tests; no Firefox/Safari runs.
+- **The iCal feed is read-only**; changing events needs Google Calendar (each change approved). The planner fits work around the
+  calendar's busy times.
+- **Dashboard browser coverage**: 11 Chromium end-to-end tests plus jsdom render tests; no Firefox/Safari runs, and not yet tested on real phones.
+- **Keel's browser** is tested on local fixture pages, not yet on real portals; see [STATUS.md](STATUS.md) for what is verified live.
 - **The fetcher is not a firewall.** `web_fetch` pins DNS (the address that was checked is the address connected to), which closes
   DNS rebinding, but on a server you should still block private ranges with an egress firewall or network policy.
 - **Following a link inside a page needs approval** once a conversation is tainted (only typed URLs and search results open freely).

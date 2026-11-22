@@ -9,10 +9,12 @@ To run Keel on a server instead, see **[DEPLOY.md](DEPLOY.md)**.
 |---|---|
 | Python | 3.11 or 3.12 |
 | Node | 20 or newer, only to build the dashboard once |
-| An LLM key | [Anthropic](https://console.anthropic.com/) **or** [Groq](https://console.groq.com/keys) (Groq has a free tier) |
+| A model | A key for [Groq](https://console.groq.com/keys) (free tier), [Google AI Studio](https://aistudio.google.com/apikey) (free tier) or [Anthropic](https://console.anthropic.com/), **or** [Ollama](https://ollama.com) on your own computer (no key) |
 | Disk | under 1 GB including the virtual environment |
 
-Everything else (Telegram, web search, calendar, GitHub, a notes folder) is optional and can be added later.
+Everything else (Gmail, Google Calendar, Keel's browser, Telegram or email reminders, web search, GitHub, a notes
+folder, encrypted backups) is optional and can be added later. What has been checked against real services is in
+[STATUS.md](STATUS.md).
 
 ## 1. Get the code and install
 
@@ -40,7 +42,7 @@ copy .env.example .env
 Open `.env` and set three things:
 
 ```ini
-GROQ_API_KEY=...                 # or ANTHROPIC_API_KEY=...
+GROQ_API_KEY=...                 # or GEMINI_API_KEY=..., ANTHROPIC_API_KEY=..., or LLM_PROVIDER=ollama
 AGENT_MODEL=openai/gpt-oss-120b  # must belong to the provider whose key you set (Anthropic: claude-sonnet-5)
 AGENT_TIMEZONE=Asia/Karachi      # your IANA timezone
 ```
@@ -54,7 +56,8 @@ On Groq's free tier also set `HISTORY_MESSAGE_LIMIT=12`. Every other option is d
 pytest -q
 ```
 
-About 465 tests should pass in a few minutes. They need no key and no network, so a failure here is an install problem,
+About 860 tests should pass (10-15 minutes on a laptop; Windows Defender scanning the venv is the usual reason
+it's slower, see Troubleshooting). They need no key and no network, so a failure here is an install problem,
 not a provider problem.
 
 ## 4. Build the dashboard and start
@@ -90,7 +93,11 @@ Keel. A longer tour is in [DEMO.md](DEMO.md).
 | Reminders by email instead | `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD` and `EMAIL_TO` (see below) |
 | Web search | `BRAVE_API_KEY` |
 | Search over your notes and papers | `NOTES_DIR=/path/to/folder` |
-| Your calendar (read-only) | `CALENDAR_ICS_URL` |
+| Your calendar, read-only (Google, Outlook or any iCal feed) | `CALENDAR_ICS_URL` |
+| Your Google Calendar, read and change (each change approved) | `GOOGLE_CALENDAR_ENABLED=true` ([below](#connect-google-calendar)) |
+| Your Gmail | `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET` ([below](#connect-gmail)) |
+| Keel's own browser for portals and forms | `BROWSER_ENABLED=true` ([below](#keels-browser)) |
+| Encrypted backups | `BACKUP_PASSPHRASE` ([below](#encrypted-backups)) |
 | Your GitHub repos (read-only) | `GITHUB_USER`, and `GITHUB_TOKEN` for private repos |
 
 Check the ones you configured with one read-only call each (it never prints keys):
@@ -175,7 +182,7 @@ paid tier, or use a local model (below) as the fallback: `LLM_FALLBACK=ollama`.
 
 ### Run on a local model (Ollama)
 
-Keel can use a model on your own computer instead of Anthropic or Groq. No key is needed and your chats, tasks and
+Keel can use a model on your own computer instead of a hosted one. No key is needed and your chats, tasks and
 notes never leave the machine.
 
 1. Install [Ollama](https://ollama.com) and pull a model that can call tools:
@@ -217,6 +224,25 @@ to the one address in `EMAIL_TO`, over an encrypted connection, as plain text. W
 Email is one-way: you get reminders and check-ins, and reply in the dashboard or the CLI. If Telegram is also
 configured, Telegram is used instead. The same daily budget, quiet hours and de-duplication apply to both.
 
+### Encrypted backups
+
+1. In `.env`: `BACKUP_PASSPHRASE=` a few random words (12+ characters). Save the same passphrase in your password
+   manager: without it nobody, including you, can open a backup.
+2. Optional: `BACKUP_DIR=` a folder on another drive or a synced folder (OneDrive, Google Drive), and
+   `BACKUP_DAILY=true` with `SCHEDULER_ENABLED=true` for one every night at `BACKUP_TIME`.
+3. Take one: `python -m scripts.backup` (or **Back up now** on the Services tab). Check it: `python -m scripts.backup
+   verify <file>`. Restore (Keel stopped): `python -m scripts.backup restore <file>`.
+
+A backup holds the database and your notes folder, never `.env` or the Google sign-in. Moving Keel to another computer
+is a restore: install Keel there, copy `.env`, restore, start Keel, and run `python -m scripts.gmail_connect` again.
+
+### Switch an integration off, and choose what is kept
+
+The Services tab has an on/off switch on each connected integration (Gmail, Google Calendar, the browser, web pages,
+web search, GitHub, the notes folder, and reminders/check-ins). Off works at once, also for approvals already waiting,
+and only you can switch it back on there. Its **Data retention** card sets how long logs and history are kept
+(everything is kept until you choose otherwise); "Delete expired now" shows what would go before deleting anything.
+
 ## 7. Docker instead
 
 ```bash
@@ -234,7 +260,8 @@ pip install -r requirements-dev.txt
 cd frontend && npm ci && npm run build && cd ..
 ```
 
-Restart Keel. With Docker: `git pull && docker compose up -d --build`. Take a backup first: `python -m scripts.backup`.
+Restart Keel. With Docker: `git pull && docker compose up -d --build`. Take a backup first: `python -m scripts.backup`
+(encrypted once `BACKUP_PASSPHRASE` is set). The database upgrades itself on the next start.
 
 ---
 
@@ -280,14 +307,24 @@ needs `API_KEY`. This check is what stops a website open in your browser from us
 Two different limits on the free tier:
 - *Tokens per minute.* Keep `TOOL_PROFILE=lean` and `HISTORY_MESSAGE_LIMIT=12`, and wait a minute.
 - *Tokens per day.* It frees up gradually over the following hours; nothing in Keel can speed that up. Long sessions
-  and the routing eval (`evals/`, 160 calls) are the usual cause.
+  and the routing eval (`evals/`, 242 calls for a full run) are the usual cause. Set `GEMINI_API_KEY` and
+  `LLM_FALLBACK=gemini` so another model answers meanwhile ([above](#use-two-models-groq-and-gemini)).
 
 **The provider says the model does not exist, or does not support tools.**
 `AGENT_MODEL` must be a model of the provider whose key is set, and it must support tool calling. The default
 `claude-sonnet-5` only works with an Anthropic key. On Groq use `openai/gpt-oss-120b`.
 
-**Both keys are set and the wrong provider is used.**
-Set `LLM_PROVIDER=anthropic` or `LLM_PROVIDER=groq` explicitly.
+**Several keys are set and the wrong provider is used.**
+Set `LLM_PROVIDER=groq`, `gemini`, `anthropic` or `ollama` explicitly.
+
+**"Invalid API key", 401 or 403 from the provider.**
+The key was revoked, mistyped, or belongs to another provider. Make a new one, put it in `.env`, restart, and use
+the Services tab's "Check connection" on the AI model row (it lists models; nothing is sent).
+
+**No internet.**
+Keel itself keeps working (dashboard, tasks, plans, approvals); chat needs the model unless you use Ollama, and the
+reply says the model couldn't be reached. Reminders that fall due while offline are sent when the connection returns,
+within a day.
 
 **Local model (Ollama): "Can't reach Ollama", "isn't on this computer", "can't call tools", or very slow.**
 Start the Ollama app (or `ollama serve`); `ollama pull` the model named in `OLLAMA_MODEL`; pick a model whose
@@ -334,8 +371,16 @@ Telegram variables are also set, Telegram is used instead of email.
 Send your bot `/start` once (a bot cannot message you first), and check that `TELEGRAM_CHAT_ID` is your *numeric* id
 (ask `@userinfobot`). Use your private chat, not a group. Keel ignores every other chat without replying.
 
+**Gmail or Google Calendar stopped working ("invalid_grant", "Token has been expired or revoked").**
+In Testing mode Google signs you out after 7 days, and removing Keel at myaccount.google.com/permissions revokes it.
+Run `python -m scripts.gmail_connect` again and restart Keel. To stop the 7-day sign-out, publish the app (see
+[Connect Gmail](#connect-gmail)).
+
+**A tool says an integration "is switched off on the Services tab".**
+You (or someone with the dashboard) switched it off there. Switch it back on; nothing in `.env` needs changing.
+
 **`notes_search` finds nothing.**
-`NOTES_DIR` must point at a folder that contains `.md`, `.txt`, `.rst`, `.tex`, `.org` or `.pdf` files. The folder is
+`NOTES_DIR` must point at a folder that contains `.md`, `.txt`, `.rst`, `.tex`, `.org`, `.pdf` or `.docx` files. The folder is
 scanned at startup; after adding files, restart or type `/index` in the CLI. Scanned PDFs without a text layer cannot be read.
 
 **The agent says it cannot search the web.**
@@ -343,6 +388,43 @@ scanned at startup; after adding files, restart or type `/index` in the CLI. Sca
 
 **The end-to-end tests are skipped.**
 They need a browser: `python -m playwright install chromium`, and the dashboard must be built.
+
+### Windows
+
+**Use PowerShell or Windows Terminal, from the project folder.** Commands in this guide are written for PowerShell on
+Windows. In Git Bash, activate with `source .venv/Scripts/activate`.
+
+**`pip install` fails building `cryptography`, `pydantic-core` or another package.**
+Your Python is too new or 32-bit, so pip found no ready-made wheel and tried to compile. Install 64-bit Python 3.11 or
+3.12 from python.org, recreate the venv (`py -3.12 -m venv .venv`) and install again.
+
+**Paths with spaces or OneDrive.**
+Quote them in `.env`: `NOTES_DIR="C:/Users/you/OneDrive/My Notes"`. Forward slashes work everywhere and avoid
+backslash surprises. If OneDrive keeps files "online-only", Keel can't read them until you choose *Always keep on this
+device* for that folder.
+
+**Tests or the first start are very slow.**
+Windows Defender scans every file the venv touches. Add the project folder to Defender's exclusions (Windows Security >
+Virus & threat protection > Exclusions), or run a subset: `pytest -q tests/test_files.py`.
+
+**`npm ci` fails with EPERM or "file in use".**
+Close editors and dev servers using `frontend/node_modules`, then run it again. Antivirus can also lock files mid-install.
+
+**Port 8000 is in use.**
+Find what holds it: `netstat -ano | findstr :8000`, then end that process in Task Manager (the last number is its PID), or
+start Keel on another port with `--port 8010`.
+
+**`python -m playwright install chromium` is blocked.**
+A company proxy or antivirus may block the download. Try another network, or leave `BROWSER_ENABLED=false`: everything
+else works without it.
+
+**Line endings.**
+Git may warn "LF will be replaced by CRLF". That's harmless. If you edit `.env` in Notepad, save it as UTF-8.
+
+**Reminders stop when the laptop sleeps.**
+The scheduler only runs while Keel does. To start Keel at login, create a Task Scheduler task "At log on" that runs
+`C:\path\to\Keel\.venv\Scripts\python.exe -m uvicorn app.api.main:create_app --factory` in the project folder.
+Reminders missed while it slept are sent when it wakes, within a day; check-ins too late to be useful are skipped.
 
 ### Still stuck
 

@@ -194,6 +194,12 @@ class Scheduler:
             return
         self._aps = BackgroundScheduler(timezone=str(self.tz))
         self._aps.add_job(self._safe_tick, "interval", seconds=self.settings.scheduler_tick_seconds, max_instances=1, coalesce=True, next_run_time=datetime.now(self.tz))
+        if self.settings.backup_daily:
+            if self.settings.backup_passphrase:
+                hh, mm = (int(x) for x in self.settings.backup_time.split(":"))
+                self._aps.add_job(self._safe_backup, "cron", hour=hh, minute=mm, max_instances=1, coalesce=True)
+            else:
+                logger.warning("BACKUP_DAILY is on but BACKUP_PASSPHRASE is empty: no backups will be taken")
         self._aps.start()
         if self.settings.telegram_inbound and isinstance(self.notifier, TelegramNotifier):
             self._stop.clear()
@@ -212,6 +218,15 @@ class Scheduler:
             self.tick()
         except Exception:  # noqa: BLE001
             logger.exception("Scheduler tick crashed")
+
+    def _safe_backup(self) -> None:
+        from app.services.backups import backup_now
+
+        try:
+            target = backup_now(self.settings)
+            logger.info("Daily encrypted backup written: %s", target.name)
+        except Exception:  # noqa: BLE001 - a failed backup must not stop the scheduler; it shows in the log and dashboard
+            logger.exception("Daily backup failed")
 
     def _poll_loop(self) -> None:
         inbox = TelegramInbox(self.notifier, self.handle_inbound)  # type: ignore[arg-type]

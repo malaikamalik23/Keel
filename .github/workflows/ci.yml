@@ -135,3 +135,21 @@ jobs:
           docker compose up -d
           for i in $(seq 1 20); do curl -fsS http://127.0.0.1:8000/health && break; sleep 2; done
           test "$(curl -s -o /dev/null -w '%{http_code}' -H "X-API-Key: $API_KEY" http://127.0.0.1:8000/api/tasks)" = 200 || { docker compose logs keel; exit 1; }
+      - name: Encrypted backup, verify and restore, as in docs/DEPLOY.md
+        env:
+          API_KEY: ci-only-not-a-secret
+          BACKUP_PASSPHRASE: ci-only-not-a-secret-passphrase
+        run: |
+          docker compose up -d
+          for i in $(seq 1 20); do curl -fsS http://127.0.0.1:8000/health && break; sleep 2; done
+          docker compose exec -T -e BACKUP_PASSPHRASE keel python -m scripts.backup | tee out.txt && grep -q "encrypted" out.txt
+          rm -rf "$HOME/keel-backups" && mkdir -p "$HOME/keel-backups" && docker compose cp keel:/app/data/backups/. "$HOME/keel-backups/"
+          backup="$(ls "$HOME/keel-backups" | grep '\.keelbak$' | head -1)" && test -n "$backup"
+          ! grep -q "SQLite format" "$HOME/keel-backups/$backup"
+          docker compose exec -T -e BACKUP_PASSPHRASE keel python -m scripts.backup verify "/app/data/backups/$backup"
+          docker compose stop keel
+          docker compose run --rm --no-deps -T -e BACKUP_PASSPHRASE keel sh -c 'cat > /tmp/restore.keelbak && python -m scripts.backup restore /tmp/restore.keelbak' < "$HOME/keel-backups/$backup" | tee out.txt
+          grep -q "Restored the database" out.txt
+          docker compose up -d
+          for i in $(seq 1 20); do curl -fsS http://127.0.0.1:8000/health && break; sleep 2; done
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H "X-API-Key: $API_KEY" http://127.0.0.1:8000/api/tasks)" = 200 || { docker compose logs keel; exit 1; }

@@ -112,6 +112,16 @@ class Settings(BaseSettings):
     browser_enabled: bool = False
     browser_headless: bool = True  # false = you can watch the window (and log in to sites yourself in it)
 
+    # ---- Encrypted backups (`python -m scripts.backup`; restore with `python -m scripts.backup restore FILE`) ----
+    # With a passphrase, backups are one encrypted file holding the database and your notes folder. Keep the passphrase
+    # in your password manager too: without it a backup can't be opened, by anyone, including you.
+    backup_passphrase: str | None = None
+    backup_dir: str | None = None  # default: data/backups next to the database
+    backup_keep: int = Field(14, ge=0, le=1000)  # newest N kept, older ones deleted (0 = keep all)
+    backup_include_notes: bool = True
+    backup_daily: bool = False  # with the scheduler on, take an encrypted backup every day at BACKUP_TIME (local)
+    backup_time: str = Field("03:15", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+
     rate_limit_per_minute: int = 30  # per client, for endpoints that call the LLM (/api/chat, /api/scheduler/tick). 0 = off
 
     # Built dashboard (frontend/dist). Served at / when the directory exists; blank/None disables.

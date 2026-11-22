@@ -265,12 +265,36 @@ messages and tool results of each request) and the services you configured.
 To erase everything, stop Keel and delete the database file (and its backups). Secrets live only in `.env`.
 
 **Backups.** `python -m scripts.backup` writes a consistent copy to `data/backups/` (SQLite's online backup API, safe
-while Keel is running; the copy is integrity-checked) and keeps the newest 14 (`--keep`, `--dir`). Backup files are created readable by their owner only (mode 600). Run it from a daily
-scheduled task. Backups contain everything above, so store them as carefully as the database. To restore, stop Keel and
-copy a backup over the database file.
+while Keel is running; the copy is integrity-checked) and keeps the newest 14 (`BACKUP_KEEP`, `--keep`, `BACKUP_DIR`,
+`--dir`). Backup files are created readable by their owner only (mode 600).
+
+With `BACKUP_PASSPHRASE` set (12+ characters), a backup is **one encrypted file** (`agent-<stamp>.keelbak`) holding the
+database and the notes folder (`BACKUP_INCLUDE_NOTES`; hidden files and folders and symlinks are skipped):
+
+- **Encryption:** AES-256-GCM in 64 KiB chunks; the key comes from the passphrase through scrypt (N=2^17, r=8, p=1: about
+  a second and 128 MB per guess). Each chunk is authenticated together with the header and its position, so a wrong
+  passphrase, a changed byte, reordered or missing chunks and a cut-off file are all refused. Nothing unencrypted is
+  written to the backup folder; a short-lived database copy sits in your temp folder while the file is made.
+- **Never included:** `.env` and the Google token. Keep `.env` (and the passphrase) in your password manager: without
+  the passphrase nobody, including you, can open a backup.
+- **Checks:** `python -m scripts.backup verify FILE` decrypts it, checks every file against the SHA-256 in its manifest
+  and runs SQLite's integrity check, without restoring anything.
+- **Restore** (`restore FILE`, with Keel stopped): the whole backup is checked first, in a staging folder; only then is
+  the current database renamed `agent.before-restore-<stamp>.db` (kept, not deleted) and replaced. Notes are copied back
+  only where no file exists, never overwriting one. A crafted backup can't write anywhere else: only `agent.db`,
+  `manifest.json` and `notes/<relative path>` are accepted (no `..`, absolute paths, hidden names, links or devices),
+  and a backup from a newer Keel (unknown database version) is refused. Restoring is CLI-only; the dashboard can list
+  backups and take one, never restore.
+- **Daily:** `BACKUP_DAILY=true` with the scheduler on takes one every day at `BACKUP_TIME`.
+
+Put `BACKUP_DIR` on another drive or a synced folder (OneDrive, Google Drive, Dropbox): the provider only ever sees the
+encrypted file. Without a passphrase, backups are plain database copies (the old format) and need the same care as the
+database. Moving Keel to another computer is a restore: install Keel, copy `.env`, `restore FILE`, start Keel, and
+reconnect Google (`python -m scripts.gmail_connect`).
 
 **Encryption at rest: not built in, on purpose.** Encrypting the SQLite file (e.g. SQLCipher) means a native dependency
 that breaks `pip install` on many machines, and a key that has to live somewhere: in `.env` next to the database it
 protects, which adds little, or typed in on every start, which breaks the scheduler and Docker. Full-disk encryption
 already protects the file against the realistic threat (a lost or stolen laptop) with none of those costs, so use it:
-BitLocker (Windows), FileVault (macOS) or LUKS (Linux), and keep backups on an encrypted drive too.
+BitLocker (Windows), FileVault (macOS) or LUKS (Linux). Backups are different: they leave the machine, so they are
+encrypted with their own passphrase (above).

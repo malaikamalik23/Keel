@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api } from "../api";
-import { useLoad } from "../hooks";
+import { useAction, useLoad } from "../hooks";
 import type { ServiceCheck, ServiceRow } from "../types";
 import { Badge, Card, ErrorNote, Loading } from "../ui";
 
@@ -33,6 +33,7 @@ export default function Services() {
               {s.details.length > 0 && <ul className="small svc-details">{s.details.map((d) => <li key={d}>{d}</li>)}</ul>}
               <p className="small muted">{s.access}</p>
               {(s.status === "not_set_up" || s.status === "partial" || s.status === "off") && <p className="small">To set up: <code>{s.setup}</code></p>}
+              {s.id === "backups" && <Backups />}
               {s.testable && (
                 <div className="svc-check">
                   <button className="ghost" disabled={check === "running"} onClick={() => void test(s.id)}>{check === "running" ? "Checking…" : "Check connection"}</button>
@@ -47,6 +48,31 @@ export default function Services() {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+type BackupList = { enabled: boolean; folder?: string; backups: { name: string; size: number; created: string; encrypted: boolean }[] };
+
+function Backups() {
+  const { data, reload } = useLoad<BackupList>("/api/backups");
+  const [busy, setBusy] = useState(false);
+  const { run, error } = useAction(reload);
+  const now = async () => { setBusy(true); try { await run(() => api.post("/api/backups")); } finally { setBusy(false); } };
+  if (!data) return null;
+  const latest = data.backups.slice(0, 3);
+  return (
+    <div className="small">
+      {data.enabled && <button className="ghost" disabled={busy} onClick={() => void now()}>{busy ? "Backing up…" : "Back up now"}</button>}
+      <ErrorNote error={error} />
+      {latest.length > 0 ? (
+        <ul className="svc-details">
+          {latest.map((b) => (
+            <li key={b.name}>{b.name} · {Math.max(1, Math.round(b.size / 1024))} KB{b.encrypted ? "" : " · not encrypted"}</li>
+          ))}
+        </ul>
+      ) : <p className="muted">No backups yet{data.folder ? ` in ${data.folder}` : ""}.</p>}
+      <p className="muted">To restore, stop Keel and run <code>python -m scripts.backup restore FILE</code>.</p>
     </div>
   );
 }

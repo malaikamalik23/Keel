@@ -325,6 +325,14 @@ def describe(s: Settings, indexed_documents: int | None = None) -> list[dict]:
                     ["Reminders, check-ins and workflows don't run on their own"],
          "access": "Runs inside Keel. Sends only through the channel above, within the daily budget and quiet hours.",
          "setup": "SCHEDULER_ENABLED=true"},
+        {"id": "backups", "name": "Encrypted backups", "status": "connected" if s.backup_passphrase else "not_set_up",
+         "details": (["One encrypted file (AES-256-GCM) with the database" + (" and your notes" if s.backup_include_notes and s.notes_dir else ""),
+                      f"Every day at {s.backup_time}, newest {s.backup_keep or 'all'} kept" if s.backup_daily and s.scheduler_enabled
+                      else "Daily backups need BACKUP_DAILY=true and the scheduler" if s.backup_daily
+                      else "Taken when you ask (python -m scripts.backup or the Backups card)"] if s.backup_passphrase else
+                     ["Backups are plain, unencrypted copies of the database until a passphrase is set"]),
+         "access": "Writes to your backup folder only. Secrets (.env, the Google token) are never in a backup.",
+         "setup": "BACKUP_PASSPHRASE (keep it in your password manager too), BACKUP_DIR, BACKUP_DAILY=true"},
     ]
     for r in rows:
         r["details"] = [d for d in r["details"] if d]

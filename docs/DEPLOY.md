@@ -16,7 +16,7 @@ Keel protects against a compromised *model*. On a server, the rest is yours:
 | A strong `API_KEY` | The only thing between the internet and your data. There are no user accounts. | Step 2 |
 | TLS in front | Keel speaks plain HTTP; the key would travel in clear text. | Step 4 |
 | A firewall | Nothing but SSH (and 443 if you choose public access) should be reachable. | Step 3 |
-| Protected database and backups | They hold everything you told Keel, unencrypted. | Steps 5 and 6 |
+| Protected database and backups | They hold everything you told Keel. The database is unencrypted; backups are encrypted once `BACKUP_PASSPHRASE` is set. | Steps 5 and 6 |
 | One process | The scheduler and the rate limiter live in memory. Two copies means duplicate check-ins. | Step 2 |
 | Logs with a limit | So they do not fill the disk or keep more than you want. | Step 7 |
 
@@ -137,8 +137,12 @@ Make it nightly with `crontab -e`:
 15 3 * * * cd /opt/keel && docker compose exec -T keel python -m scripts.backup && docker compose cp keel:/app/data/backups/. $HOME/keel-backups/
 ```
 
-A backup on the same disk is not a backup. Send `~/keel-backups` somewhere else, encrypted, with a tool you trust
-(`restic` and `rclone crypt` both encrypt before uploading). Backups contain everything Keel knows about you; `.env`
+With `BACKUP_PASSPHRASE` in `.env` (12+ characters, also stored in your password manager) each backup is one encrypted
+`.keelbak` file with the database and notes, and `BACKUP_DAILY=true` (with `SCHEDULER_ENABLED=true`) replaces the cron
+line. Check one without restoring it: `docker compose exec -T keel python -m scripts.backup verify /app/data/backups/<file>`.
+
+A backup on the same disk is not a backup. Send `~/keel-backups` somewhere else: encrypted `.keelbak` files can go
+anywhere as they are; plain `.db` copies need a tool that encrypts first (`restic` and `rclone crypt` both do). Backups contain everything Keel knows about you; `.env`
 is deliberately not in them, so keep a copy of your keys in a password manager.
 
 **Restore** (also how you move to a new server):
@@ -147,6 +151,14 @@ is deliberately not in them, so keep a copy of your keys in a password manager.
 cd /opt/keel
 docker compose stop keel
 docker compose run --rm --no-deps -T keel sh -c 'cat > /app/data/agent.db' < ~/keel-backups/agent-<timestamp>.db
+docker compose up -d
+```
+
+An encrypted backup is restored with the script instead, which checks it first and keeps the current database:
+
+```bash
+docker compose stop keel
+docker compose run --rm --no-deps -T keel sh -c 'cat > /tmp/restore.keelbak && python -m scripts.backup restore /tmp/restore.keelbak' < ~/keel-backups/agent-<timestamp>.keelbak
 docker compose up -d
 ```
 

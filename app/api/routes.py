@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hmac
 import ipaddress
+import threading
 from collections.abc import Iterator
 from datetime import date, datetime
 from typing import Literal
@@ -760,3 +761,38 @@ def test_service(service: str, c: Container = Depends(get_container)):
     if service not in connections_svc.CHECKS:
         raise NotFoundError(f"No live check for '{service}'.")
     return {"service": service, **connections_svc.run_check(service, c.settings), "checked_at": datetime.now(ZoneInfo(c.settings.agent_timezone)).isoformat(timespec="seconds")}
+
+
+# ---------- encrypted backups (the passphrase never leaves .env; restoring is CLI-only, with Keel stopped)
+_backup_lock = threading.Lock()
+
+
+@router.get("/backups")
+def list_backups(c: Container = Depends(get_container)):
+    from app.services import backups as backups_svc
+
+    s = c.settings
+    try:
+        folder = backups_svc.backup_dir(s)
+    except backups_svc.BackupError:
+        return {"enabled": False, "reason": "Backups need a file-based SQLite database.", "backups": []}
+    return {"enabled": bool(s.backup_passphrase), "daily": bool(s.backup_daily and s.scheduler_enabled and s.backup_passphrase),
+            "time": s.backup_time, "keep": s.backup_keep, "includes_notes": bool(s.backup_include_notes and s.notes_dir),
+            "folder": str(folder), "backups": [b.__dict__ for b in backups_svc.list_backups(folder)]}
+
+
+@router.post("/backups", status_code=status.HTTP_201_CREATED, dependencies=[Depends(rate_limit)])
+def create_backup(c: Container = Depends(get_container)):
+    from app.services import backups as backups_svc
+
+    if not c.settings.backup_passphrase:
+        raise ConflictError("Set BACKUP_PASSPHRASE in .env to turn on encrypted backups.")
+    if not _backup_lock.acquire(blocking=False):
+        raise ConflictError("A backup is already running.")
+    try:
+        target = backups_svc.backup_now(c.settings)
+    except backups_svc.BackupError as e:
+        raise ConflictError(str(e)) from None
+    finally:
+        _backup_lock.release()
+    return {"name": target.name, "size": target.stat().st_size}

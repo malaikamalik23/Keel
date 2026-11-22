@@ -44,6 +44,7 @@ const FIXTURES: Record<string, unknown> = {
     { id: "calendar", name: "Calendar", status: "connected", details: ["iCal feed from calendar.google.com"], access: "Read-only.", setup: "CALENDAR_ICS_URL", testable: true },
     { id: "search", name: "Web search (Brave)", status: "not_set_up", details: [], access: "Sends your search query to Brave.", setup: "BRAVE_API_KEY", testable: false },
   ],
+  "/api/backups": { enabled: true, folder: "data/backups", backups: [{ name: "agent-20261123-031500.keelbak", size: 52224, created: "2026-11-23T03:15:00+00:00", encrypted: true }] },
   "/api/services/calendar/test": { service: "calendar", ok: false, detail: "CalendarError: Calendar server returned HTTP 404.", checked_at: "2026-11-24T10:00:00" },
   "/api/memories/review": { stale: [{ id: 2, kind: "fact", category: "academic", topic: "supervisor", content: "Dr. Khan", importance: "medium", source: "user", created_at: "2025-01-01T00:00:00", updated_at: "2025-01-01T00:00:00", confirmed_at: "2025-01-01T00:00:00", last_used_at: null, needs_review: true }], conflicts: [] },
   "/api/analytics": { weeks: Array.from({ length: 8 }, (_, i) => week(i)), streak: { current_days: 4, longest_days: 9, window_days: 90 }, commitments: { done: 3, dropped: 1, overdue: 1, kept_rate: 0.6 }, estimates: { tasks_measured: 5, median_actual_vs_estimate: 1.4 }, postponement: { total: 6, avg_before_completion: 1.5, top_reasons: [{ reason: "too big", count: 3 }] }, completions_by_weekday: { Mon: 1, Tue: 2, Wed: 0, Thu: 3, Fri: 1, Sat: 0, Sun: 0 } },
@@ -247,6 +248,18 @@ describe("dashboard smoke tests", () => {
     await user.click(screen.getByRole("button", { name: "Check connection" }));
     await waitFor(() => expect(calls).toContainEqual({ method: "POST", path: "/api/services/calendar/test" }));
     expect((await screen.findByRole("status")).textContent).toMatch(/Failed: CalendarError: Calendar server returned HTTP 404/);
+    expect(errors).toEqual([]);
+  });
+
+  it("Services tab lists encrypted backups and takes one on request", async () => {
+    const rows = [{ id: "backups", name: "Encrypted backups", status: "connected", details: ["One encrypted file (AES-256-GCM) with the database"], access: "Writes to your backup folder only.", setup: "BACKUP_PASSPHRASE", testable: false }];
+    const calls = mockFetch({ "/api/services": rows });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Services" }));
+    expect(await screen.findByText(/agent-20261123-031500.keelbak · 51 KB/)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Back up now" }));
+    await waitFor(() => expect(calls).toContainEqual({ method: "POST", path: "/api/backups" }));
     expect(errors).toEqual([]);
   });
 

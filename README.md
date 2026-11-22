@@ -34,6 +34,7 @@ machine, with your data in one SQLite file.
 | **Research** | Web search and page reading, search over your own notes and papers (including Urdu), read-only GitHub and calendar access. |
 | **Calendar** | The Calendar tab shows a week or a month: your calendar's meetings next to Keel's own plan blocks, task due dates, promises, application and project deadlines, reminders and important dates. Each day shows its meeting time and the free working time left, and warns about packed or double-booked days. Read-only: Keel never changes your calendar, and a day's plan downloads as a file you import. |
 | **Connected services** | The Services tab lists what Keel is connected to (AI model, Telegram, email, calendar, GitHub, Brave search, web pages, notes folder, scheduler), what each may do, and what to set for the ones that aren't. "Check connection" makes one read-only request. Keys, passwords and the calendar's secret address are never shown. |
+| **Encrypted backups** | With a passphrase in `.env`, `python -m scripts.backup` (or **Back up now** on the Services tab, or every night with `BACKUP_DAILY=true`) writes one encrypted file with your database and notes folder: AES-256-GCM, key from scrypt, every part authenticated so a wrong passphrase, a changed byte or a cut-off file is refused. `verify` checks a backup without restoring it; `restore` keeps your current database beside it and never overwrites a note. Secrets are never in a backup. It is also how you move Keel to another computer. |
 | **Insights** | Weekly trends, streaks, promises kept, how long things really take versus your estimates. |
 
 ## What it looks like
@@ -201,7 +202,7 @@ python -m evals.run_routing        # how often does the model pick the right too
   (see [docs/DEMO.md](docs/DEMO.md)) and please open an issue if a real API behaves differently.
 - The dashboard is type-checked, has 31 jsdom tests (every tab, voice input and read-aloud, empty states, a malformed response, the approval flow, skip-cancel) and 2 **real-Chromium end-to-end tests** (`tests/e2e`, Playwright; CI job `e2e`) that drive the real server through chat, plan, delete-and-approve and reminders and fail on any console error. The browser tests exist because the first manual run found a Chrome-only crash that jsdom could not see.
 - Single-user by design: no accounts, one optional dashboard key. Not multi-tenant.
-- See [SECURITY.md](SECURITY.md#known-limitations-read-these) for the security limitations (sticky taint, approved-memory risks, and more) and for what is stored and how to back it up (`python -m scripts.backup`).
+- See [SECURITY.md](SECURITY.md#known-limitations-read-these) for the security limitations (sticky taint, approved-memory risks, and more) and for what is stored and how to back it up (`python -m scripts.backup`, encrypted with `BACKUP_PASSPHRASE`).
 
 ## Project layout
 

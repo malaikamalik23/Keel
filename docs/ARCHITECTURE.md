@@ -34,7 +34,7 @@ database and in code, not in the prompt.
                      ┌────────────────────────┼──────────────────────────────────────────┐
 ┌────────────────────▼──────────────┐  ┌──────▼─────────────────────────────────────────────────────┐
 │ SQLite (SQLAlchemy 2, Alembic      │  │ Integrations (app/integrations): Gmail · Google Calendar ·   │
-│ 0001-0021) + FTS5 notes index      │  │ Google OAuth · iCal · Keel's browser (Playwright) · safe     │
+│ 0001-0022) + FTS5 notes index      │  │ Google OAuth · iCal · Keel's browser (Playwright) · safe     │
 └────────────────────▲──────────────┘  │ HTTP fetcher · GitHub · SMTP                                 │
                      │ same services    └─────────────────────────────────────────────────────────────┘
 ┌────────────────────┴──────────────────────────────────────────────────────────────────────────┐
@@ -63,7 +63,7 @@ database and in code, not in the prompt.
 
 ## 2. Data model
 
-Hand-written Alembic migrations `0001`–`0021`; SQLite today, SQLAlchemy keeps PostgreSQL a URL change (notes search needs FTS5, so it is SQLite-only).
+Hand-written Alembic migrations `0001`–`0022`; SQLite today, SQLAlchemy keeps PostgreSQL a URL change (notes search needs FTS5, so it is SQLite-only).
 
 | Table | Purpose |
 |---|---|
@@ -72,7 +72,7 @@ Hand-written Alembic migrations `0001`–`0021`; SQLite today, SQLAlchemy keeps 
 | `task_events` | **Append-only history**: created / postponed (old→new date + reason) / completed / reopened / cancelled / skipped. Survives task deletion. |
 | `goals`, `milestones`, `projects` | The goal → milestone → task and project → task hierarchies |
 | `commitments` | "I'll do X by Y": `proposed` until you confirm → `open` → `done` / `dropped`; "missed" is derived, not stored |
-| `memories` | Durable facts about you: kind (preference / context / fact / decision), category (personal / academic / professional / project / general), an optional profile topic, source and review dates |
+| `memories`, `memory_links` | Durable facts about you, and which belong together: kind (preference / context / fact / decision), category (personal / academic / professional / project / general), an optional profile topic, source and review dates |
 | `plans`, `plan_items` | One plan per local day; items snapshot the title so history stays readable |
 | `work_sessions` | Time actually worked: the ground truth plans are compared against |
 | `reminders`, `checkins`, `notifications` | Scheduler state. `notifications` *is* the budget: counts and dedupe keys are read from it, so limits survive restarts |
@@ -145,7 +145,12 @@ Write policy: commitments are proposed, then confirmed; memories are saved only 
 change is audited. A profile topic holds one answer: saving a different value for an existing topic saves nothing and tells the
 agent to ask the user which is right, so contradicting facts are never kept side by side. Each memory records its source (saved in
 chat, approved by the user, added by the user) and when it was last confirmed; memories unconfirmed for six months are offered for
-review in the dashboard and through `review_memories`. Retrieval is by words first; when a search shares no word with
+review in the dashboard and through `review_memories`, as are memories marked low confidence or past their end date.
+**Lifecycle (migration 0022):** a fact that stops being true (a new job, a move) is marked *outdated*, not deleted: it stays as
+history with a pointer to what replaced it, but is left out of the context pack and of searches unless history is asked for.
+Editing a memory keeps its previous wording the same way, so when something was learned is never lost. Memories carry a
+confidence (high when the user said or confirmed it, low when inferred), an optional end date, and links to related memories.
+Word matching treats plurals as the same word ("works" finds "work"). Retrieval is by words first; when a search shares no word with
 any memory, the most important memories come back as candidates and the model judges them by meaning (no embeddings, no
 extra call). Saving a memory also shows the model the others in its category, so a contradiction worded differently is
 noticed and put to the user. Embeddings were deliberately skipped: keyword + FTS5 covers this scale and avoids a second datastore.
@@ -202,7 +207,7 @@ they are tested (the red-team suite, mutation-checked) and the known limitations
 ```
 app/{agent,api,db,integrations,llm,scheduler,security,services,tools}/   backend
 frontend/         React + Vite + TypeScript dashboard (served by FastAPI from frontend/dist)
-migrations/       hand-written Alembic migrations 0001-0021
+migrations/       hand-written Alembic migrations 0001-0022
 tests/            unit/API tests; tests/injection = red team
 evals/            tool-routing eval        scripts/   backup, Gmail connect, smoke checks, doc generators
 docs/             ARCHITECTURE · TOOLS (generated) · INSTALL · DEPLOY · DEMO · API · STATUS · ROADMAP

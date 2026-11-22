@@ -114,3 +114,6 @@ code { font-size: 12px; background: var(--bg); border: 1px solid var(--border); 
 .ob-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 
 .capture { display: flex; gap: 8px; margin-bottom: 6px; } .capture input { flex: 1; min-width: 0; }
+
+.mem-more { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; width: 100%; margin-top: 4px; }
+.mem-more label { display: inline-flex; gap: 4px; align-items: center; }

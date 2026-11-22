@@ -73,8 +73,9 @@ def test_invisible_characters_never_reach_storage_even_when_the_user_saves_direc
         ctx = ToolContext(db=db, tz=ZoneInfo("UTC"))
         assert c.executor.run(ctx, "save_memory", {"content": f"Studies at night‮{TAG_SMUGGLED}"}).status == "ok"
         assert c.executor.run(ctx, "update_memory", {"memory_id": 1, "content": f"Studies at night.​{TAG_SMUGGLED}"}).status == "ok"
-        (stored,) = [m.content for m in db.query(Memory)]
-        assert stored == "Studies at night."
+        # the current memory and the earlier wording kept as history: both clean
+        stored = {m.status: m.content for m in db.query(Memory)}
+        assert stored == {"current": "Studies at night.", "outdated": "Studies at night"}
         # Content that is *only* hidden characters is refused, not stored as an empty memory.
         out = c.executor.run(ctx, "save_memory", {"content": TAG_SMUGGLED})
         assert out.status == "error" and "empty" in out.result["error"]

@@ -45,6 +45,8 @@ from app.services.calendar_view import MAX_DAYS, build_calendar
 from app.services.ics_export import plan_to_ics
 from app.services.notifications import parse_hhmm
 from app.tools.base import ToolContext
+from app.tools.memory import is_current as memory_is_current
+from app.tools.memory import linked_ids as memory_linked_ids
 from app.tools.memory import needs_review as memory_needs_review
 from app.tools.planning import get_plan, plan_dict
 
@@ -262,9 +264,11 @@ def commitments(
     return rows
 
 
-def _memory_out(m: Memory) -> schemas.MemoryOut:
+def _memory_out(m: Memory, db: Session | None = None) -> schemas.MemoryOut:
     out = schemas.MemoryOut.model_validate(m)
     out.needs_review = memory_needs_review(m)
+    out.status = "current" if memory_is_current(m) else "outdated"
+    out.linked = memory_linked_ids(db, m.id) if db is not None else []
     return out
 
 
@@ -272,6 +276,7 @@ def _memory_out(m: Memory) -> schemas.MemoryOut:
 def memories(
     kind: Literal["preference", "context", "fact", "decision", "all"] = "all",
     category: Literal["personal", "academic", "professional", "project", "general", "all"] = "all",
+    status: Literal["current", "outdated", "all"] = "current",
     db: Session = Depends(get_db),
 ):
     stmt = select(Memory).order_by(Memory.updated_at.desc())
@@ -279,16 +284,18 @@ def memories(
         stmt = stmt.where(Memory.kind == kind)
     if category != "all":
         stmt = stmt.where(Memory.category == category)
-    return [_memory_out(m) for m in db.scalars(stmt)]
+    rows = [m for m in db.scalars(stmt) if status == "all" or memory_is_current(m) == (status == "current")]
+    return [_memory_out(m, db) for m in rows]
 
 
 @router.get("/memories/review", response_model=schemas.MemoryReview)
 def memories_to_review(db: Session = Depends(get_db)):
-    """Memories not confirmed for a long time, and profile topics recorded more than once."""
-    every = list(db.scalars(select(Memory).order_by(Memory.id)))
+    """Memories to check: not confirmed for a long time, low confidence, past their valid-until day, and profile topics
+    recorded more than once."""
+    every = list(db.scalars(select(Memory).where(Memory.status == "current").order_by(Memory.id)))
     by_topic: dict[str, list[Memory]] = {}
     for m in every:
-        if m.topic:
+        if m.topic and memory_is_current(m):
             by_topic.setdefault(m.topic.lower(), []).append(m)
     return schemas.MemoryReview(
         stale=[_memory_out(m) for m in every if memory_needs_review(m)],
@@ -1016,3 +1023,31 @@ def dismiss_inbox_item(item_id: int, db: Session = Depends(get_db)):
         item.status = "dismissed"
         db.commit()
     return _inbox_dict(item)
+
+
+# ---------- links between memories (dashboard only)
+@router.post("/memories/{memory_id}/links", status_code=status.HTTP_201_CREATED)
+def link_memories(memory_id: int, body: dict, db: Session = Depends(get_db)):
+    from app.db.models import MemoryLink
+
+    other = body.get("other_id")
+    if not isinstance(other, int) or other == memory_id or db.get(Memory, memory_id) is None or db.get(Memory, other) is None:
+        raise HTTPException(422, "Pick another existing memory to link.")
+    a, b = sorted((memory_id, other))
+    if db.scalars(select(MemoryLink).where(MemoryLink.a_id == a, MemoryLink.b_id == b)).first() is None:
+        note = " ".join(str(body.get("note") or "").split())[:120] or None
+        db.add(MemoryLink(a_id=a, b_id=b, note=note))
+        db.commit()
+    return {"linked": memory_linked_ids(db, memory_id)}
+
+
+@router.delete("/memories/{memory_id}/links/{other_id}", status_code=status.HTTP_204_NO_CONTENT)
+def unlink_memories(memory_id: int, other_id: int, db: Session = Depends(get_db)):
+    from app.db.models import MemoryLink
+
+    a, b = sorted((memory_id, other_id))
+    link = db.scalars(select(MemoryLink).where(MemoryLink.a_id == a, MemoryLink.b_id == b)).first()
+    if link is None:
+        raise NotFoundError("Those memories aren't linked.")
+    db.delete(link)
+    db.commit()

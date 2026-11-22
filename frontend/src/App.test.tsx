@@ -342,6 +342,25 @@ describe("dashboard smoke tests", () => {
     expect(errors).toEqual([]);
   });
 
+  it("Memory tab marks a fact no longer true instead of deleting it, and filters to history", async () => {
+    const mem = (id: number, content: string, extra = {}) => ({ id, kind: "fact", category: "professional", topic: null, content, importance: "medium", source: "chat",
+      created_at: "2026-01-01T00:00:00", updated_at: "2026-01-01T00:00:00", confirmed_at: "2026-01-01T00:00:00", last_used_at: null, needs_review: false, status: "current", confidence: "medium", linked: [], ...extra });
+    const calls = mockFetch({
+      "/api/memories": [mem(1, "Works at Arbisoft", { linked: [2] }), mem(2, "Team lead is Sara", { confidence: "low" })],
+      "/api/memories/review": { stale: [], conflicts: [] },
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Memory" }));
+    expect((await screen.findAllByText(/linked to Team lead is Sara/)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("unsure").length).toBeGreaterThan(0);
+    await user.click(screen.getAllByRole("button", { name: "No longer true" })[0]);
+    await waitFor(() => expect(calls).toContainEqual({ method: "PATCH", path: "/api/memories/1" }));
+    await user.selectOptions(screen.getByLabelText("Memory status"), "outdated");
+    await waitFor(() => expect(calls.some((c) => c.path === "/api/memories")).toBe(true));
+    expect(errors).toEqual([]);
+  });
+
   it("shows a badge with the number of pending approvals", async () => {
     mockFetch();
     render(<App />);

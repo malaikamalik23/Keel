@@ -114,6 +114,11 @@ class MemoryOut(BaseModel):
     confirmed_at: datetime | None
     last_used_at: datetime | None
     needs_review: bool = False
+    status: str = "current"
+    confidence: str = "medium"
+    valid_until: date | None = None
+    replaced_by_id: int | None = None
+    linked: list[int] = []
 
 
 class MemoryCreate(BaseModel):
@@ -131,6 +136,10 @@ class MemoryUpdate(BaseModel):
     topic: str | None = Field(None, max_length=60)
     importance: Literal["low", "medium", "high"] | None = None
     confirm: bool = False
+    status: Literal["current", "outdated"] | None = None
+    replaced_by_id: int | None = None
+    confidence: Literal["low", "medium", "high"] | None = None
+    valid_until: date | None = None
 
 
 class MemoryReview(BaseModel):

@@ -8,9 +8,13 @@ const KINDS = ["preference", "context", "fact", "decision"];
 const CATEGORIES = ["personal", "academic", "professional", "project", "general"];
 const SOURCE: Record<string, string> = { chat: "saved in chat", approved: "you approved", user: "added by you", unknown: "older memory" };
 
-function Row({ m, onChange }: { m: Memory; onChange: () => Promise<void> }) {
+function Row({ m, onChange, others = [] }: { m: Memory; onChange: () => Promise<void>; others?: Memory[] }) {
   const [editing, setEditing] = useState<string | null>(null);
+  const [more, setMore] = useState(false);
   const { run, error } = useAction(onChange);
+  const outdated = m.status === "outdated";
+  const patch = (body: object) => run(() => api.patch(`/api/memories/${m.id}`, body));
+  const byId = new Map(others.map((o) => [o.id, o]));
   return (
     <li>
       {editing !== null ? (
@@ -23,17 +27,37 @@ function Row({ m, onChange }: { m: Memory; onChange: () => Promise<void> }) {
         </>
       ) : (
         <>
-          <span>
-            {m.topic && <strong>{m.topic}: </strong>}{m.content}{" "}
+          <span className={outdated ? "muted" : ""}>
+            {m.topic && <strong>{m.topic}: </strong>}{outdated ? <s>{m.content}</s> : m.content}{" "}
             <Badge>{m.kind}</Badge> <Badge>{m.category}</Badge>
             {m.importance === "high" && <> <Badge tone="warn">high</Badge></>}
+            {outdated && <> <Badge>no longer true</Badge></>}
+            {!outdated && m.confidence === "low" && <> <Badge tone="warn">unsure</Badge></>}
+            {m.valid_until && <span className="muted small"> · until {m.valid_until}</span>}
             <span className="muted small"> · {SOURCE[m.source] ?? m.source}</span>
+            {(m.linked ?? []).length > 0 && <span className="muted small"> · linked to {(m.linked ?? []).map((id) => byId.get(id)?.content.slice(0, 40) ?? `#${id}`).join("; ")}</span>}
           </span>
           <span className="actions">
-            {m.needs_review && <button onClick={() => run(() => api.patch(`/api/memories/${m.id}`, { confirm: true }))}>Still true</button>}
+            {m.needs_review && !outdated && <button onClick={() => patch({ confirm: true })}>Still true</button>}
+            {outdated
+              ? <button className="ghost" onClick={() => patch({ status: "current" })}>True again</button>
+              : <button className="ghost" onClick={() => patch({ status: "outdated" })}>No longer true</button>}
             <button className="ghost" onClick={() => setEditing(m.content)}>Edit</button>
-            <button className="ghost danger" onClick={() => window.confirm("Permanently delete this memory?") && run(() => api.del(`/api/memories/${m.id}`))}>Delete</button>
+            <button className="ghost" aria-expanded={more} onClick={() => setMore(!more)}>More</button>
+            <button className="ghost danger" onClick={() => window.confirm("Permanently delete this memory? (\"No longer true\" keeps it as history instead.)") && run(() => api.del(`/api/memories/${m.id}`))}>Delete</button>
           </span>
+          {more && (
+            <span className="mem-more small">
+              <label>How sure <select value={m.confidence ?? "medium"} onChange={(e) => void patch({ confidence: e.target.value })} aria-label={`How sure: ${m.content}`}>
+                {["high", "medium", "low"].map((c) => <option key={c}>{c}</option>)}</select></label>
+              <label>True until <input type="date" value={m.valid_until ?? ""} onChange={(e) => void patch({ valid_until: e.target.value || null })} aria-label={`True until: ${m.content}`} /></label>
+              <label>Link to <select value="" onChange={(e) => e.target.value && void run(() => api.post(`/api/memories/${m.id}/links`, { other_id: Number(e.target.value) }))} aria-label={`Link: ${m.content}`}>
+                <option value="">choose a memory…</option>
+                {others.filter((o) => o.id !== m.id && !(m.linked ?? []).includes(o.id)).map((o) => <option key={o.id} value={o.id}>{o.content.slice(0, 60)}</option>)}
+              </select></label>
+              {(m.linked ?? []).map((id) => <button key={id} className="ghost small" onClick={() => void run(() => api.del(`/api/memories/${m.id}/links/${id}`))}>Unlink {byId.get(id)?.content.slice(0, 30) ?? `#${id}`}</button>)}
+            </span>
+          )}
         </>
       )}
       <ErrorNote error={error} />
@@ -70,7 +94,8 @@ function AddMemory({ onAdded }: { onAdded: () => Promise<void> }) {
 export default function MemoryView() {
   const [kind, setKind] = useState("all");
   const [category, setCategory] = useState("all");
-  const list = useLoad<Memory[]>(`/api/memories?kind=${kind}&category=${category}`);
+  const [status, setStatus] = useState("current");
+  const list = useLoad<Memory[]>(`/api/memories?kind=${kind}&category=${category}&status=${status}`);
   const all = useLoad<Memory[]>("/api/memories");
   const review = useLoad<MemoryReview>("/api/memories/review");
   const { reload: reloadList } = list;
@@ -86,13 +111,13 @@ export default function MemoryView() {
 
   return (
     <div className="stack">
-      <p className="muted small">Everything the agent remembers about you. Edit, confirm or delete anything; changes are audited.</p>
+      <p className="muted small">Everything the agent remembers about you. Edit, confirm or delete anything; changes are audited. "No longer true" keeps a fact as history (a past job, an old address) without Keel treating it as current; editing keeps the old wording the same way.</p>
 
       <Card title="Profile">
         {topics.length === 0 ? (
           <Empty>No profile facts yet. Tell the agent things like your university or supervisor, or add one below with a topic.</Empty>
         ) : (
-          <ul className="list">{topics.map((m) => <Row key={m.id} m={m} onChange={reloadAll} />)}</ul>
+          <ul className="list">{topics.map((m) => <Row key={m.id} m={m} onChange={reloadAll} others={all.data ?? []} />)}</ul>
         )}
       </Card>
 
@@ -104,8 +129,8 @@ export default function MemoryView() {
               <ul className="list">{group.map((m) => <Row key={m.id} m={m} onChange={reloadAll} />)}</ul>
             </div>
           ))}
-          {stale.length > 0 && <p className="small">Not confirmed for over six months. Still true?</p>}
-          <ul className="list">{stale.map((m) => <Row key={m.id} m={m} onChange={reloadAll} />)}</ul>
+          {stale.length > 0 && <p className="small">Not confirmed for over six months, marked unsure, or past its end date. Still true?</p>}
+          <ul className="list">{stale.map((m) => <Row key={m.id} m={m} onChange={reloadAll} others={all.data ?? []} />)}</ul>
         </Card>
       )}
 
@@ -116,13 +141,15 @@ export default function MemoryView() {
         right={
           <span>
             <select name="kind" value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Memory kind">{["all", ...KINDS].map((k) => <option key={k} value={k}>{k === "all" ? "every kind" : k}</option>)}</select>{" "}
-            <select name="category" value={category} onChange={(e) => setCategory(e.target.value)} aria-label="Memory category">{["all", ...CATEGORIES].map((k) => <option key={k} value={k}>{k === "all" ? "every category" : k}</option>)}</select>
+            <select name="category" value={category} onChange={(e) => setCategory(e.target.value)} aria-label="Memory category">{["all", ...CATEGORIES].map((k) => <option key={k} value={k}>{k === "all" ? "every category" : k}</option>)}</select>{" "}
+            <select name="status" value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Memory status">
+              <option value="current">still true</option><option value="outdated">no longer true (history)</option><option value="all">all</option></select>
           </span>
         }
       >
         <Loading loading={list.loading} error={list.error} />
         {list.data?.length === 0 && <Empty>No memories match.</Empty>}
-        <ul className="list">{list.data?.map((m) => <Row key={m.id} m={m} onChange={reloadAll} />)}</ul>
+        <ul className="list">{list.data?.map((m) => <Row key={m.id} m={m} onChange={reloadAll} others={all.data ?? []} />)}</ul>
       </Card>
     </div>
   );

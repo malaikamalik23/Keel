@@ -22,6 +22,7 @@ Last updated: 23 November 2026. Re-check with `python -m scripts.release_check` 
 | Chat (dashboard, CLI), tool loop, approvals, audit log | ✅ Live | Daily use; every eval run; `tests/test_agent.py`, e2e chat → delete → approve |
 | Tasks, goals, milestones, projects, commitments, routines, waiting on others | ✅ Live | Routing eval (242 cases) on Groq and Gemini; unit tests |
 | Daily and weekly planning, accountability, insights | ✅ Live | Planner guarantees unit-tested; eval cases |
+| Memory lifecycle: confidence, facts no longer true kept as history, end dates, links | 🧪 Tested | `tests/test_memory_lifecycle.py`, dashboard test |
 | Memory: profile, preferences, decisions, review, contradictions | ✅ Live | Eval cases; red-team memory-poisoning tests |
 | Applications: tracking, drafts, eligibility, readiness | ✅ Live | Eval cases on Groq and qwen2.5:3b; unit tests |
 | Workflows ("whenever X, do Y"), retries, approval steps | 🧪 Tested | `tests/test_workflows.py`; not yet run for days on a real schedule |

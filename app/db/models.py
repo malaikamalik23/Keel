@@ -350,6 +350,24 @@ class Memory(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+    # Lifecycle (migration 0022): an outdated memory is history, never treated as true now.
+    status: Mapped[str] = mapped_column(String(12), default="current", server_default="current", index=True)  # current|outdated
+    confidence: Mapped[str] = mapped_column(String(8), default="medium", server_default="medium")  # high|medium|low
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)  # holds until this day, then counts as outdated
+    replaced_by_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # the newer version of this fact
+
+
+class MemoryLink(Base):
+    """Two memories that belong together (migration 0022). Stored once per pair, smaller id first."""
+
+    __tablename__ = "memory_links"
+    __table_args__ = (UniqueConstraint("a_id", "b_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    a_id: Mapped[int] = mapped_column(ForeignKey("memories.id", ondelete="CASCADE"))
+    b_id: Mapped[int] = mapped_column(ForeignKey("memories.id", ondelete="CASCADE"))
+    note: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class PendingAction(Base):

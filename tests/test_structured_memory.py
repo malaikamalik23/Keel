@@ -56,7 +56,9 @@ def test_a_topic_holds_one_answer_and_a_different_one_is_a_conflict_not_a_second
 
         # the user says the new one is right: the agent updates the existing memory
         _run(c, db, "update_memory", {"memory_id": mid, "content": "Supervisor is Dr. Ali"})
-        assert db.get(Memory, mid).content == "Supervisor is Dr. Ali" and db.query(Memory).count() == 1
+        assert db.get(Memory, mid).content == "Supervisor is Dr. Ali" and db.query(Memory).filter_by(status="current").count() == 1
+        old = db.query(Memory).filter_by(status="outdated").one()  # what it used to say is kept as history, not current
+        assert old.content == "Supervisor is Dr. Khan" and old.replaced_by_id == mid and old.topic is None
 
         # a second memory can't take over a topic that is already used
         other = _run(c, db, "save_memory", {"content": "Works with Dr. Saeed on the side project", "category": "project"})

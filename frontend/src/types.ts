@@ -30,7 +30,7 @@ export interface WorkflowRun { id: number; workflow_id: number; status: string; 
 export interface WorkflowRow { id: number; name: string; enabled: boolean; trigger: Record<string, unknown>; steps: WorkflowStep[]; description: string; runs: WorkflowRun[]; }
 export interface WorkflowTemplate { key: string; name: string; trigger: Record<string, unknown>; steps: WorkflowStep[]; description: string; }
 export interface Commitment { id: number; text: string; deadline: string | null; importance: string; status: string; postponement_count: number; completed_at: string | null; }
-export interface Memory { id: number; kind: string; category: string; topic: string | null; content: string; importance: string; source: string; created_at: string; updated_at: string; confirmed_at: string | null; last_used_at: string | null; needs_review: boolean; }
+export interface Memory { id: number; kind: string; category: string; topic: string | null; content: string; importance: string; source: string; created_at: string; updated_at: string; confirmed_at: string | null; last_used_at: string | null; needs_review: boolean; status?: "current" | "outdated"; confidence?: "high" | "medium" | "low"; valid_until?: string | null; replaced_by_id?: number | null; linked?: number[]; }
 export interface BriefTask { id: number; title: string; priority: string; due?: string; minutes?: number; }
 export interface Briefing {
   date: string; weekday: string; next_action: string | BriefTask | null;

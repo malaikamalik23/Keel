@@ -7,17 +7,21 @@
   user says which is right. The agent never silently keeps two contradicting facts.
 - source and dates: who wrote it (the agent in a clean chat, the agent with the user's approval, or the user), when it
   was last confirmed, and when it was last used. Memories not confirmed for a long time are offered for review.
+- lifecycle: confidence (high = the user said or confirmed it, low = inferred), an optional valid_until date, and a
+  status. When a fact stops being true (a new job, a move), the old memory becomes "outdated": kept as history with a
+  pointer to what replaced it, but never treated as current (left out of each message's context and of searches by
+  default). Editing a memory's content keeps the previous wording the same way. Related memories can be linked.
 """
 from __future__ import annotations
 
 import re
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 
-from app.db.models import Memory, utcnow
+from app.db.models import Memory, MemoryLink, utcnow
 from app.security.untrusted import sanitize_text
 from app.tools.base import Permission, Tool, ToolContext, ToolError, ToolRegistry
 
@@ -50,9 +54,23 @@ def clean_topic(topic: str | None) -> str | None:
     return " ".join(found)[:60] or None
 
 
+def is_current(m: Memory, today: date | None = None) -> bool:
+    """True unless it was marked outdated or its valid_until day has passed."""
+    if (m.status or "current") != "current":
+        return False
+    return m.valid_until is None or m.valid_until >= (today or utcnow().date())
+
+
 def needs_review(m: Memory, now=None) -> bool:
+    if not is_current(m, (now or utcnow()).date()):
+        return m.status == "current"  # expired but never marked: ask about it
     confirmed = m.confirmed_at or m.updated_at or m.created_at
-    return confirmed is not None and (now or utcnow()) - confirmed > REVIEW_AFTER
+    return confirmed is not None and (now or utcnow()) - confirmed > REVIEW_AFTER or m.confidence == "low"
+
+
+def linked_ids(db, memory_id: int) -> list[int]:
+    rows = db.scalars(select(MemoryLink).where((MemoryLink.a_id == memory_id) | (MemoryLink.b_id == memory_id)))
+    return sorted({r.b_id if r.a_id == memory_id else r.a_id for r in rows})
 
 
 def memory_dict(m: Memory) -> dict:
@@ -67,6 +85,10 @@ def memory_dict(m: Memory) -> dict:
         "created_at": m.created_at.isoformat(timespec="minutes"),
         "confirmed_at": m.confirmed_at.isoformat(timespec="minutes") if m.confirmed_at else None,
         "needs_review": needs_review(m),
+        "status": "current" if is_current(m) else "outdated",
+        "confidence": m.confidence or "medium",
+        **({"valid_until": m.valid_until.isoformat()} if m.valid_until else {}),
+        **({"replaced_by": m.replaced_by_id} if m.replaced_by_id else {}),
     }
 
 
@@ -78,14 +100,24 @@ def _get_memory(ctx: ToolContext, memory_id: int) -> Memory:
 
 
 def _by_topic(ctx: ToolContext, topic: str, exclude_id: int | None = None) -> Memory | None:
-    stmt = select(Memory).where(func.lower(Memory.topic) == topic)
+    """The current memory for a profile topic (an outdated one is history and doesn't hold the topic)."""
+    stmt = select(Memory).where(func.lower(Memory.topic) == topic, Memory.status == "current")
     if exclude_id is not None:
         stmt = stmt.where(Memory.id != exclude_id)
     return ctx.db.scalars(stmt.order_by(Memory.id)).first()
 
 
+def _base(w: str) -> str:
+    """'works' and 'work', 'studies' and 'study' match: questions are worded differently from what was saved."""
+    if len(w) > 4 and w.endswith("ies"):
+        return w[:-3] + "y"
+    if len(w) > 3 and w.endswith("s") and not w.endswith(("ss", "us", "is")):
+        return w[:-1]
+    return w
+
+
 def words(text: str) -> set[str]:
-    return {w for w in _WORD.findall(text.lower()) if w not in _STOP}
+    return {_base(w) for w in _WORD.findall(text.lower()) if w not in _STOP}
 
 
 def _similar(ctx: ToolContext, content: str, category: str, exclude_id: int | None = None) -> list[Memory]:
@@ -94,7 +126,7 @@ def _similar(ctx: ToolContext, content: str, category: str, exclude_id: int | No
     if len(mine) < 3:
         return []
     out = []
-    for m in ctx.db.scalars(select(Memory).where(Memory.category == category)):
+    for m in ctx.db.scalars(select(Memory).where(Memory.category == category, Memory.status == "current")):
         if m.id == exclude_id:
             continue
         theirs = words(m.content)
@@ -120,6 +152,8 @@ class SaveMemoryInput(BaseModel):
                     "'supervisor', 'career goal', 'home city'. Leave empty for everything else.",
     )
     importance: Literal["low", "medium", "high"] = "medium"
+    confidence: Literal["low", "medium", "high"] = Field("medium", description="high if the user stated it plainly; low if you inferred it.")
+    valid_until: date | None = Field(None, description="Only if it holds until a known day ('in Lahore until December').")
 
     @field_validator("topic")
     @classmethod
@@ -131,7 +165,7 @@ def save_memory(ctx: ToolContext, p: SaveMemoryInput) -> dict:
     content = _clean(p.content)
     if not content:
         raise ToolError("The memory is empty once invisible characters are removed.")
-    existing = ctx.db.scalars(select(Memory).where(Memory.content == content)).first()
+    existing = ctx.db.scalars(select(Memory).where(Memory.content == content, Memory.status == "current")).first()
     if existing:
         return {"memory": memory_dict(existing), "note": "Already stored (duplicate skipped)."}
     if p.topic:
@@ -145,8 +179,10 @@ def save_memory(ctx: ToolContext, p: SaveMemoryInput) -> dict:
                            f"#{current.id}). Ask the user which is correct. If the new one is, call update_memory on "
                            f"#{current.id} with the new content; if the old one still holds, leave it.",
             }
+    source = SOURCE_OF_ACTOR.get(ctx.actor, "chat")
     m = Memory(content=content, kind=p.kind, category=p.category, topic=p.topic, importance=p.importance,
-               conversation_id=ctx.conversation_id, source=SOURCE_OF_ACTOR.get(ctx.actor, "chat"), confirmed_at=utcnow())
+               conversation_id=ctx.conversation_id, source=source, confirmed_at=utcnow(),
+               confidence="high" if source == "user" else p.confidence, valid_until=p.valid_until)
     ctx.db.add(m)
     ctx.db.flush()
     out: dict = {"memory": memory_dict(m)}
@@ -158,11 +194,14 @@ def save_memory(ctx: ToolContext, p: SaveMemoryInput) -> dict:
     # Contradictions worded differently ("lives in Lahore" vs "moved to Islamabad") share few words, so the model
     # gets the other memories in this category to compare by meaning.
     seen = {s.id for s in similar} | {m.id}
-    others = [o for o in rank(list(ctx.db.scalars(select(Memory).where(Memory.category == p.category))), set()) if o.id not in seen][:CONTRADICTION_POOL]
+    others = [o for o in rank(list(ctx.db.scalars(select(Memory).where(Memory.category == p.category, Memory.status == "current"))), set())
+              if o.id not in seen][:CONTRADICTION_POOL]
     if others:
         out["same_category"] = [{"id": o.id, "topic": o.topic, "content": o.content[:160]} for o in others]
         out.setdefault("note", "Saved.")
-        out["note"] += " If the new memory contradicts one in same_category, ask the user which is right."
+        out["note"] += (" If the new memory contradicts one in same_category, ask the user which is right; if the old one "
+                        "is simply no longer true (a new job, a move), mark it outdated with update_memory(status='outdated', "
+                        "replaced_by_id=<new id>) rather than deleting it.")
     return out
 
 
@@ -172,6 +211,7 @@ class SearchMemoriesInput(BaseModel):
     kind: Literal["preference", "context", "fact", "decision", "all"] = "all"
     category: Literal["personal", "academic", "professional", "project", "general", "all"] = "all"
     limit: int = Field(20, ge=1, le=100)
+    include_outdated: bool = Field(False, description="Also return facts that are no longer true (history, e.g. 'where did I work before?').")
 
 
 def rank(memories: list[Memory], query_words: set[str]) -> list[Memory]:
@@ -189,7 +229,8 @@ def search_memories(ctx: ToolContext, p: SearchMemoriesInput) -> dict:
         stmt = stmt.where(Memory.kind == p.kind)
     if p.category != "all":
         stmt = stmt.where(Memory.category == p.category)
-    every = list(ctx.db.scalars(stmt))
+    today = ctx.today()
+    every = [m for m in ctx.db.scalars(stmt) if p.include_outdated or is_current(m, today)]
     q = words(p.query or "")
     # any query word in the content or topic, so "supervisor email" finds "Dr. Khan is my supervisor"
     rows = [m for m in every if q & (words(m.content) | words(m.topic or ""))] if q else every
@@ -199,6 +240,12 @@ def search_memories(ctx: ToolContext, p: SearchMemoriesInput) -> dict:
         m.last_used_at = now
     ctx.db.flush()
     out: dict = {"total": len(rows), "memories": [memory_dict(m) for m in rows]}
+    links = {m.id: linked_ids(ctx.db, m.id) for m in rows}
+    for d in out["memories"]:
+        if links.get(d["id"]):
+            d["linked"] = links[d["id"]]
+    if any(d["status"] == "outdated" for d in out["memories"]):
+        out["note_outdated"] = "Memories with status 'outdated' are no longer true: use them only as history."
     if q and not rows and every:
         # No shared words ("where do I study" vs "COMSATS Islamabad, BS CS"): hand the model the memories themselves,
         # compactly, and let it judge by meaning. No extra LLM call, and only on a search that missed.
@@ -218,11 +265,11 @@ class ReviewMemoriesInput(BaseModel):
 def review_memories(ctx: ToolContext, p: ReviewMemoriesInput) -> dict:
     """Memories that may be out of date (not confirmed for a long time) and topics recorded more than once."""
     now = utcnow()
-    every = list(ctx.db.scalars(select(Memory).order_by(Memory.id)))
+    every = list(ctx.db.scalars(select(Memory).where(Memory.status == "current").order_by(Memory.id)))
     stale = [m for m in every if needs_review(m, now)]
     by_topic: dict[str, list[Memory]] = {}
     for m in every:
-        if m.topic:
+        if m.topic and is_current(m, now.date()):
             by_topic.setdefault(m.topic.lower(), []).append(m)
     conflicts = [{"topic": t, "memories": [memory_dict(m) for m in ms]} for t, ms in by_topic.items() if len(ms) > 1]
     return {
@@ -230,7 +277,7 @@ def review_memories(ctx: ToolContext, p: ReviewMemoriesInput) -> dict:
         "stale_total": len(stale),
         "conflicts": conflicts,
         "how": "Ask the user whether each is still true. Confirm with update_memory(confirm=true), correct it with "
-               "update_memory(content=...), or offer delete_memory if it no longer applies.",
+               "update_memory(content=...), or mark it update_memory(status='outdated') if it no longer applies (kept as history).",
     }
 
 
@@ -243,6 +290,10 @@ class UpdateMemoryInput(BaseModel):
     topic: str | None = Field(None, max_length=60, description="Set or change the profile topic; an empty string removes it.")
     importance: Literal["low", "medium", "high"] | None = None
     confirm: bool = Field(False, description="True when the user has just confirmed this memory is still correct.")
+    status: Literal["current", "outdated"] | None = Field(None, description="outdated = no longer true; kept as history, not deleted.")
+    replaced_by_id: int | None = Field(None, description="With status=outdated: the memory that replaces it.")
+    confidence: Literal["low", "medium", "high"] | None = None
+    valid_until: date | None = None
 
     @field_validator("topic")
     @classmethod
@@ -255,6 +306,19 @@ def update_memory(ctx: ToolContext, p: UpdateMemoryInput) -> dict:
     changes = p.model_dump(exclude_unset=True, exclude={"memory_id", "confirm"})
     if not changes and not p.confirm:
         raise ToolError("No fields to update were provided.")
+    if changes.get("replaced_by_id") is not None:
+        newer = ctx.db.get(Memory, changes["replaced_by_id"])
+        if newer is None or newer.id == m.id:
+            raise ToolError(f"No other memory with id {changes['replaced_by_id']}.")
+        changes.setdefault("status", "outdated")
+    if changes.get("status") == "current" and m.topic and _by_topic(ctx, m.topic.lower(), exclude_id=m.id):
+        raise ToolError(f'Another memory already holds the topic "{m.topic}". Mark that one outdated first.')
+    new_content = _clean(changes["content"]) if changes.get("content") else None
+    if new_content and new_content != m.content and changes.get("status") != "outdated":
+        # Keep what it used to say, as history: "when information was learned" survives an edit.
+        ctx.db.add(Memory(content=m.content, kind=m.kind, category=m.category, topic=None, importance=m.importance,
+                          source=m.source, confidence=m.confidence, status="outdated", replaced_by_id=m.id,
+                          created_at=m.created_at, confirmed_at=m.confirmed_at, conversation_id=m.conversation_id))
     if changes.get("topic"):
         other = _by_topic(ctx, changes["topic"], exclude_id=m.id)
         if other is not None:
@@ -272,6 +336,8 @@ def update_memory(ctx: ToolContext, p: UpdateMemoryInput) -> dict:
     if ctx.actor == "user":
         m.source = "user"  # the user's own words now
     ctx.db.flush()
+    if p.confirm or (ctx.actor == "user" and changes.get("status") != "outdated"):
+        m.confidence = changes.get("confidence") or "high"  # the user just said or confirmed it
     return {"memory": memory_dict(m)}
 
 
@@ -346,7 +412,8 @@ def register(registry: ToolRegistry) -> None:
     registry.register(
         Tool(
             name="update_memory",
-            description="Edit an existing memory (content, kind, category, topic, importance), or confirm it is still correct (confirm=true).",
+            description="Edit a memory, confirm it is still correct (confirm=true), or mark it no longer true (status='outdated', "
+                        "replaced_by_id=<the new fact>): outdated facts are kept as history, never treated as current.",
             permission=Permission.WRITE,
             input_model=UpdateMemoryInput,
             handler=update_memory,

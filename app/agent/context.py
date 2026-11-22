@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import Commitment, Memory, Notification, Plan, Task, utcnow
 from app.security.untrusted import sanitize_text
-from app.tools.memory import rank
+from app.tools.memory import is_current, rank
 from app.tools.memory import words as memory_words
 
 MAX_TASKS = 5
@@ -113,7 +113,8 @@ def build_context_pack(db: Session, today: date, message: str = "") -> str:
 
     # The profile (memories with a topic: university, supervisor, career goal...) and preferences always apply; other
     # memories only when the message touches them, best match first. Everything shown is marked as used.
-    memories = list(db.scalars(select(Memory)))
+    # Only what is still true: outdated memories (a past job, an old address) are history, never "the user's X".
+    memories = [m for m in db.scalars(select(Memory).where(Memory.status == "current")) if is_current(m, today)]
     shown: list[Memory] = []
     profile = rank([m for m in memories if m.topic], set())[:MAX_PROFILE]
     if profile:

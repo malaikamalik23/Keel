@@ -75,6 +75,6 @@ Last updated: 23 November 2026. Re-check with `python -m scripts.release_check` 
 
 | Feature | Status | Evidence / what's missing |
 |---|---|---|
-| All 14 tabs (Today, Calendar, Goals, Projects, Commitments, Applications, Documents, Workflows, Memory, Chat, Insights, Activity, Services, Approvals) | ✅ Live | 35 jsdom tests, 11 real-Chromium e2e tests, used locally |
+| Dashboard: 15 pages in 7 sections (Home, Assistant, My Life, Memory, Automations, Insights, Settings) | ✅ Live | 38 jsdom tests, 13 real-Chromium e2e tests, checked at desktop and phone width |
 | Phone layout | 🔬 Experimental | Responsive CSS checked at phone width in a desktop browser; not tested on a real phone |
 | Install on phone (PWA), access from other devices | Not built | See [ROADMAP.md](ROADMAP.md) |

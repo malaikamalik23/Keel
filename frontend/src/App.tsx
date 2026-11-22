@@ -19,8 +19,17 @@ import Projects from "./views/Projects";
 import Today from "./views/Today";
 import type { PendingAction } from "./types";
 
-const TABS = ["Today", "Inbox", "Calendar", "Goals", "Projects", "Commitments", "Applications", "Documents", "Workflows", "Memory", "Chat", "Insights", "Activity", "Services", "Approvals"] as const;
-type Tab = (typeof TABS)[number];
+// Seven sections, each holding the pages that belong to it. Every page stays one click away.
+const SECTIONS = [
+  { name: "Home", pages: ["Today"] },
+  { name: "Assistant", pages: ["Chat", "Inbox"] },
+  { name: "My Life", pages: ["Calendar", "Goals", "Projects", "Commitments", "Applications"] },
+  { name: "Memory", pages: ["Memory", "Documents"] },
+  { name: "Automations", pages: ["Workflows", "Approvals", "Activity"] },
+  { name: "Insights", pages: ["Insights"] },
+  { name: "Settings", pages: ["Services"] },
+] as const;
+type Tab = (typeof SECTIONS)[number]["pages"][number];
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("Today");
@@ -60,14 +69,19 @@ export default function App() {
 
   return (
     <div className="app">
-      <nav>
+      <nav aria-label="Keel">
         <strong>Keel</strong>
-        {TABS.map((t) => (
-          <button key={t} className={t === tab ? "active" : ""} onClick={() => setTab(t)}>
-            {t}{t === "Approvals" && pending > 0 && <span className="pill">{pending}</span>}
-          </button>
+        {SECTIONS.map((s) => (
+          <div key={s.name} className="nav-section" role="group" aria-label={s.name}>
+            <span className="nav-heading">{s.name}{s.name === "Automations" && pending > 0 && tab !== "Approvals" ? " •" : ""}</span>
+            {s.pages.map((t) => (
+              <button key={t} className={t === tab ? "active" : ""} aria-current={t === tab ? "page" : undefined} onClick={() => setTab(t)}>
+                {t}{t === "Approvals" && pending > 0 && <span className="pill">{pending}</span>}
+              </button>
+            ))}
+            {s.name === "Settings" && <button onClick={() => setProfileOpen(true)}>Profile</button>}
+          </div>
         ))}
-        <button className="ghost" onClick={() => setProfileOpen(true)}>Profile</button>
       </nav>
       {/* Chat stays mounted (just hidden) so the conversation survives tab switches and data refreshes. */}
       <main hidden={tab !== "Chat"} className="chat-pane"><ErrorBoundary><Chat onChange={changed} /></ErrorBoundary></main>

@@ -44,7 +44,7 @@ the app and shows you the approval text first. Type `yes` to do a step; anything
 
 ## 4. Only a person can check these
 
-- [ ] **Dashboard**: open every tab with your real data; no errors in the browser console.
+- [ ] **Dashboard**: open every page in every section with your real data; no errors in the browser console.
 - [ ] **Approvals**: ask Keel in Chat to delete a test task; it waits under Approvals; approving it deletes it once.
 - [ ] **Restart Keel** while something waits for approval: after the restart it is still there and approvable.
 - [ ] **Reminders over time**: with `SCHEDULER_ENABLED=true`, a reminder set for a few hours later arrives on time; the

@@ -14,6 +14,7 @@ machine, with your data in one SQLite file.
 
 | | |
 |---|---|
+| **Dashboard** | Fifteen pages in seven sections: Home (Today), Assistant (Chat, Inbox), My Life (Calendar, Goals, Projects, Commitments, Applications), Memory (Memory, Documents), Automations (Workflows, Approvals, Activity), Insights, and Settings (Services, Profile). A sidebar on wide screens, one scrolling bar on a phone. |
 | **Personal setup** | On first start the dashboard asks your name and how to address you, your time zone and working hours, main goals and responsibilities, preferences, and when check-ins should come. Every question can be skipped, and the **Profile** button changes the answers later. Answers become memories and goals you can see; time zone and hours apply at once, without editing `.env`. |
 | **Capture inbox** | One box for anything ("renew my passport", "remind me at 6pm to call the bank", "remember my CGPA is 3.6", a link to read later). Keel suggests a task, reminder, memory, note or project update from your words, says why, and lets you change the type or any field. Nothing is saved until you file it. The suggestions come from plain rules, so there's no model call and nothing leaves your computer. |
 | **Chat** | Talk to it in the web dashboard or the terminal. It calls tools to read and change your data. Reminders and check-ins arrive by email. |
@@ -209,7 +210,7 @@ python -m evals.run_routing        # how often does the model pick the right too
   was rate-limited) and Ollama. Built and tested only against mocks or local fixture pages so far: sending Gmail, changing Google
   Calendar events, Keel's browser on real websites, and Anthropic. Those need a first real run with your
   approval; please open an issue if a real service behaves differently.
-- The dashboard is type-checked, has 35 jsdom tests (every tab, voice input and read-aloud, empty states, a malformed response, the approval flow, switches and retention) and 11 **real-Chromium end-to-end tests** (`tests/e2e`, Playwright; CI job `e2e`) that drive the real server through chat, plan, delete-and-approve, reminders and Keel's browser on fixture pages, and fail on any console error. The browser tests exist because the first manual run found a Chrome-only crash that jsdom could not see.
+- The dashboard is type-checked, has 38 jsdom tests (every page, onboarding, the inbox, memory review, voice input and read-aloud, empty states, a malformed response, the approval flow, switches and retention) and 13 **real-Chromium end-to-end tests** (`tests/e2e`, Playwright; CI job `e2e`) that drive the real server through chat, plan, delete-and-approve, reminders and Keel's browser on fixture pages, and fail on any console error. The browser tests exist because the first manual run found a Chrome-only crash that jsdom could not see.
 - **Single-user by design**: no accounts, one optional API key for the whole API. It is not a multi-user product and shouldn't be deployed as one.
 - The SQLite database is not encrypted by Keel (use full-disk encryption); backups are, once `BACKUP_PASSPHRASE` is set.
 - See [SECURITY.md](SECURITY.md#known-limitations-read-these) for the security limitations (sticky taint, approved-memory risks, and more) and for what is stored and how to back it up (`python -m scripts.backup`, encrypted with `BACKUP_PASSPHRASE`).

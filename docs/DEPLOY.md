@@ -41,7 +41,7 @@ Turn on full-disk encryption if your provider offers it (see step 6).
 ```bash
 cp .env.example .env && chmod 600 .env
 python3 -c "import secrets; print('API_KEY=' + secrets.token_urlsafe(32))" >> .env
-nano .env        # set an LLM key, AGENT_MODEL, AGENT_TIMEZONE; Telegram if you want messages on your phone
+nano .env        # set an LLM key, AGENT_MODEL, AGENT_TIMEZONE; the email settings for reminders
 docker compose up -d --build
 curl -fsS http://127.0.0.1:8000/health          # {"status":"ok"}
 ```
@@ -87,8 +87,8 @@ ssh -N -L 8000:127.0.0.1:8000 you@your-server
 ```
 
 Then open http://127.0.0.1:8000 on the laptop and enter your `API_KEY`. SSH provides the encryption.
-A private network such as WireGuard or Tailscale does the same job for a phone. Telegram needs no inbound access at
-all: Keel calls out to Telegram, so check-ins and chat from your phone work with every port closed.
+A private network such as WireGuard or Tailscale does the same job for a phone. Reminder emails need no inbound access
+at all: Keel sends them out, so they reach your phone with every port closed.
 
 ### Option B: public HTTPS with Caddy
 
@@ -171,7 +171,7 @@ The database is one SQLite file in the `keel-data` volume and is **not encrypted
 
 - use the provider's disk encryption or LUKS, so a discarded or snapshotted disk is unreadable;
 - remember that provider snapshots and your backup copies are copies of your data too;
-- keep `.env` at mode 600. It holds your LLM key, Telegram token and `API_KEY`.
+- keep `.env` at mode 600. It holds your LLM key, email password and `API_KEY`.
 - backups are written readable by their owner only (mode 600); keep the folder you copy them to at mode 700, as above.
 
 Keel keeps your history until you delete it. To erase everything: `docker compose down -v`, then delete your backups.

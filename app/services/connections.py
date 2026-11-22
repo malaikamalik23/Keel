@@ -33,8 +33,8 @@ def mask_email(addr: str | None) -> str | None:
 
 
 def secrets(s: Settings) -> list[str]:
-    return [v for v in (s.anthropic_api_key, s.groq_api_key, s.brave_api_key, s.github_token, s.telegram_bot_token,
-                        s.calendar_ics_url, s.telegram_chat_id, s.smtp_password, s.api_key, s.gmail_client_secret, s.gemini_api_key)
+    return [v for v in (s.anthropic_api_key, s.groq_api_key, s.github_token, s.calendar_ics_url, s.smtp_password, s.api_key,
+                        s.gmail_client_secret, s.gemini_api_key, s.backup_passphrase)
             if v and len(v) >= 4]
 
 
@@ -45,13 +45,6 @@ def scrub(message: str, s: Settings) -> str:
 
 
 # ---------- live checks: each returns a short detail, raises Skip when unconfigured, anything else is a failure
-
-def check_brave(s: Settings) -> str:
-    from app.integrations.websearch import BraveSearch
-
-    results = BraveSearch(_need(s.brave_api_key, "BRAVE_API_KEY")).search("python programming language", count=1)
-    return f"{len(results)} result(s)"
-
 
 def check_github(s: Settings) -> str:
     from app.integrations.github import GitHubClient
@@ -84,15 +77,6 @@ def check_calendar(s: Settings) -> str:
     return f"{len(events)} event(s) in the next 7 days"
 
 
-def check_telegram(s: Settings) -> str:
-    from app.integrations.notifier import TelegramNotifier
-
-    notifier = TelegramNotifier(_need(s.telegram_bot_token, "TELEGRAM_BOT_TOKEN"), s.telegram_chat_id or "")
-    bot = notifier.api("getMe").get("result", {})  # read-only; validates the token. Never sendMessage here.
-    note = "" if s.telegram_chat_id else " (TELEGRAM_CHAT_ID not set, so notifications stay off)"
-    return f"token valid, bot is_bot={bot.get('is_bot')}{note}"
-
-
 def check_email(s: Settings, send: bool = False) -> str:
     from app.integrations.notifier import EmailNotifier, build_notifier
 
@@ -100,7 +84,7 @@ def check_email(s: Settings, send: bool = False) -> str:
     _need(s.email_to, "EMAIL_TO")
     notifier = build_notifier(s)
     if not isinstance(notifier, EmailNotifier):
-        return "configured, but Telegram is set too and takes priority, so email is not used"
+        raise RuntimeError("email settings are incomplete")
     to = mask_email(s.email_to)
     if send:
         notifier.send("Keel test email\nIf you can read this, reminders and check-ins will reach you by email.")
@@ -202,8 +186,8 @@ CHECKS: dict[str, Callable[[Settings], str]] = {
     "browser": check_browser,
     "google_calendar": check_google_calendar,
     "gmail": check_gmail,
-    "search": check_brave, "github": check_github, "notes": check_notes,
-    "calendar": check_calendar, "telegram": check_telegram, "email": check_email,
+    "github": check_github, "notes": check_notes,
+    "calendar": check_calendar, "email": check_email,
 }
 
 
@@ -248,9 +232,7 @@ def _host(url: str | None) -> str | None:
 def describe(s: Settings, indexed_documents: int | None = None) -> list[dict]:
     """One row per service: status ("connected" | "partial" | "not_set_up" | "off"), what it can do, and setup hints."""
     provider = _provider(s)
-    telegram = bool(s.telegram_bot_token and s.telegram_chat_id)
     email = bool(s.smtp_host and s.email_to)
-    channel = "telegram" if telegram else "email" if email else None
     rows = [
         {"id": "model", "name": "AI model", "status": "connected" if provider else "not_set_up",
          "details": ([_model_label(s, provider)] if provider else [])
@@ -259,16 +241,9 @@ def describe(s: Settings, indexed_documents: int | None = None) -> list[dict]:
                     + ([GEMINI_DATA_NOTE] if "gemini" in (provider, s.llm_fallback) and s.gemini_api_key else []),
          "access": "Receives each chat message, the facts Keel looked up to answer it, and the tool list.",
          "setup": "ANTHROPIC_API_KEY, GROQ_API_KEY or GEMINI_API_KEY, or LLM_PROVIDER=ollama for a model on this computer; LLM_FALLBACK for a second one"},
-        {"id": "telegram", "name": "Telegram", "status": "connected" if telegram else "partial" if s.telegram_bot_token else "not_set_up",
-         "details": ([("Delivers your reminders and check-ins" if channel == "telegram" else "")]
-                     + (["You can chat with Keel through the bot (only from your chat)"] if telegram and s.telegram_inbound else [])
-                     + (["TELEGRAM_CHAT_ID is missing, so nothing is sent"] if s.telegram_bot_token and not s.telegram_chat_id else [])),
-         "access": "Sends messages to your one chat; reads only messages from that chat.",
-         "setup": "TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID"},
         {"id": "email", "name": "Email", "status": "connected" if email else "partial" if s.smtp_host or s.email_to else "not_set_up",
          "details": ([f"{s.smtp_host} ({s.smtp_security})", f"Sends to {mask_email(s.email_to)}"] if email else [])
-                    + (["Not used: Telegram is set up and takes priority"] if email and telegram else [])
-                    + (["Delivers your reminders and check-ins"] if channel == "email" else []),
+                    + (["Delivers your reminders and check-ins"] if email else []),
          "access": "Sends plain-text mail to your own address only. Keel never reads your inbox.",
          "setup": "SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD and EMAIL_TO"},
         {"id": "gmail", "name": "Gmail", "status": "not_set_up" if not s.gmail_client_id else "connected" if gmail_connected(s) else "partial",
@@ -298,14 +273,11 @@ def describe(s: Settings, indexed_documents: int | None = None) -> list[dict]:
                     + ([f"Default account: {s.github_user}"] if s.github_user else []),
          "access": "Read-only: repos, issues, pull requests and commits.",
          "setup": "GITHUB_TOKEN (read-only scope) and GITHUB_USER; GITHUB_ENABLED=false turns it off"},
-        {"id": "search", "name": "Web search (Brave)", "status": "connected" if s.brave_api_key else "not_set_up",
-         "details": [], "access": "Sends your search query to Brave. Results are treated as untrusted.",
-         "setup": "BRAVE_API_KEY"},
         {"id": "web", "name": "Reading web pages", "status": "connected" if s.web_fetch_enabled else "off",
          "details": ([f"Only {len(csv_list(s.web_allowed_domains))} allowed site(s)"] if csv_list(s.web_allowed_domains) else ["Any public site"])
                     + ([f"{len(csv_list(s.web_blocked_domains))} blocked site(s)"] if csv_list(s.web_blocked_domains) else [])
                     if s.web_fetch_enabled else [],
-         "access": "Fetches a page you or a search result named. Never private network addresses. Pages are untrusted.",
+         "access": "Fetches a page you named or linked. Never private network addresses. Pages are untrusted.",
          "setup": "WEB_FETCH_ENABLED, WEB_ALLOWED_DOMAINS, WEB_BLOCKED_DOMAINS"},
         {"id": "browser", "name": "Keel's browser", "status": "connected" if s.browser_enabled else "off",
          "details": (["Its own Chromium with a fresh private profile each start; never your browser",
@@ -323,7 +295,7 @@ def describe(s: Settings, indexed_documents: int | None = None) -> list[dict]:
          "details": [f"Checks every {s.scheduler_tick_seconds} s; quiet hours {s.quiet_hours_start}-{s.quiet_hours_end}; "
                      f"at most {s.notification_max_per_day} messages a day"] if s.scheduler_enabled else
                     ["Reminders, check-ins and workflows don't run on their own"],
-         "access": "Runs inside Keel. Sends only through the channel above, within the daily budget and quiet hours.",
+         "access": "Runs inside Keel. Sends only by email, to you, within the daily budget and quiet hours.",
          "setup": "SCHEDULER_ENABLED=true"},
         {"id": "backups", "name": "Encrypted backups", "status": "connected" if s.backup_passphrase else "not_set_up",
          "details": (["One encrypted file (AES-256-GCM) with the database" + (" and your notes" if s.backup_include_notes and s.notes_dir else ""),

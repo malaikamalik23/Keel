@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from app.config import Settings
-from app.integrations.notifier import EmailNotifier, LogNotifier, NotificationError, TelegramNotifier, build_notifier
+from app.integrations.notifier import EmailNotifier, LogNotifier, NotificationError, build_notifier
 from app.services.notifications import NotificationService
 from tests.conftest import make_settings
 from tests.fakes import ScriptedLLM
@@ -111,10 +111,9 @@ def test_errors_never_include_the_password_or_the_servers_reply(error, expected)
     assert e.value.__cause__ is None  # not chained either, so a traceback can't show it
 
 
-def test_channel_choice_telegram_first_then_email_then_log():
+def test_channel_choice_email_then_log():
     base = dict(smtp_host="smtp.example.com", smtp_username="me@example.com", smtp_password=PASSWORD, email_to="me@example.com")
     assert isinstance(build_notifier(make_settings(**base)), EmailNotifier)
-    assert isinstance(build_notifier(make_settings(**base, telegram_bot_token="t", telegram_chat_id="42")), TelegramNotifier)
     assert isinstance(build_notifier(make_settings(smtp_host="smtp.example.com")), LogNotifier)  # no recipient: nothing is sent
     n = build_notifier(make_settings(**base))
     assert n.sender == "me@example.com" and n.recipient == "me@example.com"

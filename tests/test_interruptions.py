@@ -45,7 +45,7 @@ def test_two_approvals_of_the_same_workflow_step_run_it_once(tmp_path):
         ra, rb = a.get(WorkflowRun, run_id), b.get(WorkflowRun, run_id)  # both see "waiting_approval"
         c.workflows.approve(a, ra, NOW)
         with pytest.raises(ValueError):
-            c.workflows.approve(b, rb, NOW)  # a stale second click (another tab, Telegram) is refused
+            c.workflows.approve(b, rb, NOW)  # a stale second click (another tab) is refused
     finally:
         a.close()
         b.close()

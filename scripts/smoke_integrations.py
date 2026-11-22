@@ -4,7 +4,7 @@
     python -m scripts.smoke_integrations --send-test-email     # also email ONE test message to EMAIL_TO (yourself)
 
 For each integration: if its setting is missing -> SKIPPED(no key); otherwise one read-only request -> PASS / FAIL.
-Telegram is only checked with getMe (validates the bot token); no message is ever sent. Email is checked by connecting,
+Email is checked by connecting,
 encrypting and logging in, then hanging up; a test email is sent only with --send-test-email, and only to EMAIL_TO. Notes are only listed on disk
 (nothing is indexed into the database). Key values are never printed: every message is also scrubbed of them.
 Exit code is 1 if anything FAILED, else 0.
@@ -17,12 +17,10 @@ from collections.abc import Callable
 from app.config import Settings
 from app.services.connections import (  # noqa: F401 - re-exported for callers and tests
     Skip,
-    check_brave,
     check_calendar,
     check_email,
     check_github,
     check_notes,
-    check_telegram,
     scrub,
 )
 
@@ -30,11 +28,9 @@ Check = Callable[[Settings], str]  # returns a short detail on success; raises S
 
 
 CHECKS: list[tuple[str, Check]] = [
-    ("Brave search", check_brave),
     ("GitHub", check_github),
     ("Notes folder", check_notes),
     ("Calendar", check_calendar),
-    ("Telegram", check_telegram),
     ("Email", check_email),
 ]
 

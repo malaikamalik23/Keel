@@ -117,8 +117,7 @@ def test_calendar_endpoint_limits_the_range():
     assert client.get("/api/calendar", params={"start": "not-a-date"}).status_code == 422
 
 
-SECRETS = dict(groq_api_key="gsk_SECRET_groq_key_123", brave_api_key="BRAVE_SECRET_456", github_token="ghp_SECRET_789",
-               telegram_bot_token="111:TG_SECRET_TOKEN", telegram_chat_id="987654321",
+SECRETS = dict(groq_api_key="gsk_SECRET_groq_key_123", github_token="ghp_SECRET_789", backup_passphrase="BACKUP_SECRET_PHRASE",
                calendar_ics_url="https://calendar.google.com/calendar/ical/me%40x.com/private-SECRETCAL/basic.ics",
                smtp_host="smtp.gmail.com", smtp_username="me@gmail.com", smtp_password="SMTP_SECRET_PASS",
                email_to="malaika@example.com", api_key="DASH_SECRET_KEY")
@@ -131,9 +130,8 @@ def test_services_page_never_shows_a_secret():
     for secret in [v for k, v in SECRETS.items() if k not in ("smtp_host", "smtp_username", "email_to")] + ["malaika@", "private-"]:
         assert secret not in dumped
     assert rows["model"]["status"] == "connected" and rows["model"]["details"] == [f"Groq · {s.agent_model}"]
-    assert rows["telegram"]["status"] == "connected" and "Delivers your reminders and check-ins" in rows["telegram"]["details"]
-    assert rows["email"]["details"][:2] == ["smtp.gmail.com (starttls)", "Sends to m•••@example.com"]
-    assert "Not used: Telegram is set up and takes priority" in rows["email"]["details"]
+    assert "telegram" not in rows and "search" not in rows  # removed integrations
+    assert rows["email"]["details"] == ["smtp.gmail.com (starttls)", "Sends to m•••@example.com", "Delivers your reminders and check-ins"]
     assert rows["calendar"]["details"] == ["iCal feed from calendar.google.com"]
     assert rows["notes"]["details"] == ["Folder “Study notes”", "12 document(s) indexed"]
     assert rows["github"]["testable"] and rows["scheduler"]["status"] == "connected"
@@ -141,11 +139,10 @@ def test_services_page_never_shows_a_secret():
 
 
 def test_services_statuses_when_little_is_set_up():
-    s = make_settings(telegram_bot_token="111:TOKEN", github_enabled=False, web_fetch_enabled=True,
+    s = make_settings(smtp_host="smtp.gmail.com", github_enabled=False, web_fetch_enabled=True,
                       web_allowed_domains="arxiv.org, nature.com")
     rows = {r["id"]: r for r in connections.describe(s)}
-    assert rows["model"]["status"] == "not_set_up" and rows["telegram"]["status"] == "partial"
-    assert "TELEGRAM_CHAT_ID is missing, so nothing is sent" in rows["telegram"]["details"]
+    assert rows["model"]["status"] == "not_set_up" and rows["email"]["status"] == "partial"  # no EMAIL_TO yet
     assert rows["github"]["status"] == "off" and not rows["github"]["testable"]
     assert rows["web"]["details"] == ["Only 2 allowed site(s)"]
     assert rows["calendar"]["status"] == "not_set_up" and not rows["calendar"]["testable"]
@@ -156,22 +153,23 @@ def test_a_failing_check_is_scrubbed_and_never_raises():
     s = make_settings(**SECRETS)
 
     def leaky(st):
-        raise RuntimeError(f"GET {st.calendar_ics_url} failed with key {st.brave_api_key}")
+        raise RuntimeError(f"GET {st.calendar_ics_url} failed with key {st.github_token}")
 
     out = connections.run_check("calendar", s, leaky)
-    assert out["ok"] is False and "BRAVE_SECRET_456" not in out["detail"] and "private-SECRETCAL" not in out["detail"] and "***" in out["detail"]
-    assert connections.run_check("search", make_settings())["ok"] is None  # not set up: nothing to check
+    assert out["ok"] is False and "ghp_SECRET_789" not in out["detail"] and "private-SECRETCAL" not in out["detail"] and "***" in out["detail"]
+    assert connections.run_check("calendar", make_settings())["ok"] is None  # not set up: nothing to check
 
 
 def test_services_endpoints(monkeypatch):
     app = create_app(make_settings(**{k: v for k, v in SECRETS.items() if k != "api_key"}), ScriptedLLM([]))
     client = local_client(app)
     body = client.get("/api/services").json()
-    assert [r["id"] for r in body][:3] == ["model", "telegram", "email"] and not any(v in json.dumps(body) for k, v in SECRETS.items() if k not in ("smtp_host", "smtp_username", "email_to", "api_key"))
+    assert [r["id"] for r in body][:3] == ["model", "email", "gmail"] and not any(v in json.dumps(body) for k, v in SECRETS.items() if k not in ("smtp_host", "smtp_username", "email_to", "api_key"))
 
     calls = []
-    monkeypatch.setitem(connections.CHECKS, "telegram", lambda st: calls.append(1) or "token valid")
-    r = client.post("/api/services/telegram/test").json()
-    assert r["ok"] is True and r["detail"] == "token valid" and r["service"] == "telegram" and calls == [1]
+    monkeypatch.setitem(connections.CHECKS, "email", lambda st: calls.append(1) or "logged in")
+    r = client.post("/api/services/email/test").json()
+    assert r["ok"] is True and r["detail"] == "logged in" and r["service"] == "email" and calls == [1]
+    assert client.post("/api/services/telegram/test").status_code == 404 and client.post("/api/services/search/test").status_code == 404
     assert client.post("/api/services/model/test").json()["ok"] is None  # a hosted model has no free check: nothing is sent
     assert client.post("/api/services/web/test").status_code == 404

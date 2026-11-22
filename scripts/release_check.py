@@ -13,7 +13,7 @@ each configured model (a few tokens), and one request with a deliberately wrong 
 
 Interactive checks run Keel's real tools on a scratch copy of the database, so approvals work exactly as in the app:
 a Gmail draft to yourself, one approved email to yourself, a Google Calendar test event added, moved and deleted, the
-browser reading a page you choose (never submitting), and one Telegram message or test email. Each says exactly what it
+browser reading a page you choose (never submitting), and one test email. Each says exactly what it
 will do and waits for "yes"; anything else skips it.
 
 Results are printed and saved (no secrets) to data/release-checks/<UTC time>.json. Exit code 1 if anything failed.

@@ -94,7 +94,7 @@ def test_full_profile_hands_the_model_every_tool_lean_a_subset():
     run_eval(Spy(), load_cases()[:1], "x", profile="full")
     assert seen["tools"] == domain and "Monday, 09 November 2026" in seen["system"] and "More tools" not in seen["system"]
     run_eval(Spy(), [{"id": "x", "category": "c", "prompt": "Hi!", "expect": [], "allow_none": True}], "x", profile="lean")
-    assert "create_task" in seen["tools"] and "load_tools" in seen["tools"] and "web_search" not in seen["tools"] and "More tools" in seen["system"]
+    assert "create_task" in seen["tools"] and "load_tools" in seen["tools"] and "web_fetch" not in seen["tools"] and "More tools" in seen["system"]
 
 
 def test_load_tools_for_the_right_group_counts_as_a_pass_in_lean_mode():

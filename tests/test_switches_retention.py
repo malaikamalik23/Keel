@@ -132,7 +132,7 @@ def _history(db):
         db.flush()
         db.add(Message(conversation_id=conv.id, role="user", content=[{"type": "text", "text": tag}], created_at=when))
         db.add(AuditLog(created_at=when, actor="agent", tool_name="list_tasks", permission="read", status="ok"))
-        db.add(Notification(kind="nudge", priority="normal", channel="telegram", text=tag, sent_at=when))
+        db.add(Notification(kind="nudge", priority="normal", channel="email", text=tag, sent_at=when))
         db.add(Checkin(kind="morning", checkin_date=when.date(), summary=tag, created_at=when))
         db.add(TaskEvent(task_id=task.id, task_title=task.title, type="postponed", at=when))
         db.add(PendingAction(tool_name="delete_task", tool_input={}, summary=tag, status="rejected", created_at=when, resolved_at=when))

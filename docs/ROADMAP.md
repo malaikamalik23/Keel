@@ -7,8 +7,8 @@ What is verified for real and what is only tested with mocks is in [STATUS.md](S
 ## Next
 
 1. **Run the release checklist's guided steps for real** ([RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)): a Gmail
-   draft and an approved send, a Google Calendar change, the browser on a real portal (stopping before submit), and
-   Telegram over several days. The automated local and read-only parts already pass.
+   draft and an approved send, a Google Calendar change, and the browser on a real portal (stopping before
+   submit). The automated local and read-only parts already pass.
 2. **An independent security review.** The adversarial suites (attachments, invitations, hidden page text, OAuth
    expiry and revocation, concurrent approvals, interrupted workflows) were written alongside the defences they test;
    someone who didn't build Keel should try to break it.
@@ -35,7 +35,8 @@ What is verified for real and what is only tested with mocks is in [STATUS.md](S
 | Browser | Chromium only; it never solves CAPTCHAs or types passwords, payment or ID numbers, so many portals need you to log in or finish yourself. |
 | Gmail | Your own Google Cloud project in Testing mode signs you out every 7 days unless you publish it (unverified, for your use only). |
 | Calendars | The iCal feed is read-only; changes need Google Calendar. Outlook works through its iCal feed only. |
-| Telegram | Not yet tried with a real bot. |
+| Web search | None: Keel reads pages you link and your own notes. |
+| Messages | Reminders and check-ins come by email only. |
 | Fetcher and browser | Not a firewall: the browser's address check can in principle be raced by DNS rebinding; on a server, also block private ranges with an egress firewall. |
 | Hidden text | Detected by rules (styles, attributes, rendering); a page can still hide text in ways no rule recognises. |
 | Phone | Usable in a phone browser; not installable yet and not tested on real phones. |

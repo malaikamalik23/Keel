@@ -272,7 +272,7 @@ def test_workflows_api(make_container):
     assert client.post(f"/api/workflow-runs/{rid}/explode").status_code == 422
     assert client.delete(f"/api/workflows/{wid}").status_code == 204
     assert client.get("/api/workflows").json() == []
-    bad = client.post("/api/workflows", json={"name": "x", "trigger": {"type": "manual"}, "steps": [{"tool": "web_search", "args": {}}]})
+    bad = client.post("/api/workflows", json={"name": "x", "trigger": {"type": "manual"}, "steps": [{"tool": "web_fetch", "args": {"url": "https://example.com"}}]})
     assert bad.status_code == 422
 
 

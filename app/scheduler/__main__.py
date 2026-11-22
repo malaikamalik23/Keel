@@ -1,6 +1,6 @@
 """Run the scheduler as a standalone daemon:  python -m app.scheduler
 
-Useful when you chat through the CLI/Telegram and don't keep the API running. Don't run this *and* the API with
+Useful when you chat through the CLI and don't keep the API running. Don't run this *and* the API with
 SCHEDULER_ENABLED=true against the same database: you would get every check-in twice (dedupe would catch most,
 but there's no reason to take the chance).
 """

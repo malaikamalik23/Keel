@@ -31,9 +31,9 @@ machine, with your data in one SQLite file.
 | **Memory you control** | A profile (university, supervisor, career goal...), preferences, background and the decisions you made, sorted into personal, academic, professional and project. One answer per profile topic: a contradicting fact makes it ask you which is right. Old memories come up for review. Every memory shows where it came from, and is visible, editable and deletable. When a search shares no words with any memory ("where do I study?"), the model is shown your memories and judges by meaning; saving a memory shows it the others in that category so it can catch a contradiction. |
 | **Proactive, within a budget** | A morning briefing by email: the best next task, what is due or overdue, promises due soon, who to follow up with, and today's calendar. A heads-up the day before a promise or important task is due, an evening check-in and a weekly review that looks ahead. All limited by a daily budget, quiet hours and de-duplication. Ask "brief me" any time, or see it on the Today tab. |
 | **Documents** | Your notes folder can hold Markdown, text, PDF and Word (.docx) files, and the Documents tab uploads them into it. Answers cite pages ("proposal.pdf, p. 4"; Word files saved without page breaks get estimated pages, cited as "p. ~4"), long documents are read in parts before summarising, and code can outline a document, compare two versions (added, removed, changed paragraphs) and find deadlines, dates and action items with their pages. Nothing becomes a task without your OK. Keel also manages the folder: it links a document to an application, task, project or email (the Documents tab shows each document's links, and "What's ready?" uses them), moves or renames files (you approve; never overwrites; links follow), creates notes, and edits text notes (one exact passage or an addition, with the old version kept in `.keel-backups/`). |
-| **Research** | Web search and page reading, search over your own notes and papers (including Urdu), read-only GitHub and calendar access. |
+| **Research** | Reading the web pages you link, search over your own notes and papers (including Urdu), read-only GitHub and calendar access. Keel has no web search. |
 | **Calendar** | The Calendar tab shows a week or a month: your calendar's meetings next to Keel's own plan blocks, task due dates, promises, application and project deadlines, reminders and important dates. Each day shows its meeting time and the free working time left, and warns about packed or double-booked days. Read-only: Keel never changes your calendar, and a day's plan downloads as a file you import. |
-| **Connected services** | The Services tab lists what Keel is connected to (AI model, Telegram, email, calendar, GitHub, Brave search, web pages, notes folder, scheduler), what each may do, and what to set for the ones that aren't. "Check connection" makes one read-only request. Keys, passwords and the calendar's secret address are never shown. Each one has an on/off switch that takes effect at once (chat, workflows and approvals already waiting), and a Data retention card sets how long logs and history are kept (forever by default; never what you made yourself). |
+| **Connected services** | The Services tab lists what Keel is connected to (AI model, email, Gmail, Google Calendar, iCal, GitHub, web pages, Keel's browser, notes folder, scheduler, backups), what each may do, and what to set for the ones that aren't. "Check connection" makes one read-only request. Keys, passwords and the calendar's secret address are never shown. Each one has an on/off switch that takes effect at once (chat, workflows and approvals already waiting), and a Data retention card sets how long logs and history are kept (forever by default; never what you made yourself). |
 | **Encrypted backups** | With a passphrase in `.env`, `python -m scripts.backup` (or **Back up now** on the Services tab, or every night with `BACKUP_DAILY=true`) writes one encrypted file with your database and notes folder: AES-256-GCM, key from scrypt, every part authenticated so a wrong passphrase, a changed byte or a cut-off file is refused. `verify` checks a backup without restoring it; `restore` keeps your current database beside it and never overwrites a note. Secrets are never in a backup. It is also how you move Keel to another computer. |
 | **Insights** | Weekly trends, streaks, promises kept, how long things really take versus your estimates. |
 
@@ -59,7 +59,7 @@ trusted once it has read external text** and enforces the rest in code:
 - A URL the model *assembled itself* (how data is smuggled out), or a link it found inside a page, is **gated**; the fetcher refuses private networks, validates every redirect.
 - Every action is **audited**.
 
-This is verified by a red-team suite that drives a *fully compromised* model through 15 external channels (web, search,
+This is verified by a red-team suite that drives a *fully compromised* model through 14 external channels (web pages,
 GitHub, notes, Word documents, both calendars, Gmail) × 7 attack payloads and asserts nothing changes. It was mutation-checked: breaking any single defence makes it fail.
 See it for yourself: `python -m scripts.security_demo` runs 12 attacks (injected deletes, memory poisoning, data in URLs,
 link choice, CSRF and DNS rebinding against the local API, eight simultaneous approvals...) against a throwaway instance and
@@ -135,24 +135,23 @@ The ones you'll touch first:
 | `SCHEDULER_ENABLED=true` | Turns on check-ins, reminders and nudges (run one process only). |
 | `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `EMAIL_TO` | Receive reminders and check-ins by email ([setup](docs/INSTALL.md#reminders-and-check-ins-by-email)). |
 | `NOTES_DIR` | A folder of notes, papers and Word/PDF documents for the notes tools. |
-| `BRAVE_API_KEY` | Enables `web_search`. |
 | `WEB_ALLOWED_DOMAINS` | Restrict the web fetcher to a short allow-list. |
 | `CALENDAR_ICS_URL`, `GITHUB_USER`/`GITHUB_TOKEN` | Calendar and GitHub (both read-only). |
 
 ## How it works
 
 ```
-Dashboard (React) · CLI · Telegram ──▶ FastAPI ──▶ Agent loop ──▶ ToolExecutor ──▶ tools ──▶ SQLite, Gmail, Google
+Dashboard (React) · CLI ──▶ FastAPI ──▶ Agent loop ──▶ ToolExecutor ──▶ tools ──▶ SQLite, Gmail, Google
                                                          │                │   Calendar, browser, web, GitHub
                                                LLM (Groq · Gemini ·       │  switch → validate → permission
                                                Anthropic · Ollama,        │  → taint gate → run → audit
                                                with a fallback)           └─ queues HIGH_IMPACT for you
-Scheduler ──▶ reminders · workflows · detectors (SQL) ──▶ notification budget ──▶ LLM only words it ──▶ Telegram/email
+Scheduler ──▶ reminders · workflows · detectors (SQL) ──▶ notification budget ──▶ LLM only words it ──▶ email
 ```
 
 - **One agent, native tool calling**, bounded loop (`MAX_AGENT_STEPS`), atomic history (a `tool_use` is never saved without its result).
-- **100 tools** in three permission tiers (one is the small `load_tools` helper); see the generated **[docs/TOOLS.md](docs/TOOLS.md)**.
-- **Lean tool profile (default).** A request that carries all 99 tool definitions is ~10,600 tokens before the conversation starts. Keel sends the core task tools plus only the groups the message needs (keywords, groups used recently, or a `load_tools` call), about 2.6-3.2k tokens. That is cheaper everywhere and is what makes it usable on Groq's free tier (8,000 tokens/minute). `TOOL_PROFILE=full` restores everything.
+- **99 tools** in three permission tiers (one is the small `load_tools` helper); see the generated **[docs/TOOLS.md](docs/TOOLS.md)**.
+- **Lean tool profile (default).** A request that carries all 98 tool definitions is ~10,600 tokens before the conversation starts. Keel sends the core task tools plus only the groups the message needs (keywords, groups used recently, or a `load_tools` call), about 2.6-3.2k tokens. That is cheaper everywhere and is what makes it usable on Groq's free tier (8,000 tokens/minute). `TOOL_PROFILE=full` restores everything.
 - **Proactivity = detectors + budget.** SQL decides *whether* something is overdue or neglected; the model only decides *how to say it*, and a deterministic fallback text is sent if the LLM is down.
 - Full design: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
@@ -166,7 +165,7 @@ ruff check .                       # lint
 python -m evals.run_routing        # how often does the model pick the right tool? (needs your Groq or Anthropic key)
 ```
 
-- Agent logic is tested against a scripted fake LLM, and all network calls (email, Brave, GitHub, web pages, calendar) against mocks, so CI needs no keys and no network.
+- Agent logic is tested against a scripted fake LLM, and all network calls (email, Gmail, Google Calendar, GitHub, web pages, calendar) against mocks, so CI needs no keys and no network.
 - `evals/` holds 242 routing cases (89 with argument checks, tagged for natural-language deadlines, ambiguity, multi-step, safety, Roman Urdu and regressions), scored per category and tag, with history in `evals/history.jsonl` and a generated [dashboard](evals/dashboard.html) of scores over time, plus latency and token use per run. [More](evals/README.md).
 - CI (GitHub Actions): lint, tests on Python 3.11 and 3.12, red-team suite, dashboard tests + build, real-Chromium end-to-end tests, dependency audit, secret scan, static analysis (Bandit and Semgrep's python, security-audit and secrets rules), Docker build plus the deployment guide's backup and restore.
 
@@ -205,7 +204,7 @@ python -m evals.run_routing        # how often does the model pick the right too
   real services: GitHub (including private repos), the iCal calendar, the notes folder, email delivery (a reminder set in chat
   arrived on time), reading a real Gmail inbox, listing a real Google Calendar, and Groq, Gemini (including taking over when Groq
   was rate-limited) and Ollama. Built and tested only against mocks or local fixture pages so far: sending Gmail, changing Google
-  Calendar events, Keel's browser on real websites, Telegram, Brave Search and Anthropic. Those need a first real run with your
+  Calendar events, Keel's browser on real websites, and Anthropic. Those need a first real run with your
   approval; please open an issue if a real service behaves differently.
 - The dashboard is type-checked, has 35 jsdom tests (every tab, voice input and read-aloud, empty states, a malformed response, the approval flow, switches and retention) and 11 **real-Chromium end-to-end tests** (`tests/e2e`, Playwright; CI job `e2e`) that drive the real server through chat, plan, delete-and-approve, reminders and Keel's browser on fixture pages, and fail on any console error. The browser tests exist because the first manual run found a Chrome-only crash that jsdom could not see.
 - **Single-user by design**: no accounts, one optional API key for the whole API. It is not a multi-user product and shouldn't be deployed as one.
@@ -221,7 +220,7 @@ app/
   security/     permission policy, audit log, untrusted-content fencing and sanitising
   services/     planner, accountability, analytics, notifications, notes indexer, workflows, backups, retention, switches
   scheduler/    tick loop, detectors, check-ins
-  integrations/ Gmail, Google Calendar and sign-in, iCal, Keel's browser, safe HTTP fetcher, Brave, GitHub, Telegram, email
+  integrations/ Gmail, Google Calendar and sign-in, iCal, Keel's browser, safe HTTP fetcher, GitHub, email
   llm/          provider-neutral interface + Groq, Gemini, Anthropic and Ollama adapters, and the fallback
   api/ db/      FastAPI app, SQLAlchemy models, Alembic session
 frontend/       React + Vite + TypeScript dashboard

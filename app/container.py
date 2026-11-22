@@ -16,7 +16,6 @@ from app.integrations.calendar import fetch_ics
 from app.integrations.github import GitHubClient
 from app.integrations.notifier import Notifier, build_notifier
 from app.integrations.safe_http import SafeFetcher
-from app.integrations.websearch import BraveSearch
 from app.llm.base import LLMClient
 from app.llm.factory import build_llm
 from app.scheduler.runner import Scheduler
@@ -89,7 +88,6 @@ def build_container(
         calendar_source=calendar_source,
         fetcher=SafeFetcher(allowed_domains=csv_list(settings.web_allowed_domains), blocked_domains=csv_list(settings.web_blocked_domains))
         if settings.web_fetch_enabled else None,
-        search=BraveSearch(settings.brave_api_key) if settings.brave_api_key else None,
         github=GitHubClient(settings.github_token) if settings.github_enabled else None,
         github_user=settings.github_user,
         notes_enabled=bool(settings.notes_dir) and settings.database_url.startswith("sqlite"),

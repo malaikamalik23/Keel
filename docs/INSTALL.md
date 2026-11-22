@@ -12,7 +12,7 @@ To run Keel on a server instead, see **[DEPLOY.md](DEPLOY.md)**.
 | A model | A key for [Groq](https://console.groq.com/keys) (free tier), [Google AI Studio](https://aistudio.google.com/apikey) (free tier) or [Anthropic](https://console.anthropic.com/), **or** [Ollama](https://ollama.com) on your own computer (no key) |
 | Disk | under 1 GB including the virtual environment |
 
-Everything else (Gmail, Google Calendar, Keel's browser, Telegram or email reminders, web search, GitHub, a notes
+Everything else (Gmail, Google Calendar, Keel's browser, email reminders, GitHub, a notes
 folder, encrypted backups) is optional and can be added later. What has been checked against real services is in
 [STATUS.md](STATUS.md).
 
@@ -89,9 +89,7 @@ Keel. A longer tour is in [DEMO.md](DEMO.md).
 | You want | Set in `.env` |
 |---|---|
 | Reminders, morning and evening check-ins | `SCHEDULER_ENABLED=true` (run only one Keel process) |
-| Messages on your phone | `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` (also lets you chat from your phone) |
-| Reminders by email instead | `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD` and `EMAIL_TO` (see below) |
-| Web search | `BRAVE_API_KEY` |
+| Reminders and check-ins by email | `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD` and `EMAIL_TO` (see below) |
 | Search over your notes and papers | `NOTES_DIR=/path/to/folder` |
 | Your calendar, read-only (Google, Outlook or any iCal feed) | `CALENDAR_ICS_URL` |
 | Your Google Calendar, read and change (each change approved) | `GOOGLE_CALENDAR_ENABLED=true` ([below](#connect-google-calendar)) |
@@ -203,8 +201,8 @@ are mostly task cases, so the full suite will score lower. Measure your model wi
 
 ### Reminders and check-ins by email
 
-If Telegram is not an option (it is blocked on some networks), Keel can email them to you instead. It only ever sends
-to the one address in `EMAIL_TO`, over an encrypted connection, as plain text. With Gmail:
+Keel emails reminders and check-ins to you. It only ever sends to the one address in `EMAIL_TO`, over an encrypted
+connection, as plain text. With Gmail:
 
 1. Turn on 2-Step Verification for your Google account, then create an **App Password** (Google Account > Security >
    2-Step Verification > App passwords). Use that, not your normal password.
@@ -221,8 +219,8 @@ to the one address in `EMAIL_TO`, over an encrypted connection, as plain text. W
 
 3. Check it: `python -m scripts.smoke_integrations` logs in without sending; add `--send-test-email` to receive one.
 
-Email is one-way: you get reminders and check-ins, and reply in the dashboard or the CLI. If Telegram is also
-configured, Telegram is used instead. The same daily budget, quiet hours and de-duplication apply to both.
+Email is one-way: you get reminders and check-ins, and reply in the dashboard or the CLI. The daily budget, quiet hours
+and de-duplication decide what is sent.
 
 ### Encrypted backups
 
@@ -239,7 +237,7 @@ is a restore: install Keel there, copy `.env`, restore, start Keel, and run `pyt
 ### Switch an integration off, and choose what is kept
 
 The Services tab has an on/off switch on each connected integration (Gmail, Google Calendar, the browser, web pages,
-web search, GitHub, the notes folder, and reminders/check-ins). Off works at once, also for approvals already waiting,
+GitHub, the notes folder, and reminders/check-ins). Off works at once, also for approvals already waiting,
 and only you can switch it back on there. Its **Data retention** card sets how long logs and history are kept
 (everything is kept until you choose otherwise); "Delete expired now" shows what would go before deleting anything.
 
@@ -342,7 +340,7 @@ change in *that conversation* waits for your approval, because Keel can no longe
 page. Start a new chat (the **New** button in Chat, or `/new` in the CLI) for a clean one. See [SECURITY.md](../SECURITY.md).
 
 **Opening a link from a page asks for approval.**
-After Keel has read something external, it opens only URLs you typed and search results without asking. A link it
+After Keel has read something external, it opens only URLs you typed without asking. A link it
 found inside a page waits under **Approvals**, or paste the URL into the chat yourself.
 
 **A delete did nothing.**
@@ -355,8 +353,8 @@ The item was edited or replaced after the request was made, so Keel refused to a
 ### Optional features
 
 **Reminders and check-ins never arrive.**
-`SCHEDULER_ENABLED=true` must be set and Keel must be running at that time. Without Telegram they are stored and
-shown in the dashboard's Activity tab rather than pushed to you. Quiet hours and the daily budget also hold messages back.
+`SCHEDULER_ENABLED=true` must be set and Keel must be running at that time. Without the email settings they are stored and
+shown in the dashboard's Activity tab rather than sent to you. Quiet hours and the daily budget also hold messages back.
 
 **Every check-in arrives twice.**
 Two schedulers are running on the same database (two server processes, or the server plus `python -m app.scheduler`).
@@ -364,12 +362,7 @@ Run one.
 
 **Emails do not arrive.**
 Run `python -m scripts.smoke_integrations`. "rejected the username or password" with Gmail means you need an App
-Password (step above), not your account password. Look in Spam once and mark the first message as not spam. If
-Telegram variables are also set, Telegram is used instead of email.
-
-**Telegram stays silent.**
-Send your bot `/start` once (a bot cannot message you first), and check that `TELEGRAM_CHAT_ID` is your *numeric* id
-(ask `@userinfobot`). Use your private chat, not a group. Keel ignores every other chat without replying.
+Password (step above), not your account password. Look in Spam once and mark the first message as not spam.
 
 **Gmail or Google Calendar stopped working ("invalid_grant", "Token has been expired or revoked").**
 In Testing mode Google signs you out after 7 days, and removing Keel at myaccount.google.com/permissions revokes it.
@@ -384,7 +377,7 @@ You (or someone with the dashboard) switched it off there. Switch it back on; no
 scanned at startup; after adding files, restart or type `/index` in the CLI. Scanned PDFs without a text layer cannot be read.
 
 **The agent says it cannot search the web.**
-`web_search` only exists when `BRAVE_API_KEY` is set. Reading a URL you paste works without it.
+That's right: Keel has no web search. Paste the link you want it to read, or put the papers in your notes folder.
 
 **The end-to-end tests are skipped.**
 They need a browser: `python -m playwright install chromium`, and the dashboard must be built.

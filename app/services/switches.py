@@ -24,10 +24,9 @@ SWITCHES: dict[str, str] = {
     "google_calendar": "Google Calendar",
     "browser": "Keel's browser",
     "web": "Reading web pages",
-    "search": "Web search",
     "github": "GitHub",
     "notes": "Notes folder",
-    "messages": "Reminders and check-ins (Telegram or email)",
+    "messages": "Reminders and check-ins by email",
 }
 PREFIX = "switch:"
 
@@ -41,8 +40,6 @@ def integration_of(tool_name: str) -> str | None:
             return switch
     if tool_name == "web_fetch":
         return "web"
-    if tool_name == "web_search":
-        return "search"
     if tool_name == "application_fill_plan":
         return "browser"
     if group_of(tool_name) == "notes":

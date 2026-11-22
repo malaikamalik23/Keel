@@ -4,25 +4,24 @@ from scripts import smoke_integrations as smoke
 
 
 def _settings(**kw) -> Settings:
-    base = dict(brave_api_key=None, github_token=None, notes_dir=None, calendar_ics_url=None, telegram_bot_token=None,
-                telegram_chat_id=None, github_user=None)
+    base = dict(github_token=None, notes_dir=None, calendar_ics_url=None, github_user=None)
     base.update(kw)
     return Settings(_env_file=None, **base)
 
 
 def test_every_integration_is_skipped_when_nothing_is_configured():
     rows = smoke.run(_settings())
-    assert [r[0] for r in rows] == ["Brave search", "GitHub", "Notes folder", "Calendar", "Telegram", "Email"]
+    assert [r[0] for r in rows] == ["GitHub", "Notes folder", "Calendar", "Email"]
     assert all(status == "SKIPPED(no key)" for _, status, _ in rows)
 
 
 def test_a_failure_never_prints_the_key_and_other_checks_still_run():
-    secret = "123456:SECRET-telegram-token-value"
+    secret = "ghp_SECRET_github_token_value"
 
     def leaky(s):
-        raise RuntimeError(f"POST https://api.telegram.org/bot{s.telegram_bot_token}/getMe failed")
+        raise RuntimeError(f"GET https://api.github.com/user?token={s.github_token} failed")
 
-    rows = smoke.run(_settings(telegram_bot_token=secret), [("Telegram", leaky), ("Notes folder", smoke.check_notes)])
+    rows = smoke.run(_settings(github_token=secret), [("GitHub", leaky), ("Notes folder", smoke.check_notes)])
     assert rows[0][1] == "FAIL" and secret not in rows[0][2] and "***" in rows[0][2]
     assert rows[1][1] == "SKIPPED(no key)"
 

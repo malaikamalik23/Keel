@@ -8,7 +8,6 @@ firing at an exact instant, so a laptop that was asleep at 08:00 still gets its 
 from __future__ import annotations
 
 import logging
-import threading
 import uuid
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -20,8 +19,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.agent.loop import Agent
 from app.config import Settings
 from app.db.models import Checkin, Conversation, Reminder, UserSetting, utcnow
-from app.integrations.notifier import Notifier, TelegramNotifier
-from app.integrations.telegram_bot import TelegramInbox
+from app.integrations.notifier import Notifier
 from app.scheduler.checkins import build_facts, checkins_due, fallback_text
 from app.scheduler.detectors import detect_nudges
 from app.services.briefing import calendar_events, calendar_lines, calendar_warnings
@@ -32,7 +30,6 @@ logger = logging.getLogger(__name__)
 CALENDAR_EVERY = timedelta(minutes=30)
 REMINDER_MAX_LATE = timedelta(hours=24)
 LEASE_KEY = "scheduler:lease"
-RESPONSE_WINDOW = timedelta(hours=6)
 
 
 def latest_conversation_id(db: Session) -> int | None:
@@ -52,8 +49,6 @@ class Scheduler:
         self.tz = ZoneInfo(settings.agent_timezone)
         self._lease_id = uuid.uuid4().hex  # which scheduler holds the lease (see _take_lease)
         self._aps = None
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
         self._calendar_checked_at: datetime | None = None  # the calendar is re-read at most every CALENDAR_EVERY
 
     # ------------------------------------------------------------------ one pass
@@ -221,25 +216,6 @@ class Scheduler:
             if res.reason != "duplicate":
                 self._block(report, res.reason)
 
-    # ------------------------------------------------------------------ inbound chat
-    def handle_inbound(self, text: str) -> str:
-        """A message typed into Telegram: same agent, same latest conversation as the CLI/dashboard."""
-        if text.startswith("/start") or text.startswith("/help"):
-            return "Hi! Just message me like you would in the app. High-impact actions (deletes) must be approved in the dashboard or CLI."
-        with self.session_factory() as db:
-            today = datetime.now(self.tz).date()
-            open_checkin = db.scalars(
-                select(Checkin).where(Checkin.checkin_date == today, Checkin.user_response.is_(None)).order_by(Checkin.id.desc())
-            ).first()
-            if open_checkin and utcnow() - open_checkin.created_at < RESPONSE_WINDOW:
-                open_checkin.user_response = text[:2000]
-                db.commit()
-            res = self.agent.chat(db, text, latest_conversation_id(db))
-        reply = res.reply
-        if res.pending_action_ids:
-            reply += f"\n\n({len(res.pending_action_ids)} action(s) are waiting for your approval — approve them in the dashboard or CLI.)"
-        return reply
-
     # ------------------------------------------------------------------ lifecycle
     def start(self) -> None:
         from apscheduler.schedulers.background import BackgroundScheduler
@@ -255,14 +231,9 @@ class Scheduler:
             else:
                 logger.warning("BACKUP_DAILY is on but BACKUP_PASSPHRASE is empty: no backups will be taken")
         self._aps.start()
-        if self.settings.telegram_inbound and isinstance(self.notifier, TelegramNotifier):
-            self._stop.clear()
-            self._thread = threading.Thread(target=self._poll_loop, name="telegram-inbox", daemon=True)
-            self._thread.start()
         logger.info("Scheduler started (tick every %ss)", self.settings.scheduler_tick_seconds)
 
     def stop(self) -> None:
-        self._stop.set()
         if self._aps is not None:
             self._aps.shutdown(wait=False)
             self._aps = None
@@ -285,12 +256,3 @@ class Scheduler:
             logger.info("Daily encrypted backup written: %s", target.name)
         except Exception:  # noqa: BLE001 - a failed backup must not stop the scheduler; it shows in the log and dashboard
             logger.exception("Daily backup failed")
-
-    def _poll_loop(self) -> None:
-        inbox = TelegramInbox(self.notifier, self.handle_inbound)  # type: ignore[arg-type]
-        while not self._stop.is_set():
-            try:
-                inbox.poll_once(timeout=25)
-            except Exception:  # noqa: BLE001 - network blips: back off and keep going
-                logger.warning("Telegram poll failed; retrying in 5s")
-                self._stop.wait(5)

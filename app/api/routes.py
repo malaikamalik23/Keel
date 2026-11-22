@@ -778,7 +778,7 @@ def set_switch(switch: str, body: dict, db: Session = Depends(get_db)):
 
 @router.post("/services/{service}/test", dependencies=[Depends(rate_limit)])
 def test_service(service: str, c: Container = Depends(get_container)):
-    """One read-only request to the service. Never sends a message (Telegram uses getMe; email logs in and hangs up)."""
+    """One read-only request to the service. Never sends a message (email logs in and hangs up)."""
     if service not in connections_svc.CHECKS:
         raise NotFoundError(f"No live check for '{service}'.")
     return {"service": service, **connections_svc.run_check(service, c.settings), "checked_at": datetime.now(ZoneInfo(c.settings.agent_timezone)).isoformat(timespec="seconds")}

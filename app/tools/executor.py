@@ -108,7 +108,7 @@ class ToolExecutor:
                 )
 
         # Claim it atomically, in the same transaction as the action itself, so it can never run twice: two approvals
-        # arriving together (dashboard + Telegram, a double click) both saw "pending" above, but only one UPDATE can
+        # arriving together (two tabs, a double click) both saw "pending" above, but only one UPDATE can
         # move it out of "pending". The loser is refused; SQLite's write lock makes the second wait for the first.
         self._claim(ctx, pa, "confirmed")
         outcome = self._execute(ctx, tool, params, actor="user", pending_action_id=pa.id)

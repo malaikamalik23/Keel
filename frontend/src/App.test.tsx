@@ -42,7 +42,7 @@ const FIXTURES: Record<string, unknown> = {
   "/api/services": [
     { id: "model", name: "AI model", status: "connected", details: ["Groq · openai/gpt-oss-120b"], access: "Receives each chat message", setup: "GROQ_API_KEY", testable: false },
     { id: "calendar", name: "Calendar", status: "connected", details: ["iCal feed from calendar.google.com"], access: "Read-only.", setup: "CALENDAR_ICS_URL", testable: true },
-    { id: "search", name: "Web search (Brave)", status: "not_set_up", details: [], access: "Sends your search query to Brave.", setup: "BRAVE_API_KEY", testable: false },
+    { id: "browser", name: "Keel's browser", status: "off", details: [], access: "Opens sites.", setup: "BROWSER_ENABLED=true", testable: false },
   ],
   "/api/backups": { enabled: true, folder: "data/backups", backups: [{ name: "agent-20261123-031500.keelbak", size: 52224, created: "2026-11-23T03:15:00+00:00", encrypted: true }] },
   "/api/retention": { categories: [{ id: "conversations", label: "Chat conversations", min_days: 7, note: "Whole conversations", days: null }, { id: "audit_log", label: "Audit log", min_days: 30, note: "Every tool call", days: 90 }], last_run: null },
@@ -246,7 +246,7 @@ describe("dashboard smoke tests", () => {
     render(<App />);
     await user.click(await screen.findByRole("button", { name: "Services" }));
     expect(await screen.findByText("Groq · openai/gpt-oss-120b")).toBeTruthy();
-    expect(screen.getByText("BRAVE_API_KEY")).toBeTruthy();  // setup hint for what isn't connected
+    expect(screen.getByText("BROWSER_ENABLED=true")).toBeTruthy();  // setup hint for what isn't connected
     expect(screen.getAllByRole("button", { name: "Check connection" })).toHaveLength(1);
     await user.click(screen.getByRole("button", { name: "Check connection" }));
     await waitFor(() => expect(calls).toContainEqual({ method: "POST", path: "/api/services/calendar/test" }));

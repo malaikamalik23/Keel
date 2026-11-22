@@ -28,7 +28,7 @@ from app.tools.base import ToolRegistry
 
 
 def build_default_registry(
-    calendar_source: Callable[[], str] | None = None, *, fetcher=None, search=None, github=None, github_user: str | None = None,
+    calendar_source: Callable[[], str] | None = None, *, fetcher=None, github=None, github_user: str | None = None,
     notes_enabled: bool = False, workday: tuple[str, str] = ("09:00", "21:00"), workflow_engine: dict | None = None,
     gmail=None, gmail_send: bool = True, gmail_max_sends: int = 20, notes_dir: str | None = None, google_calendar=None,
     browser=None,
@@ -47,7 +47,7 @@ def build_default_registry(
     applications.register(registry)
     if calendar_source is not None:  # only advertised when a calendar is configured
         calendar.register(registry, calendar_source)
-    web_tools.register(registry, fetcher=fetcher, search=search)
+    web_tools.register(registry, fetcher=fetcher)
     if github is not None:
         github_tools.register(registry, github, github_user)
     if notes_enabled:
@@ -57,7 +57,7 @@ def build_default_registry(
     if gmail is not None:
         gmail_tools.register(registry, gmail, send_enabled=gmail_send, notes_dir=notes_dir if notes_enabled else None,
                              max_sends_per_day=gmail_max_sends)
-    application_help.register(registry, search=search, gmail=gmail, browser=browser)
+    application_help.register(registry, gmail=gmail, browser=browser)
     if browser is not None:
         browser_tools.register(registry, browser, notes_dir=notes_dir if notes_enabled else None)
     if google_calendar is not None:

@@ -30,7 +30,7 @@ through something Keel reads, hoping the model treats it as instructions:
 
 | Channel | How attacker text arrives |
 |---|---|
-| Web pages / search results | A poisoned page, or an SEO-poisoned search snippet |
+| Web pages | A poisoned page, including one Keel's browser opens |
 | GitHub | A malicious README, issue title or commit message in a repo you ask about |
 | Calendar | An invite from a stranger (titles are attacker-controlled) |
 | Notes / PDFs / Word | A downloaded paper, a .docx someone sent you, or pasted web text in your notes folder |
@@ -59,10 +59,10 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
    zero-size boxes, Outlook's `mso-hide`). That covers web pages, Gmail and Google Calendar invitations, whose
    description is HTML written by whoever sent the invite. Keel's browser renders the page and leaves out anything a
    person couldn't see, including text hidden by stylesheets.
-5. **Exfiltration gate.** In a tainted conversation `web_fetch` runs without approval only for URLs the *user typed*
-   and the result URLs of a `web_search`. Everything else is queued for approval: a URL the model assembled itself (the
-   way data gets smuggled out in a query string), and a link found *inside* external text (a fetched page, a search
-   snippet, a README, an issue, a note, a calendar event), because choosing among an attacker's links is a way to
+5. **Exfiltration gate.** In a tainted conversation `web_fetch` and `browser_open` run without approval only for URLs
+   the *user typed*. Everything else is queued for approval: a URL the model assembled itself (the way data gets smuggled
+   out in a query string), and a link found *inside* external text (a fetched page, a README, an issue, a note, a
+   calendar event, an email), because choosing among an attacker's links is a way to
    signal to them. URLs the model wrote, and the text of queued/error results, never count, so a retry can't slip through.
 6. **SSRF protection.** `web_fetch` allows only http(s) on ports 80/443, no credentials in URLs, and only hosts that
    resolve to **public** addresses (loopback, private, link-local, cloud-metadata, multicast, reserved and IPv4-mapped
@@ -74,10 +74,10 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
    from the environment are ignored, since a proxy would do its own lookup.
 7. **Notes confinement.** Only files physically inside `NOTES_DIR` are indexed (symlinks that point outside are skipped).
    `read_note` serves text from the index, never from disk, so there is no path to traverse.
-8. **Secrets stay out of messages.** Errors from Telegram, Brave and GitHub clients never include URLs or headers
-   (the Telegram bot token lives in the URL, API keys in headers). Tokens are never logged or returned to the model.
-9. **Plain-text output.** The dashboard renders model output as text (no HTML/Markdown), and Telegram messages are sent
-   without `parse_mode`, so a Markdown image/link in a reply is not an exfiltration channel. Calendar event titles are written by whoever sent
+8. **Secrets stay out of messages.** Errors from the model, Google and GitHub clients never include URLs or headers
+   (API keys and tokens travel in headers). Tokens are never logged or returned to the model.
+9. **Plain-text output.** The dashboard renders model output as text (no HTML/Markdown), and reminder emails are plain
+   text, so a Markdown image/link in a reply is not an exfiltration channel. Calendar event titles are written by whoever sent
    the invite, so the morning briefing never hands them to the model: code appends them after the model's text, as plain
    lines with links removed, and the `get_briefing` tool leaves them out.
    The planner, the week overview, task-to-meeting links and the automatic re-planning use only the *times* and
@@ -101,10 +101,10 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
    actor `workflow`; templates are plain lookups ({{event.title}}), not an expression language; and a step that may
    have been cut off by a restart is not repeated without the user's OK. The red-team suite tries to create and run
    workflows from injected text.
-   The Services tab says whether each key is set, never its value: no key, token, password, Telegram chat id or the
+   The Services tab says whether each key is set, never its value: no key, token, password or the
    calendar's secret address is ever returned (only the calendar's host name, and your email as `m•••@domain`), and a
-   failed check's message is scrubbed of every configured secret. Each check is one read-only request: Telegram uses
-   `getMe`, email logs in and hangs up, and nothing is sent. The Calendar tab shows invite titles as plain text with
+   failed check's message is scrubbed of every configured secret. Each check is one read-only request: email logs in and
+   hangs up, and nothing is sent. The Calendar tab shows invite titles as plain text with
    links removed, and none of it is passed to the model.
    Gmail is the biggest injection channel, because anyone can email you. So: every tool that reads mail is
    `returns_untrusted` (fenced, sanitised, taints the turn, and HTML is reduced to visible text); a draft is a write, so
@@ -169,10 +169,7 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
     A stored profile fact can't be silently replaced: a different value for the same topic is saved only after the user
     decides, and in a tainted conversation the edit is an approval request that shows the old and the new value.
 12. **Audit log.** Every tool call (allowed, queued, rejected, failed, expired) is recorded with actor and parameters.
-13. **Telegram.** Only messages you send in your private chat with the bot are answered (the chat id must match, the chat
-    must be private and the sender must be you); groups and everyone else are ignored silently. Approving
-    actions is deliberately **not** possible from Telegram.
-14. **Email.** Reminders and check-ins go to the single address in `EMAIL_TO`, from configuration only: no tool can
+13. **Email.** Reminders and check-ins go to the single address in `EMAIL_TO`, from configuration only: no tool can
     send email, and the model can't choose a recipient. Only encrypted connections (STARTTLS or TLS, certificate
     checked) are used, the message is plain text, its subject can't add headers, and errors never include the password
     or the server's reply.
@@ -181,8 +178,8 @@ Tool *advertising* is not part of this model: in the default lean profile each r
 
 ## How this is tested
 
-`tests/injection/` runs on every push. It builds a world where **web pages, search results, GitHub READMEs and issues,
-notes, Word documents, iCal and Google Calendar events and Gmail messages and threads all contain attack text** (15
+`tests/injection/` runs on every push. It builds a world where **web pages, GitHub READMEs and issues,
+notes, Word documents, iCal and Google Calendar events and Gmail messages and threads all contain attack text** (14
 channels; 7 payload styles: plain override, fence breakout, fake tool JSON,
 fake user consent, Urdu/Roman Urdu, invisible Unicode, Markdown-image exfiltration), then drives a *fully compromised*
 model that tries 17 harmful calls: deletes, writes, memory poisoning, exfiltration URLs, requests to `127.0.0.1` and
@@ -205,9 +202,9 @@ Further suites cover the cases that are about *time* rather than one turn:
   rebinding) and cross-site POSTs (CSRF on the approve/reject endpoints) get 403 and nothing changes; the dashboard,
   the Vite dev proxy, curl and the CLI still work. The CSRF case was also run from a real Chromium page on another
   origin: before the fix it deleted the task, after it the API answers 403.
-- `tests/injection/test_link_choice.py`: links listed by a fetched page, or found in a search snippet, README, issue,
-  note or calendar event, are held for approval in the same turn and in later turns, and no request reaches the
-  attacker's host; search results and URLs you type still open freely.
+- `tests/injection/test_link_choice.py`: links listed by a fetched page, or found in a README, issue, note, email or
+  calendar event, are held for approval in the same turn and in later turns, and no request reaches the attacker's
+  host; URLs you type still open freely.
 - `tests/test_pending_concurrency.py`: two approvals at once, approve vs reject in both orders, and 8 real threads
   approving the same action against a file database. Exactly one run, every time.
 - `tests/test_interruptions.py`: the same for workflow steps (6 threads approving one step; a stale second click or a
@@ -247,7 +244,7 @@ old memory handling or the pinning switched off, they fail. A test that can't fa
   start a new chat after research.
 - **The fetcher is not a firewall.** DNS pinning closes rebinding for `web_fetch`. Keel's browser checks every request's
   address too, but Chromium then resolves the name again itself, so a DNS-rebinding site could in principle switch to a
-  private address between the check and the connection. Other integrations (GitHub, Brave, Telegram, your calendar URL)
+  private address between the check and the connection. Other integrations (GitHub, Google, your calendar URL)
   go to fixed hosts you configured. For defence in depth, especially on a server, block private ranges with an egress
   firewall or network policy.
 - **Hidden-text detection is heuristic.** Pages can hide text in ways a rule doesn't recognise (white text on a white
@@ -255,9 +252,7 @@ old memory handling or the pinning switched off, they fail. A test that can't fa
   can't act without your approval.
 - **Following a link inside a page needs your approval** once a conversation is tainted. That is the price of closing
   the link-choice leak (a page listing ten links could otherwise learn a digit from *which* one an injected model
-  opens). Search results and URLs you type are unaffected. What remains: an injected model can still choose *which
-  search result* to open and what to search for. An attacker would need several of their own pages ranked for a query
-  to read anything from that, and the query goes to your search provider, not to them. `WEB_ALLOWED_DOMAINS` closes it.
+  opens). URLs you type are unaffected. `WEB_ALLOWED_DOMAINS` limits the fetcher to sites you list.
 - **Approved ≠ safe.** The gate puts a human in the loop; it can't judge the action for you. Read what you approve,
   especially approval requests that appear right after reading external content.
 - **Memory poisoning needs your approval, but a tricked user is still a risk.** In a tainted session `save_memory` is
@@ -301,7 +296,7 @@ scheduler on, the rules run once a day. Deletion uses SQLite's `secure_delete`, 
 file; backups taken earlier keep them until they are rotated out (`BACKUP_KEEP`).
 
 **Integration switches.** Each connected integration on the Services tab (Gmail, Google Calendar, Keel's browser, web
-pages, web search, GitHub, the notes folder, and reminders/check-ins) has an on/off switch. Off takes effect at once:
+pages, GitHub, the notes folder, and reminders/check-ins) has an on/off switch. Off takes effect at once:
 its tools aren't offered to the model, and the executor refuses them for chat, for workflow steps and for approvals
 that were already waiting (an email queued before you switched Gmail off is not sent when approved later; the refusal
 is in the audit log). With messages off, nothing is sent; reminders that fall due are sent if you switch back on within

@@ -61,7 +61,7 @@ TOOL_GROUP: dict[str, str] = {
     **dict.fromkeys(["browser_open", "browser_read", "browser_click", "browser_fill", "browser_attach", "browser_submit", "browser_download", "browser_close"], "browser"),
     **dict.fromkeys(["gmail_search", "gmail_read", "gmail_triage", "gmail_extract", "gmail_draft", "gmail_send", "gmail_save_attachment"], "email"),
     **dict.fromkeys(["read_calendar", "gcal_list_events", "gcal_create_event", "gcal_update_event", "gcal_delete_event", "gcal_add_plan"], "calendar"),
-    **dict.fromkeys(["web_fetch", "web_search"], "web"),
+    **dict.fromkeys(["web_fetch"], "web"),
     **dict.fromkeys(["github_list_repos", "github_get_readme", "github_list_issues", "github_list_pulls", "github_recent_commits"], "github"),
     **dict.fromkeys(["notes_search", "read_note", "note_outline", "extract_from_note", "compare_notes",
                      "link_document", "unlink_document", "document_links", "move_document", "create_note", "edit_note"], "notes"),
@@ -119,7 +119,9 @@ KEYWORDS: dict[str, re.Pattern[str]] = {
     "github": _rx(r"\bgithub\b", r"\brepos?\b", r"\brepositor\w*", r"\bissues?\b", r"\bpull requests?\b", r"\bprs?\b", r"\breadme\b", r"\bcommits?\b", r"\bpushed?\b",
                   r"\b(in|on|of|from|at) [A-Za-z0-9][\w-]*/[A-Za-z0-9][\w.-]*"),  # "in torvalds/linux": an owner/repo name
     "notes": _rx(r"\bnotes?\b", r"\bdocx\b", r"\bword (doc|document|file)s?\b", r"\bdocuments?\b", r"\baction items?\b",
-                 r"\bpage \d+\b", r"\b(versions?|drafts?) of\b", r"\bwrote\b", r"\bwritten\b", r"\bmy (files?|documents?|papers|drafts?|docs)\b", r"\bpdf\b", r"\bwhat did i write\b", r"\bjournal\b", r"\bobsidian\b", r"\bfolder\b", r"\bi (said|mentioned|noted|saved)\b"),
+                 r"\bpage \d+\b", r"\b(versions?|drafts?) of\b", r"\bwrote\b", r"\bwritten\b", r"\bmy (files?|documents?|papers|drafts?|docs)\b", r"\bpdf\b", r"\bwhat did i write\b", r"\bjournal\b", r"\bobsidian\b", r"\bfolder\b", r"\bi (said|mentioned|noted|saved)\b",
+                 # There is no web search, so research questions are answered from the user's own notes and papers.
+                 r"\bsearch\b", r"\bpapers?\b", r"\bresearch\b", r"\blatest\b", r"\btechniques?\b", r"\bliterature\b", r"\bsurvey\b", r"\bstate of the art\b"),
 }
 
 

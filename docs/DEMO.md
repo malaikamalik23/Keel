@@ -34,13 +34,13 @@ need Gmail, Google Calendar or the browser connected ([INSTALL.md](INSTALL.md#6-
 
 ## 4. It stays useful while you're away
 
-1. Set `SCHEDULER_ENABLED=true` (and optionally the Telegram variables), restart, then `Remind me in 2 minutes to stretch` (it resolves the time itself), then wait two minutes.
-2. **Activity** → *Run scheduler now* runs one scheduler pass immediately: you'll see the reminder, and the morning/evening check-in if it's within its window. Without Telegram, messages are stored in the *Sent notifications* table and logged.
+1. Set `SCHEDULER_ENABLED=true` (and optionally the email variables), restart, then `Remind me in 2 minutes to stretch` (it resolves the time itself), then wait two minutes.
+2. **Activity** → *Run scheduler now* runs one scheduler pass immediately: you'll see the reminder, and the morning/evening check-in if it's within its window. Without email set up, messages are stored in the *Sent notifications* table and logged.
 
 ## 5. Research, with a seatbelt
 
-1. (`BRAVE_API_KEY` set) `Search for recent papers on explainable intrusion detection and summarise the top two.`
-2. Watch `web_search` → `web_fetch`. Then ask it to **create a task from what it read**: because it just read the web, the write is **queued for approval**. That is the taint rule at work.
+1. `Read https://arxiv.org/abs/2401.00001 and summarise it` (any public page you choose).
+2. Watch `web_fetch`. Then ask it to **create a task from what it read**: because it just read the web, the write is **queued for approval**. That is the taint rule at work.
 3. `Fetch http://127.0.0.1:8000/api/memories`: refused (private address). So is `http://169.254.169.254/`.
 4. With `NOTES_DIR` set: `What did I write about phishing detection?` (Urdu notes work too).
 
@@ -82,7 +82,7 @@ need Gmail, Google Calendar or the browser connected ([INSTALL.md](INSTALL.md#6-
 ```bash
 pytest tests/injection -q
 ```
-The 268 red-team tests pass (15 channels × 7 payloads, plus memory poisoning, link choice and summary taint). For a more convincing demo, **break a defence and watch it fail**: in `app/security/permissions.py` change
+The red-team tests pass (14 channels × 7 payloads, plus memory poisoning, link choice and summary taint). For a more convincing demo, **break a defence and watch it fail**: in `app/security/permissions.py` change
 `taint_escalation: bool = True` to `False`, re-run, then `git checkout app/security/permissions.py`.
 
 ## 11. Measure the model, not your hopes
@@ -104,8 +104,7 @@ credentials (what has already been confirmed is in [STATUS.md](STATUS.md)):
 - [ ] Browser: open a real portal page and read its form; stop before submitting
 - [ ] Encrypted backup: back up, `verify`, restore onto a copy
 - [ ] Restart Keel while an approval and a workflow are waiting: both are still there and can be answered
-- [ ] Telegram: bot token + chat id set; `Run scheduler now` delivers a message; reply from your phone gets an answer; a message from another account gets none
-- [ ] Brave: `web_search` returns results
+- [ ] Email: `Run scheduler now` delivers a reminder to your inbox
 - [ ] GitHub: `List my GitHub repositories`; `Show open issues on <your repo>`
 - [ ] Calendar: `What's on my calendar tomorrow?` (iCal secret address)
 - [ ] Notes: `/index` reports files added; a search finds them

@@ -51,16 +51,14 @@ Last updated: 23 November 2026. Re-check with `python -m scripts.release_check` 
 | Keel's browser: open, read, click, fill, attach, submit, download | 🧪 Tested | Real Chromium against local fixture pages (`tests/test_browser_rules.py`, `tests/e2e`), including a red-team page; not yet on a real website |
 | Application portals (scholarships, internships) | ⏳ Needs you | Fill plans are tested on fixture forms; real portals vary, need your login, and every submit needs your approval |
 | Email reminders and check-ins (SMTP) | ✅ Live | A reminder set in chat arrived on time by Gmail SMTP |
-| Telegram (messages and chat) | 🧪 Tested | Mocked Bot API; not yet run with a real bot |
 | GitHub (incl. private repos) | ✅ Live | `scripts/smoke_integrations` |
-| Brave web search | 🧪 Tested | Mocked API only |
 | Reading web pages (SSRF-guarded fetcher) | ✅ Live | Real pages in eval and demo; SSRF and redirect rules unit-tested |
 
 ## Data and security
 
 | Feature | Status | Evidence / what's missing |
 |---|---|---|
-| Permission tiers, taint, URL gate, fencing | ✅ Live | Red-team suite (15 channels × 7 payloads, 268 tests); `scripts/security_demo` (12 attacks) |
+| Permission tiers, taint, URL gate, fencing | ✅ Live | Red-team suite (14 channels × 7 payloads); `scripts/security_demo` (12 attacks) |
 | Hostile attachments, invitations, hidden page text, OAuth expiry and revocation | 🧪 Tested | `tests/test_attachment_attacks.py`, `tests/test_invite_and_oauth_attacks.py`, `tests/e2e/test_browser_attacks.py` |
 | Concurrent approvals, restarts mid-workflow, two schedulers | 🧪 Tested | `tests/test_pending_concurrency.py`, `tests/test_interruptions.py` (real threads on a file database) |
 | Encrypted backups, verify, restore | ✅ Live | A copy of the real database backed up, verified and restored; CI does the same inside Docker |

@@ -11,7 +11,7 @@ database and in code, not in the prompt.
 
 ```
       ┌──────────────────────────────── Clients ─────────────────────────────────┐
-      │ Dashboard (React; voice in/out) · CLI · Telegram (chat + push) · email push │
+      │      Dashboard (React; voice in/out) · CLI · reminders by email          │
       └───────────────────────────────────┬───────────────────────────────────────┘
                                           │ HTTP/JSON
 ┌─────────────────────────────────────────▼────────────────────────────────────────────────────┐
@@ -35,12 +35,12 @@ database and in code, not in the prompt.
 ┌────────────────────▼──────────────┐  ┌──────▼─────────────────────────────────────────────────────┐
 │ SQLite (SQLAlchemy 2, Alembic      │  │ Integrations (app/integrations): Gmail · Google Calendar ·   │
 │ 0001-0019) + FTS5 notes index      │  │ Google OAuth · iCal · Keel's browser (Playwright) · safe     │
-└────────────────────▲──────────────┘  │ HTTP fetcher · Brave · GitHub · Telegram · SMTP              │
+└────────────────────▲──────────────┘  │ HTTP fetcher · GitHub · SMTP                                 │
                      │ same services    └─────────────────────────────────────────────────────────────┘
 ┌────────────────────┴──────────────────────────────────────────────────────────────────────────┐
 │ Scheduler (APScheduler, app/scheduler): tick() → reminders · calendar follow-up · workflows ·    │
 │   check-ins · nudges · retention rules;  daily encrypted backup (BACKUP_DAILY)                   │
-│   → NotificationService (switch, dedupe, priority, quiet hours, daily budget) → Telegram / email │
+│   → NotificationService (switch, dedupe, priority, quiet hours, daily budget) → email           │
 │   → the LLM only *words* the message (no tools; deterministic fallback text)                     │
 └───────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -116,7 +116,7 @@ Tool(name, description, permission, input_model, handler(ctx, params) -> dict,
      summarize=..., returns_untrusted=False, taint_gate=None)
 ```
 
-The JSON schema the model sees is generated from the pydantic input model that also validates the call. All 100 tools (99 domain tools plus `load_tools`) are listed in
+The JSON schema the model sees is generated from the pydantic input model that also validates the call. All 99 tools (98 domain tools plus `load_tools`) are listed in
 [TOOLS.md](TOOLS.md) (generated from the registry; a test fails if it goes stale).
 
 | Tier | Behaviour |
@@ -125,7 +125,7 @@ The JSON schema the model sees is generated from the pydantic input model that a
 | WRITE | Runs immediately and is audited. **Needs approval when the session is tainted**, or always with `CONFIRM_WRITES=true` |
 | HIGH_IMPACT | Never runs from the model; queued as a `pending_action` that only you can approve (API/CLI/UI), executed once, in one transaction |
 
-Tools that need configuration (Gmail, calendars, the browser, web search, notes, GitHub) are only advertised to the model when
+Tools that need configuration (Gmail, calendars, the browser, notes, GitHub) are only advertised to the model when
 configured, and not while their integration is switched off on the Services tab (`app/services/switches.py`). The executor
 refuses a switched-off tool on every path, including an approval queued before the switch was turned off.
 
@@ -172,27 +172,27 @@ streaks, promises kept, estimate accuracy and postponement reasons for the Insig
    stable dedupe keys. At most one nudge per tick.
 
 `NotificationService` decides whether anything is sent: duplicate → priority threshold → quiet hours (high priority may interrupt) →
-daily budget. Nudges draw from their own pool so they can never crowd out the check-ins. Delivery is a `Notifier` (Telegram,
-email or log). With "messages" switched off on the Services tab, nothing is sent.
+daily budget. Nudges draw from their own pool so they can never crowd out the check-ins. Delivery is a `Notifier` (email,
+or the log when email isn't set up). With "messages" switched off on the Services tab, nothing is sent.
 
 After those, your **retention rules** run at most once a day (nothing is deleted until you set one), and with `BACKUP_DAILY=true`
 an encrypted backup is taken at `BACKUP_TIME` (`app/services/backups.py`: scrypt + AES-256-GCM in authenticated chunks).
 
 ## 8. Research tools and the injection defences
 
-`web_fetch`, `web_search`, `github_*`, the notes and document tools, `read_calendar`, the `gmail_*` readers, `gcal_list_events` and the
+`web_fetch`, `github_*`, the notes and document tools, `read_calendar`, the `gmail_*` readers, `gcal_list_events` and the
 `browser_*` readers all return text written by third parties, so
 they are `returns_untrusted`: output is sanitised, fenced in `<untrusted_content>`, and taints the conversation (WRITE tools then need approval until a new chat).
 `web_fetch` and `browser_open` additionally have an SSRF guard (private addresses refused, every redirect checked) and an exfiltration
-`taint_gate`; the browser also refuses consequential clicks and never types passwords, payment or ID numbers. The full threat model, the 14 enforced controls, how
+`taint_gate`; the browser also refuses consequential clicks and never types passwords, payment or ID numbers. The full threat model, the 13 enforced controls, how
 they are tested (the red-team suite, mutation-checked) and the known limitations are in **[SECURITY.md](../SECURITY.md)**.
 
 ## 9. Quality gates
 
 | Gate | What it covers |
 |---|---|
-| `pytest` (~860) + `npm test` (35 dashboard tests) + `tests/e2e` (11, real Chromium) | Tools, executor, agent loop, planner, scheduler, workflows, API, notes, SSRF, backups, retention, switches; Gmail, Google, Brave, GitHub, Telegram and model clients against mocked HTTP; the browser against local fixture pages; the LLM scripted |
-| `tests/injection` | The red-team suite (268 tests): a compromised model against 15 channels (web, search, GitHub, notes, Word documents, both calendars, Gmail) × 7 payloads, plus memory poisoning, link choice and summary taint |
+| `pytest` (~860) + `npm test` (35 dashboard tests) + `tests/e2e` (11, real Chromium) | Tools, executor, agent loop, planner, scheduler, workflows, API, notes, SSRF, backups, retention, switches; Gmail, Google, GitHub, email and model clients against mocked HTTP; the browser against local fixture pages; the LLM scripted |
+| `tests/injection` | The red-team suite: a compromised model against 14 channels (web pages, GitHub, notes, Word documents, both calendars, Gmail) × 7 payloads, plus memory poisoning, link choice and summary taint |
 | `evals/` | Tool-routing eval (242 cases, 89 with argument checks; reports missed, wrong and unsafe calls, latency and tokens), scored per category and tag, history and a dashboard tracked; the dataset itself is validated offline |
 | CI | ruff, Python 3.11/3.12, red-team suite, dashboard type-check + build, real-Chromium e2e, dependency audit, gitleaks secret scan, Bandit + Semgrep, Docker build + `/health`, the deployment guide's backup and restore (plain and encrypted) |
 
@@ -220,5 +220,5 @@ docs/             ARCHITECTURE · TOOLS (generated) · INSTALL · DEPLOY · DEMO
 - **Keel's browser** is tested on local fixture pages, not yet on real portals; see [STATUS.md](STATUS.md) for what is verified live.
 - **The fetcher is not a firewall.** `web_fetch` pins DNS (the address that was checked is the address connected to), which closes
   DNS rebinding, but on a server you should still block private ranges with an egress firewall or network policy.
-- **Following a link inside a page needs approval** once a conversation is tainted (only typed URLs and search results open freely).
+- **Following a link inside a page needs approval** once a conversation is tainted (only URLs the user typed open freely).
   This closes the link-choice leak at the cost of an extra click when reading onward from a page (see SECURITY.md).

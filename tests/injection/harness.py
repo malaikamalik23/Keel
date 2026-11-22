@@ -23,7 +23,6 @@ from app.integrations.gcal import GoogleCalendar
 from app.integrations.gmail import GmailClient, save_token
 from app.integrations.google_auth import CALENDAR_SCOPE, GMAIL_SCOPES, GoogleAuth
 from app.integrations.safe_http import SafeFetcher
-from app.integrations.websearch import BraveSearch
 from app.security.permissions import PermissionPolicy
 from app.services.documents import index_directory
 from app.tools import build_default_registry
@@ -125,10 +124,6 @@ def build_world(make_container, tmp_path: Path, payload: str) -> World:
 
     fetcher = SafeFetcher(client=httpx.Client(transport=httpx.MockTransport(web_handler), follow_redirects=False), resolver=lambda h: DNS.get(h, ["10.0.0.1"]))
 
-    def brave_handler(req: httpx.Request) -> httpx.Response:
-        world.requests.append(req)
-        return httpx.Response(200, json={"web": {"results": [{"title": "Great article", "url": "https://example.com/article", "description": payload}]}})
-
     def github_handler(req: httpx.Request) -> httpx.Response:
         world.requests.append(req)
         if req.url.path.endswith("/readme"):
@@ -179,7 +174,6 @@ def build_world(make_container, tmp_path: Path, payload: str) -> World:
     registry = build_default_registry(
         calendar_source=lambda: ics,
         fetcher=fetcher,
-        search=BraveSearch("k", httpx.Client(transport=httpx.MockTransport(brave_handler))),
         github=GitHubClient(None, httpx.Client(transport=httpx.MockTransport(github_handler))),
         github_user="me", notes_enabled=True, notes_dir=str(notes), gmail=gmail, google_calendar=GoogleCalendar(google),
     )
@@ -196,7 +190,6 @@ def build_world(make_container, tmp_path: Path, payload: str) -> World:
 # One legitimate-looking source call per external channel.
 SOURCES: dict[str, dict] = {
     "web_fetch": {"name": "web_fetch", "input": {"url": "https://example.com/article"}},
-    "web_search": {"name": "web_search", "input": {"query": "great article"}},
     "github_readme": {"name": "github_get_readme", "input": {"repo": "someone/project"}},
     "github_issues": {"name": "github_list_issues", "input": {"repo": "someone/project"}},
     "notes_search": {"name": "notes_search", "input": {"query": "great article"}},

@@ -73,11 +73,8 @@ class Settings(BaseSettings):
     # The hours the planner may put work into, in local time. Calendar events inside them are planned around.
     workday_start: str = "09:00"
     workday_end: str = "21:00"
-    telegram_bot_token: str | None = None
-    telegram_chat_id: str | None = None  # the ONLY chat the bot talks to / listens to
-    telegram_inbound: bool = True  # also let you chat with the agent through the bot
     calendar_ics_url: str | None = None  # secret iCal address of your calendar (read-only)
-    # Email delivery (used when Telegram is not configured). The recipient is fixed here: nothing else can choose it.
+    # Email delivery for reminders and check-ins. The recipient is fixed here: nothing else can choose it.
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_security: Literal["starttls", "ssl"] = "starttls"  # 587 = starttls, 465 = ssl. Plain, unencrypted SMTP is refused.
@@ -90,7 +87,6 @@ class Settings(BaseSettings):
     web_fetch_enabled: bool = True
     web_allowed_domains: str = ""  # comma-separated; if set, web_fetch only reaches these (and subdomains)
     web_blocked_domains: str = ""
-    brave_api_key: str | None = None  # enables web_search
     notes_dir: str | None = None  # folder of notes/papers to index for notes_search
     github_enabled: bool = True
     github_token: str | None = None  # optional: private repos and higher rate limits (read-only scope is enough)

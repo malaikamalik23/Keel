@@ -48,7 +48,7 @@ def test_specs_filtering_and_the_load_tools_helper():
     core_only = {s["name"] for s in REG.specs({CORE})}
     assert core_only == {n for n, g in TOOL_GROUP.items() if g == CORE} | {LOAD_TOOLS}
     two = {s["name"] for s in REG.specs({CORE, "web"})}
-    assert {"web_search", "web_fetch", "create_task", LOAD_TOOLS} <= two and "github_list_repos" not in two
+    assert {"web_fetch", "create_task", LOAD_TOOLS} <= two and "github_list_repos" not in two
     assert LOAD_TOOLS not in {s["name"] for s in REG.specs(set(AVAILABLE))}  # nothing left to load
 
 

@@ -19,7 +19,6 @@ class OpportunityRef(BaseModel):
 
 class FindInput(BaseModel):
     query: str = Field(min_length=2, max_length=200, description="What to look for, e.g. 'fully funded MS computer science Germany'.")
-    include_email: bool = Field(True, description="Also look through the user's Gmail (last 60 days), if connected.")
     count: int = Field(6, ge=1, le=10)
 
 
@@ -45,7 +44,7 @@ def _memories(ctx: ToolContext) -> list[Memory]:
     return list(ctx.db.scalars(select(Memory)))
 
 
-def register(registry: ToolRegistry, *, search=None, gmail=None, browser=None) -> None:
+def register(registry: ToolRegistry, *, gmail=None, browser=None) -> None:
     def check_eligibility(ctx: ToolContext, p: OpportunityRef) -> dict:
         return eligibility_report(_find(ctx, p), _memories(ctx), ctx.today())
 
@@ -63,7 +62,7 @@ def register(registry: ToolRegistry, *, search=None, gmail=None, browser=None) -
                            description="For each document an application needs: matching files in the notes, drafts already "
                                        "written, and what's still missing."))
 
-    if search is not None or gmail is not None:
+    if gmail is not None:
         def find_opportunities(ctx: ToolContext, p: FindInput) -> dict:
             from app.tools.memory import words
 
@@ -75,35 +74,19 @@ def register(registry: ToolRegistry, *, search=None, gmail=None, browser=None) -
                         return o.id
                 return None
 
-            from app.services.switches import is_on
-
             out: dict = {"query": p.query}
-            use_search, use_gmail = search is not None and is_on(ctx.db, "search"), gmail is not None and is_on(ctx.db, "gmail")
-            if not use_search and not use_gmail:
-                raise ToolError("Web search and Gmail are both switched off (or not set up), so there's nowhere to look. "
-                                "Switch one back on on the Services tab.")
-            off = [name for name, has, use in (("Web search", search, use_search), ("Gmail", gmail, use_gmail)) if has is not None and not use]
-            if off:
-                out["switched_off"] = off
-            if use_search:
-                try:
-                    results = search.search(f"{p.query} {APPLICATION_WORDS}", p.count)
-                    out["web"] = [{**r, **({"already_tracked": i} if (i := known(r["title"], r["url"])) else {})} for r in results]
-                except Exception as exc:  # noqa: BLE001 - one source failing shouldn't hide the other
-                    out["web_error"] = str(exc)[:200]
-            if use_gmail and p.include_email:
-                try:
-                    mails = gmail.search(f"{p.query} {APPLICATION_WORDS} newer_than:60d", p.count)
-                    out["email"] = [{**m.summary(), **({"already_tracked": i} if (i := known(m.subject)) else {})} for m in mails]
-                except Exception as exc:  # noqa: BLE001
-                    out["email_error"] = str(exc)[:200]
-            out["next"] = ("Read a promising posting (web_fetch, browser_open or gmail_read) before tracking it with add_opportunity, "
-                           "copying its deadline, requirements and required documents from the posting itself.")
+            try:
+                mails = gmail.search(f"{p.query} {APPLICATION_WORDS} newer_than:60d", p.count)
+            except Exception as exc:  # noqa: BLE001 - Gmail's own errors are already user-readable
+                raise ToolError(f"Couldn't search Gmail: {str(exc)[:200]}") from None
+            out["email"] = [{**m.summary(), **({"already_tracked": i} if (i := known(m.subject)) else {})} for m in mails]
+            out["next"] = ("Read a promising posting (gmail_read, or web_fetch / browser_open for a link the user gives) before "
+                           "tracking it with add_opportunity, copying its deadline, requirements and required documents from the posting itself.")
             return out
 
         registry.register(Tool(name="find_opportunities", permission=Permission.READ, input_model=FindInput, handler=find_opportunities,
                                returns_untrusted=True,
-                               description="Look for scholarships, internships, jobs or programmes on the web and in the user's email; "
+                               description="Look for scholarships, internships, jobs or programmes in the user's email (last 60 days); "
                                            "marks the ones already tracked."))
 
     if browser is not None:

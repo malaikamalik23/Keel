@@ -5,7 +5,7 @@ from evals.dashboard import combined, load_runs, render, status_of
 CASES = [
     {"id": "a", "category": "tasks", "prompt": "<b>Add</b> a task", "expect": ["create_task"], "tags": ["regression"]},
     {"id": "b", "category": "tasks", "prompt": "List tasks", "expect": ["list_tasks"]},
-    {"id": "c", "category": "web", "prompt": "Search", "expect": ["web_search"]},
+    {"id": "c", "category": "web", "prompt": "Read a page", "expect": ["web_fetch"]},
 ]
 LEAK = "Rate limit reached for model in organization org_SECRET123"
 

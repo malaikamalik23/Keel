@@ -29,7 +29,7 @@ def render() -> str:
         "`TOOL_PROFILE=full` sends everything. Permissions and confirmation apply to every call whether or not the tool was advertised. Tools marked 🌐 return text written by third parties; their output is fenced as "
         "untrusted data and taints the session (see [SECURITY.md](../SECURITY.md)). Tools marked ⚙️ are only advertised when configured.", "",
     ]
-    optional = {"read_calendar", "web_fetch", "web_search", "notes_search", "read_note"} | {t.name for t in tools if t.name.startswith("github_")}
+    optional = {"read_calendar", "web_fetch", "notes_search", "read_note"} | {t.name for t in tools if t.name.startswith("github_")}
     for key, title in TIERS:
         group = [t for t in tools if t.permission.value == key]
         lines += [f"## {title}", "", "| Tool | Group | What it's for |", "|---|---|---|"]

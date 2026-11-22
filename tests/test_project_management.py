@@ -32,7 +32,7 @@ def test_progress_report_is_built_from_recorded_facts(make_container):
     c = make_container()
     with c.session_factory() as db:
         pid = _project(c, db, deadline="2026-12-15")
-        now = utcnow()
+        now = datetime(2026, 11, 21, 7, 0)  # noon in Karachi on TODAY, as naive UTC
         done = Task(title="Literature review", status="done", project_id=pid, completed_at=now - timedelta(days=2))
         old = Task(title="Proposal", status="done", project_id=pid, completed_at=now - timedelta(days=30))
         late = Task(title="Dataset cleaning", project_id=pid, due_date=TODAY - timedelta(days=1))

@@ -108,22 +108,16 @@ def test_fill_plan_uses_saved_facts_and_drafts_and_leaves_secrets_to_the_user():
     assert next(p for p in out["proposed"] if p["ref"] == "e1")["from"] == "memory #6 (name)"
 
 
-class FakeSearch:
-    def search(self, query, count=5):
-        self.query = query
-        return [{"title": "DAAD EPOS scholarship 2027", "url": "https://www.daad.de/epos", "snippet": "Deadline 15 Dec"},
-                {"title": "Chevening Scholarships", "url": "https://www.chevening.org/", "snippet": "Apply by November"}]
-
-
 class FakeGmail:
     def search(self, query, limit=10):
         self.query = query
-        return [Mail(id="m1", thread_id="t1", sender="HEC <hec@hec.gov.pk>", to="me", cc="", subject="HEC Overseas Scholarship call", date="", snippet="Apply by 1 Dec")]
+        return [Mail(id="m1", thread_id="t1", sender="DAAD <info@daad.de>", to="me", cc="", subject="DAAD EPOS scholarship 2027: call open", date="", snippet="Deadline 15 Dec"),
+                Mail(id="m2", thread_id="t2", sender="HEC <hec@hec.gov.pk>", to="me", cc="", subject="HEC Overseas Scholarship call", date="", snippet="Apply by 1 Dec")]
 
 
-def test_find_opportunities_searches_web_and_email_and_marks_tracked(make_container):
-    search, gmail = FakeSearch(), FakeGmail()
-    ex = ToolExecutor(build_default_registry(search=search, gmail=gmail), PermissionPolicy())
+def test_find_opportunities_searches_email_and_marks_tracked(make_container):
+    gmail = FakeGmail()
+    ex = ToolExecutor(build_default_registry(gmail=gmail), PermissionPolicy())
     c = make_container()
     with c.session_factory() as db:
         db.add(Opportunity(title="DAAD EPOS scholarship", organization="DAAD", url="https://www.daad.de/epos/"))
@@ -132,14 +126,14 @@ def test_find_opportunities_searches_web_and_email_and_marks_tracked(make_contai
         out = ex.run(ctx, "find_opportunities", {"query": "MS computer science Germany"})
         assert out.status == "ok" and ctx.tainted
         data = json.loads(re.search(r"\n(\{.*\})\n</untrusted_content>", out.result["untrusted_data"], re.S).group(1))
-    assert data["web"][0]["already_tracked"] == 1 and "already_tracked" not in data["web"][1]
-    assert data["email"][0]["subject"] == "HEC Overseas Scholarship call"
-    assert "scholarship OR" in search.query and "newer_than:60d" in gmail.query
+    assert data["email"][0]["already_tracked"] == 1 and "already_tracked" not in data["email"][1]
+    assert "web" not in data  # no web search
+    assert "scholarship OR" in gmail.query and "newer_than:60d" in gmail.query
 
 
 def test_tools_by_name_and_clear_errors(make_container):
     ex = ToolExecutor(build_default_registry(), PermissionPolicy())
-    assert ex.registry.get("find_opportunities") is None and ex.registry.get("application_fill_plan") is None  # need search/gmail/browser
+    assert ex.registry.get("find_opportunities") is None and ex.registry.get("application_fill_plan") is None  # need Gmail / the browser
     c = make_container()
     with c.session_factory() as db:
         db.add_all([Opportunity(title="Fulbright MS", eligibility="Minimum CGPA 3.0 out of 4.0."), *[mem(None, m.content, m.topic) for m in PROFILE[:1]]])

@@ -41,7 +41,7 @@ def test_every_integration_tool_has_a_switch():
     """A new Gmail/browser/web/notes tool can't slip past the switches."""
     from app.tools.groups import group_of
 
-    reg = build_default_registry(gmail=object(), browser=object(), google_calendar=object(), github=object(), search=object(),
+    reg = build_default_registry(gmail=object(), browser=object(), google_calendar=object(), github=object(),
                                  fetcher=object(), notes_enabled=True, notes_dir="notes")
     for t in reg.all():
         if group_of(t.name) in ("email", "browser", "github", "notes") or t.name.startswith(("gcal_", "web_")):

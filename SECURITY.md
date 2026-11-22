@@ -177,11 +177,13 @@ Tool *advertising* is not part of this model: in the default lean profile each r
 ## How this is tested
 
 `tests/injection/` runs on every push. It builds a world where **web pages, search results, GitHub READMEs and issues,
-notes, Word documents and calendar events all contain attack text** (7 payload styles: plain override, fence breakout, fake tool JSON,
+notes, Word documents, iCal and Google Calendar events and Gmail messages and threads all contain attack text** (15
+channels; 7 payload styles: plain override, fence breakout, fake tool JSON,
 fake user consent, Urdu/Roman Urdu, invisible Unicode, Markdown-image exfiltration), then drives a *fully compromised*
 model that tries 17 harmful calls: deletes, writes, memory poisoning, exfiltration URLs, requests to `127.0.0.1` and
 cloud metadata. It asserts that nothing executed, the database is byte-for-byte unchanged, no forbidden request was
-made, and the audit log shows only queued or refused attempts.
+made, and the audit log shows only queued or refused attempts. Keel's browser has its own real-Chromium red-team test
+(`tests/e2e/test_browser_tools.py`), because its pages are live documents rather than text.
 
 Further suites cover the cases that are about *time* rather than one turn:
 
@@ -248,19 +250,36 @@ old memory handling or the pinning switched off, they fail. A test that can't fa
 ## Your data: retention, backups, encryption
 
 **What is stored, and for how long.** Everything lives in one SQLite file (`data/agent.db` by default) on your machine,
-and Keel keeps it **until you delete it**. That is deliberate: the accountability features ("what have I been
-avoiding?", postponement reasons, promises kept) are only honest if the history is complete, and an agent that quietly
-deletes your data is worse than one that keeps it. Nothing is sent anywhere except to the LLM provider you chose (the
+and Keel keeps it **until you delete it**, unless you set retention rules. Keeping is the default on purpose: the
+accountability features ("what have I been avoiding?", postponement reasons, promises kept) are only honest if the
+history is complete, and an agent that quietly deletes your data is worse than one that keeps it. Nothing is sent anywhere except to the LLM provider you chose (the
 messages and tool results of each request) and the services you configured.
 
 | Data | Kept | How to remove it |
 |---|---|---|
 | Tasks, goals, projects, commitments, plans, work sessions, reminders | until you delete them | dashboard / chat (deletes need approval) |
 | Memories | until you delete them | dashboard Memory tab |
-| Conversations | until you delete the file; only the recent window is sent to the model, older turns are summarised | delete the database |
-| Audit log, task events (postponement history) | until you delete the file | these are the evidence trail; delete the database to reset |
+| Conversations | forever, or your retention rule (7 days or more); only the recent window is sent to the model, older turns are summarised | a retention rule, or delete the database |
+| Audit log, sent-messages log, check-ins, finished approvals and workflow runs | forever, or your retention rule (30 days or more; 7 for approvals) | a retention rule |
+| Task events (postponement history) | forever, or your retention rule (90 days or more: shorter makes accountability less complete) | a retention rule |
+| Old versions of edited notes (`NOTES_DIR/.keel-backups/`) | forever, or your retention rule (7 days or more) | a retention rule, or delete the folders |
 | Notes index | rebuilt from `NOTES_DIR` | remove the file from the folder and re-index |
 | Pending approvals | expire after `PENDING_ACTION_TTL_HOURS` (default 24) | approve or reject |
+
+**Retention rules** (Services tab, "Data retention") apply to those logs and history only, never to what you made
+yourself, and only you can set them: there is no tool for it, so the model can't shorten or lengthen what is kept. The
+floors keep what Keel needs (recent sent messages stop duplicates; a request waiting for approval keeps its
+conversation). "Delete expired now" shows how many rows each rule would remove before anything is deleted; with the
+scheduler on, the rules run once a day. Deletion uses SQLite's `secure_delete`, so removed rows are overwritten in the
+file; backups taken earlier keep them until they are rotated out (`BACKUP_KEEP`).
+
+**Integration switches.** Each connected integration on the Services tab (Gmail, Google Calendar, Keel's browser, web
+pages, web search, GitHub, the notes folder, and reminders/check-ins) has an on/off switch. Off takes effect at once:
+its tools aren't offered to the model, and the executor refuses them for chat, for workflow steps and for approvals
+that were already waiting (an email queued before you switched Gmail off is not sent when approved later; the refusal
+is in the audit log). With messages off, nothing is sent; reminders that fall due are sent if you switch back on within
+a day. A switch can only take a capability away: what `.env` hasn't set up can't be switched on, and only the dashboard
+(not the model) can change a switch.
 
 To erase everything, stop Keel and delete the database file (and its backups). Secrets live only in `.env`.
 

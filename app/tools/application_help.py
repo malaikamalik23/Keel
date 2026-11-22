@@ -75,14 +75,23 @@ def register(registry: ToolRegistry, *, search=None, gmail=None, browser=None) -
                         return o.id
                 return None
 
+            from app.services.switches import is_on
+
             out: dict = {"query": p.query}
-            if search is not None:
+            use_search, use_gmail = search is not None and is_on(ctx.db, "search"), gmail is not None and is_on(ctx.db, "gmail")
+            if not use_search and not use_gmail:
+                raise ToolError("Web search and Gmail are both switched off (or not set up), so there's nowhere to look. "
+                                "Switch one back on on the Services tab.")
+            off = [name for name, has, use in (("Web search", search, use_search), ("Gmail", gmail, use_gmail)) if has is not None and not use]
+            if off:
+                out["switched_off"] = off
+            if use_search:
                 try:
                     results = search.search(f"{p.query} {APPLICATION_WORDS}", p.count)
                     out["web"] = [{**r, **({"already_tracked": i} if (i := known(r["title"], r["url"])) else {})} for r in results]
                 except Exception as exc:  # noqa: BLE001 - one source failing shouldn't hide the other
                     out["web_error"] = str(exc)[:200]
-            if gmail is not None and p.include_email:
+            if use_gmail and p.include_email:
                 try:
                     mails = gmail.search(f"{p.query} {APPLICATION_WORDS} newer_than:60d", p.count)
                     out["email"] = [{**m.summary(), **({"already_tracked": i} if (i := known(m.subject)) else {})} for m in mails]

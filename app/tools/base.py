@@ -86,7 +86,7 @@ class ToolRegistry:
     def all(self) -> list[Tool]:
         return list(self._tools.values())
 
-    def specs(self, groups: set[str] | None = None) -> list[dict]:
+    def specs(self, groups: set[str] | None = None, hidden: set[str] | frozenset = frozenset()) -> list[dict]:
         """Tool definitions for an LLM request. `groups=None` means every domain tool (the FULL profile).
 
         With `groups`, only tools in those groups are included, and the `load_tools` helper is included only while
@@ -94,9 +94,11 @@ class ToolRegistry:
         """
         from app.tools.groups import LOAD_TOOLS, group_of
 
-        available = {group_of(t.name) for t in self._tools.values() if t.name != LOAD_TOOLS}
+        available = {group_of(t.name) for t in self._tools.values() if t.name != LOAD_TOOLS and t.name not in hidden}
         out = []
         for t in self._tools.values():
+            if t.name in hidden:  # its integration is switched off (app/services/switches.py)
+                continue
             if t.name == LOAD_TOOLS:
                 if groups is not None and available - groups:
                     out.append(t.spec())
@@ -104,7 +106,7 @@ class ToolRegistry:
                 out.append(t.spec())
         return out
 
-    def available_groups(self) -> set[str]:
+    def available_groups(self, hidden: set[str] | frozenset = frozenset()) -> set[str]:
         from app.tools.groups import LOAD_TOOLS, group_of
 
-        return {group_of(t.name) for t in self._tools.values() if t.name != LOAD_TOOLS}
+        return {group_of(t.name) for t in self._tools.values() if t.name != LOAD_TOOLS and t.name not in hidden}

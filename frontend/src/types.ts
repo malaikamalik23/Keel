@@ -23,7 +23,7 @@ export interface CalendarItem {
 }
 export interface CalendarDay { date: string; weekday: string; is_today: boolean; busy_minutes: number; free_minutes: number | null; work_due_minutes: number; warnings: string[]; items: CalendarItem[]; }
 export interface CalendarView { start: string; end: string; today: string; calendar: "ok" | "off" | "error"; calendar_error: string | null; events_truncated: boolean; overdue: { id: number; title: string; due: string }[]; days: CalendarDay[]; workday: [string, string]; }
-export interface ServiceRow { id: string; name: string; status: "connected" | "partial" | "not_set_up" | "off"; details: string[]; access: string; setup: string; testable: boolean; }
+export interface ServiceRow { id: string; name: string; status: "connected" | "partial" | "not_set_up" | "off"; details: string[]; access: string; setup: string; testable: boolean; switch?: { id: string; label: string; on: boolean }; }
 export interface ServiceCheck { service: string; ok: boolean | null; detail: string; checked_at: string; }
 export interface WorkflowStep { tool?: string; args?: Record<string, unknown>; notify?: string; approve?: boolean; }
 export interface WorkflowRun { id: number; workflow_id: number; status: string; step: number; event: Record<string, unknown>; attempts: number; error: string | null; started: string; finished: string | null; log: { step: number; state: string; at: string; error?: string; attempt?: number }[]; }

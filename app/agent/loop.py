@@ -78,7 +78,10 @@ class Agent:
 
         registry = self.executor.registry
         lean = self.settings.tool_profile == "lean"
-        available = registry.available_groups()
+        from app.services.switches import hidden_tools
+
+        hidden = hidden_tools(db, [t.name for t in registry.all()])  # integrations switched off on the Services tab
+        available = registry.available_groups(hidden)
         if lean:  # advertise only the tools this message plausibly needs (see app/tools/groups.py)
             from app.db.models import Project
 
@@ -94,7 +97,7 @@ class Agent:
             response = self.llm.complete(
                 system=system_prompt,
                 messages=messages,
-                tools=registry.specs(ctx.active_groups) if lean else registry.specs(),
+                tools=registry.specs(ctx.active_groups, hidden) if lean else registry.specs(hidden=hidden),
             )
             tool_uses = response.tool_uses if response.stop_reason == "tool_use" else []
 

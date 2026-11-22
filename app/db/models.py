@@ -156,6 +156,16 @@ class ProjectEntry(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class UserSetting(Base):
+    """A setting changed from the dashboard: integration switches, retention rules (see migration 0019)."""
+
+    __tablename__ = "user_settings"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[Any] = mapped_column(JSON, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class DocumentLink(Base):
     """A file in NOTES_DIR connected to an application, task or email. Keyed by path (see migration 0018)."""
 

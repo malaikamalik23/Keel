@@ -751,8 +751,29 @@ def calendar_view(start: date | None = None, days: int = Query(7, ge=1, le=MAX_D
 # ---------- connected services (never returns a key, token, password or the calendar's secret address)
 @router.get("/services")
 def services(db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    from app.services import switches as switches_svc
+
     indexed = db.scalar(select(func.count(Document.id))) if c.settings.notes_dir else None
-    return connections_svc.describe(c.settings, indexed)
+    rows = connections_svc.describe(c.settings, indexed)
+    off = switches_svc.off_switches(db)
+    for r in rows:  # an on/off switch on each row that has one and is set up (a switch can't turn on what .env hasn't)
+        sid = "messages" if r["id"] == "scheduler" else r["id"]
+        if sid in switches_svc.SWITCHES and r["status"] != "not_set_up":
+            r["switch"] = {"id": sid, "label": switches_svc.SWITCHES[sid], "on": sid not in off}
+    return rows
+
+
+@router.put("/switches/{switch}")
+def set_switch(switch: str, body: dict, db: Session = Depends(get_db)):
+    """Turn an integration off (or back on). Only the dashboard can do this: there is no tool for it."""
+    from app.services import switches as switches_svc
+
+    if switch not in switches_svc.SWITCHES:
+        raise NotFoundError(f"No switch '{switch}'.")
+    if not isinstance(body.get("on"), bool):
+        raise HTTPException(422, 'Send {"on": true} or {"on": false}.')
+    switches_svc.set_switch(db, switch, body["on"])
+    return {"id": switch, "on": body["on"]}
 
 
 @router.post("/services/{service}/test", dependencies=[Depends(rate_limit)])
@@ -796,3 +817,55 @@ def create_backup(c: Container = Depends(get_container)):
     finally:
         _backup_lock.release()
     return {"name": target.name, "size": target.stat().st_size}
+
+
+# ---------- retention rules (logs and history only; what you created yourself is deleted only by you)
+@router.get("/retention")
+def get_retention(db: Session = Depends(get_db)):
+    from app.services import retention
+
+    saved = retention.rules(db)
+    return {"categories": [{"id": c.id, "label": c.label, "min_days": c.min_days, "note": c.note, "days": saved[c.id]}
+                           for c in retention.CATEGORIES.values()], "last_run": retention.last_run(db)}
+
+
+def _rules_body(body: dict) -> dict[str, int | None]:
+    from app.services import retention
+
+    out = {}
+    for cat, days in body.items():
+        if cat not in retention.CATEGORIES:
+            raise HTTPException(422, f"Unknown category '{cat}'.")
+        if days is not None and (not isinstance(days, int) or isinstance(days, bool)):
+            raise HTTPException(422, f"{cat}: days must be a whole number or null (keep forever).")
+        c = retention.CATEGORIES[cat]
+        if days is not None and not (c.min_days <= days <= retention.MAX_DAYS):
+            raise HTTPException(422, f"{c.label}: keep at least {c.min_days} days (or forever).")
+        out[cat] = days
+    return out
+
+
+@router.put("/retention")
+def put_retention(body: dict, db: Session = Depends(get_db)):
+    from app.services import retention
+
+    for cat, days in _rules_body(body).items():
+        retention.set_rule(db, cat, days)
+    return get_retention(db)
+
+
+@router.post("/retention/preview")
+def preview_retention(body: dict | None = None, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    """What the saved rules (or the rules in the body, not saved yet) would delete now. Deletes nothing."""
+    from app.services import retention
+
+    rules = {**retention.rules(db), **_rules_body(body or {})}
+    return {"would_delete": retention.apply(db, notes_dir=c.settings.notes_dir, dry_run=True, only=rules)}
+
+
+@router.post("/retention/apply")
+def apply_retention(db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    """Run the saved rules now (the dashboard shows the preview first)."""
+    from app.services import retention
+
+    return {"deleted": retention.apply(db, notes_dir=c.settings.notes_dir)}

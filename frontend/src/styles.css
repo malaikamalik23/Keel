@@ -100,3 +100,5 @@ code { font-size: 12px; background: var(--bg); border: 1px solid var(--border); 
 .voice-prefs select { font-size: 13px; padding: 2px 6px; }
 
 .doc-link { white-space: nowrap; font-size: 13px; } .doc-link button.small { padding: 0 6px; font-size: 12px; margin-left: 2px; }
+
+.svc-switch { display: inline-flex; align-items: center; gap: 4px; margin-right: 8px; } table.retention { width: 100%; border-collapse: collapse; } table.retention td { padding: 6px 4px; vertical-align: top; border-top: 1px solid var(--border, #ddd); } table.retention td:last-child { width: 1%; white-space: nowrap; }

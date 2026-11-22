@@ -57,13 +57,28 @@ class Scheduler:
         now_local = now.astimezone(self.tz) if now and now.tzinfo else (now.replace(tzinfo=self.tz) if now else datetime.now(self.tz))
         report: dict = {"reminders_sent": 0, "checkins_sent": [], "nudges_sent": 0, "blocked": {}}
         with self.session_factory() as db:
-            for step in (self._reminders, self._calendar, self._workflows, self._checkins, self._nudges):
+            for step in (self._reminders, self._calendar, self._workflows, self._checkins, self._nudges, self._retention):
                 try:
                     step(db, now_local, report)
                 except Exception:  # noqa: BLE001 - one failing step must not stop the others
                     db.rollback()
                     logger.exception("Scheduler step %s failed", step.__name__)
         return report
+
+    def _retention(self, db: Session, now_local: datetime, report: dict) -> None:
+        """Your retention rules (Services tab), at most once a day. Nothing happens until you set one."""
+        from app.services import retention
+
+        if all(days is None for days in retention.rules(db).values()):
+            return
+        now_utc = local_to_naive_utc(now_local, self.tz)
+        last = retention.last_run(db)
+        if last and now_utc - datetime.fromisoformat(last) < timedelta(hours=23):
+            return
+        deleted = retention.apply(db, notes_dir=self.settings.notes_dir, now=now_utc)
+        if any(deleted.values()):
+            report["retention_deleted"] = {k: v for k, v in deleted.items() if v}
+            logger.info("Retention rules removed %s", report["retention_deleted"])
 
     def _calendar(self, db: Session, now_local: datetime, report: dict) -> None:
         """Follow the calendar: linked events that moved or vanished, and today's blocks that a new meeting now hits.

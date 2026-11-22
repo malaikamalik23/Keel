@@ -33,7 +33,7 @@ machine, with your data in one SQLite file.
 | **Documents** | Your notes folder can hold Markdown, text, PDF and Word (.docx) files, and the Documents tab uploads them into it. Answers cite pages ("proposal.pdf, p. 4"; Word files saved without page breaks get estimated pages, cited as "p. ~4"), long documents are read in parts before summarising, and code can outline a document, compare two versions (added, removed, changed paragraphs) and find deadlines, dates and action items with their pages. Nothing becomes a task without your OK. Keel also manages the folder: it links a document to an application, task, project or email (the Documents tab shows each document's links, and "What's ready?" uses them), moves or renames files (you approve; never overwrites; links follow), creates notes, and edits text notes (one exact passage or an addition, with the old version kept in `.keel-backups/`). |
 | **Research** | Web search and page reading, search over your own notes and papers (including Urdu), read-only GitHub and calendar access. |
 | **Calendar** | The Calendar tab shows a week or a month: your calendar's meetings next to Keel's own plan blocks, task due dates, promises, application and project deadlines, reminders and important dates. Each day shows its meeting time and the free working time left, and warns about packed or double-booked days. Read-only: Keel never changes your calendar, and a day's plan downloads as a file you import. |
-| **Connected services** | The Services tab lists what Keel is connected to (AI model, Telegram, email, calendar, GitHub, Brave search, web pages, notes folder, scheduler), what each may do, and what to set for the ones that aren't. "Check connection" makes one read-only request. Keys, passwords and the calendar's secret address are never shown. |
+| **Connected services** | The Services tab lists what Keel is connected to (AI model, Telegram, email, calendar, GitHub, Brave search, web pages, notes folder, scheduler), what each may do, and what to set for the ones that aren't. "Check connection" makes one read-only request. Keys, passwords and the calendar's secret address are never shown. Each one has an on/off switch that takes effect at once (chat, workflows and approvals already waiting), and a Data retention card sets how long logs and history are kept (forever by default; never what you made yourself). |
 | **Encrypted backups** | With a passphrase in `.env`, `python -m scripts.backup` (or **Back up now** on the Services tab, or every night with `BACKUP_DAILY=true`) writes one encrypted file with your database and notes folder: AES-256-GCM, key from scrypt, every part authenticated so a wrong passphrase, a changed byte or a cut-off file is refused. `verify` checks a backup without restoring it; `restore` keeps your current database beside it and never overwrites a note. Secrets are never in a backup. It is also how you move Keel to another computer. |
 | **Insights** | Weekly trends, streaks, promises kept, how long things really take versus your estimates. |
 
@@ -59,22 +59,23 @@ trusted once it has read external text** and enforces the rest in code:
 - A URL the model *assembled itself* (how data is smuggled out), or a link it found inside a page, is **gated**; the fetcher refuses private networks, validates every redirect.
 - Every action is **audited**.
 
-This is verified by a red-team suite that drives a *fully compromised* model through 7 external channels × 7 attack
-payloads and asserts nothing changes. It was mutation-checked: breaking any single defence makes it fail.
+This is verified by a red-team suite that drives a *fully compromised* model through 15 external channels (web, search,
+GitHub, notes, Word documents, both calendars, Gmail) × 7 attack payloads and asserts nothing changes. It was mutation-checked: breaking any single defence makes it fail.
 See it for yourself: `python -m scripts.security_demo` runs 12 attacks (injected deletes, memory poisoning, data in URLs,
 link choice, CSRF and DNS rebinding against the local API, eight simultaneous approvals...) against a throwaway instance and
 shows each one blocked. Details and honest limitations: **[SECURITY.md](SECURITY.md)**.
 
 ## Quick start
 
-You need Python 3.11+, Node 20+ (only to build the dashboard), and a key for [Anthropic](https://console.anthropic.com/) **or** [Groq](https://console.groq.com/keys).
+You need Python 3.11+, Node 20+ (only to build the dashboard), and a model: a free [Groq](https://console.groq.com/keys) or
+[Google AI Studio](https://aistudio.google.com/apikey) key, an [Anthropic](https://console.anthropic.com/) key, or [Ollama](https://ollama.com) on your own computer.
 
 ```bash
 git clone https://github.com/malaikamalik23/Keel.git && cd Keel
 python -m venv .venv && source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt
 cp .env.example .env                                      # Windows: copy .env.example .env
-#   then edit .env: set ANTHROPIC_API_KEY (or GROQ_API_KEY) and AGENT_TIMEZONE
+#   then edit .env: set GROQ_API_KEY (or GEMINI_API_KEY / ANTHROPIC_API_KEY, or LLM_PROVIDER=ollama) and AGENT_TIMEZONE
 
 pytest -q                                                 # ~860 tests, no key or network needed
 
@@ -111,7 +112,10 @@ you> delete the literature review task                   (queued: approve with /
 you> Remind me tomorrow at 9 to email my supervisor
 ```
 
-More in **[docs/DEMO.md](docs/DEMO.md)**. Step-by-step install and fixes for common problems: **[docs/INSTALL.md](docs/INSTALL.md)**.
+More in **[docs/DEMO.md](docs/DEMO.md)**. Step-by-step install, every integration's setup and fixes for common problems
+(including Windows): **[docs/INSTALL.md](docs/INSTALL.md)**. What is verified against real services and what is only
+tested with mocks: **[docs/STATUS.md](docs/STATUS.md)**. The HTTP API: **[docs/API.md](docs/API.md)**. What's next and
+the known limitations: **[docs/ROADMAP.md](docs/ROADMAP.md)**.
 
 ## Configuration
 
@@ -137,11 +141,12 @@ The ones you'll touch first:
 ## How it works
 
 ```
-Dashboard (React) · CLI ──▶ FastAPI ──▶ Agent loop ──▶ ToolExecutor ──▶ tools ──▶ SQLite
-                                                       │             │  validate → permission policy
-                                                  LLM (Anthropic /   │  → taint gate → run → audit
-                                                  Groq, swappable)   └─ queues HIGH_IMPACT for you
-Scheduler ──▶ detectors (SQL) ──▶ notification budget ──▶ LLM only words the message ──▶ email/log
+Dashboard (React) · CLI · Telegram ──▶ FastAPI ──▶ Agent loop ──▶ ToolExecutor ──▶ tools ──▶ SQLite, Gmail, Google
+                                                         │                │   Calendar, browser, web, GitHub
+                                               LLM (Groq · Gemini ·       │  switch → validate → permission
+                                               Anthropic · Ollama,        │  → taint gate → run → audit
+                                               with a fallback)           └─ queues HIGH_IMPACT for you
+Scheduler ──▶ reminders · workflows · detectors (SQL) ──▶ notification budget ──▶ LLM only words it ──▶ Telegram/email
 ```
 
 - **One agent, native tool calling**, bounded loop (`MAX_AGENT_STEPS`), atomic history (a `tool_use` is never saved without its result).
@@ -195,13 +200,15 @@ python -m evals.run_routing        # how often does the model pick the right too
   - Re-measure with `python -m evals.run_routing --sleep 20` (the pause keeps Groq's free tier under its tokens-per-minute limit);
     `--rerun-errors <results file>` finishes a run that hit a daily limit.
 
-- **Live services: some verified, some only mocked.** GitHub (including your private repos when a token is set), the iCal calendar and
-  the notes folder have been checked against the real services with `python -m scripts.smoke_integrations` (one read-only call each,
-  never prints keys). Email delivery has been checked against real Gmail (STARTTLS, App Password, a test message received with
-  `--send-test-email`), and a reminder set in chat arrived by email on time. Brave Search is so far verified only against mocked HTTP; try it with your own key
-  (see [docs/DEMO.md](docs/DEMO.md)) and please open an issue if a real API behaves differently.
-- The dashboard is type-checked, has 31 jsdom tests (every tab, voice input and read-aloud, empty states, a malformed response, the approval flow, skip-cancel) and 2 **real-Chromium end-to-end tests** (`tests/e2e`, Playwright; CI job `e2e`) that drive the real server through chat, plan, delete-and-approve and reminders and fail on any console error. The browser tests exist because the first manual run found a Chrome-only crash that jsdom could not see.
-- Single-user by design: no accounts, one optional dashboard key. Not multi-tenant.
+- **Live services: some verified, some only mocked.** The full list is in **[docs/STATUS.md](docs/STATUS.md)**. Checked against the
+  real services: GitHub (including private repos), the iCal calendar, the notes folder, email delivery (a reminder set in chat
+  arrived on time), reading a real Gmail inbox, listing a real Google Calendar, and Groq, Gemini (including taking over when Groq
+  was rate-limited) and Ollama. Built and tested only against mocks or local fixture pages so far: sending Gmail, changing Google
+  Calendar events, Keel's browser on real websites, Telegram, Brave Search and Anthropic. Those need a first real run with your
+  approval; please open an issue if a real service behaves differently.
+- The dashboard is type-checked, has 35 jsdom tests (every tab, voice input and read-aloud, empty states, a malformed response, the approval flow, switches and retention) and 11 **real-Chromium end-to-end tests** (`tests/e2e`, Playwright; CI job `e2e`) that drive the real server through chat, plan, delete-and-approve, reminders and Keel's browser on fixture pages, and fail on any console error. The browser tests exist because the first manual run found a Chrome-only crash that jsdom could not see.
+- **Single-user by design**: no accounts, one optional API key for the whole API. It is not a multi-user product and shouldn't be deployed as one.
+- The SQLite database is not encrypted by Keel (use full-disk encryption); backups are, once `BACKUP_PASSPHRASE` is set.
 - See [SECURITY.md](SECURITY.md#known-limitations-read-these) for the security limitations (sticky taint, approved-memory risks, and more) and for what is stored and how to back it up (`python -m scripts.backup`, encrypted with `BACKUP_PASSPHRASE`).
 
 ## Project layout
@@ -211,10 +218,10 @@ app/
   agent/        the turn loop, system prompt, context pack, summariser
   tools/        one module per domain; every tool = pydantic model + handler + permission
   security/     permission policy, audit log, untrusted-content fencing and sanitising
-  services/     planner, accountability, analytics, notifications, notes indexer (shared by tools and API)
+  services/     planner, accountability, analytics, notifications, notes indexer, workflows, backups, retention, switches
   scheduler/    tick loop, detectors, check-ins
-  integrations/ email, calendar (iCal), safe HTTP fetcher, Brave search, GitHub
-  llm/          provider-neutral interface + Anthropic and Groq adapters
+  integrations/ Gmail, Google Calendar and sign-in, iCal, Keel's browser, safe HTTP fetcher, Brave, GitHub, Telegram, email
+  llm/          provider-neutral interface + Groq, Gemini, Anthropic and Ollama adapters, and the fallback
   api/ db/      FastAPI app, SQLAlchemy models, Alembic session
 frontend/       React + Vite + TypeScript dashboard
 migrations/     hand-written Alembic migrations

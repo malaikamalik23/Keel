@@ -175,9 +175,16 @@ def register_load_tools(registry: ToolRegistry) -> None:
         unknown = [g for g in p.groups if g not in available]
         if unknown:
             raise ToolError(f"Unknown tool group(s): {', '.join(unknown)}. Valid groups: {', '.join(sorted(available - {CORE}))}.")
+        from app.services.switches import SWITCHES, hidden_tools, integration_of
+
         ctx.active_groups |= set(p.groups)
         names = [t.name for t in registry.all() if group_of(t.name) in p.groups]
-        return {"loaded": sorted(set(p.groups)), "tools_now_available": names, "note": "Call the tool you need now."}
+        hidden = hidden_tools(ctx.db, names)
+        out = {"loaded": sorted(set(p.groups)), "tools_now_available": [n for n in names if n not in hidden], "note": "Call the tool you need now."}
+        if hidden:
+            out["switched_off"] = sorted({SWITCHES[integration_of(n)] for n in hidden})
+            out["note"] += " Some tools are missing because the user switched that integration off on the Services tab; say so instead of working around it."
+        return out
 
     registry.register(Tool(
         name=LOAD_TOOLS,

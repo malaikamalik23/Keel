@@ -61,6 +61,10 @@ class NotificationService:
 
     def check(self, db: Session, *, kind: str, priority: str, dedupe_key: str | None, now_local: datetime) -> str | None:
         """Return the reason this would be blocked, or None if it may be sent."""
+        from app.services.switches import is_on
+
+        if not is_on(db, "messages"):  # switched off on the Services tab: nothing goes out, reminders included
+            return "switched_off"
         if dedupe_key:
             if db.scalars(select(Notification).where(Notification.dedupe_key == dedupe_key, Notification.status == "sent")).first():
                 return "duplicate"

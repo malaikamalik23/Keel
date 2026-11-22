@@ -44,6 +44,8 @@ class ToolExecutor:
         tool = self.registry.get(name)
         if tool is None:
             return self._error(ctx, name, "unknown", raw_input, f"Unknown tool '{name}'.")
+        if (off := self._switched_off(ctx, name)) is not None:
+            return self._error(ctx, name, tool.permission.value, raw_input, off)
         try:
             params = tool.input_model.model_validate(raw_input or {})
         except ValidationError as exc:
@@ -56,12 +58,25 @@ class ToolExecutor:
             return self._queue(ctx, tool, params)
         return self._execute(ctx, tool, params, actor="agent")
 
+    @staticmethod
+    def _switched_off(ctx: ToolContext, name: str) -> str | None:
+        from app.services.switches import integration_of, is_on, refusal
+
+        switch = integration_of(name)
+        return refusal(name) if switch is not None and not is_on(ctx.db, switch) else None
+
     # ---- called by the user (API / CLI), never by the model ----
     def confirm(self, ctx: ToolContext, pending_id: int) -> ToolOutcome:
         pa = self._get_pending(ctx, pending_id)
         tool = self.registry.get(pa.tool_name)
         if tool is None:
             raise NotFoundError(f"Tool '{pa.tool_name}' no longer exists.")
+        if (off := self._switched_off(ctx, pa.tool_name)) is not None:  # switched off after it was queued: don't run it
+            pa.status, pa.resolved_at = "failed", utcnow()
+            record_audit(ctx.db, actor="user", tool_name=pa.tool_name, permission=tool.permission.value, params=pa.tool_input,
+                         status="error", detail=off, conversation_id=pa.conversation_id, pending_action_id=pa.id)
+            ctx.db.commit()
+            return ToolOutcome("error", {"error": "Nothing was done. " + off}, tool.permission.value)
         try:
             params = tool.input_model.model_validate(pa.tool_input)
         except ValidationError as exc:
@@ -109,6 +124,8 @@ class ToolExecutor:
         tool = self.registry.get(name)
         if tool is None:
             return self._error(ctx, name, "unknown", raw_input, f"Unknown tool '{name}'.")
+        if (off := self._switched_off(ctx, name)) is not None:
+            return self._error(ctx, name, tool.permission.value, raw_input, off)
         try:
             params = tool.input_model.model_validate(raw_input or {})
         except ValidationError as exc:
@@ -123,6 +140,8 @@ class ToolExecutor:
         tool = self.registry.get(name)
         if tool is None:
             return self._error(ctx, name, "unknown", raw_input, f"Unknown tool '{name}'.")
+        if (off := self._switched_off(ctx, name)) is not None:
+            return self._error(ctx, name, tool.permission.value, raw_input, off)
         if tool.returns_untrusted:
             return self._error(ctx, name, tool.permission.value, raw_input, f"'{name}' reads external content, which workflows can't use.")
         if tool.permission is Permission.HIGH_IMPACT and not approved:

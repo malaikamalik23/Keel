@@ -45,6 +45,9 @@ const FIXTURES: Record<string, unknown> = {
     { id: "search", name: "Web search (Brave)", status: "not_set_up", details: [], access: "Sends your search query to Brave.", setup: "BRAVE_API_KEY", testable: false },
   ],
   "/api/backups": { enabled: true, folder: "data/backups", backups: [{ name: "agent-20261123-031500.keelbak", size: 52224, created: "2026-11-23T03:15:00+00:00", encrypted: true }] },
+  "/api/retention": { categories: [{ id: "conversations", label: "Chat conversations", min_days: 7, note: "Whole conversations", days: null }, { id: "audit_log", label: "Audit log", min_days: 30, note: "Every tool call", days: 90 }], last_run: null },
+  "/api/retention/preview": { would_delete: { audit_log: 12 } },
+  "/api/retention/apply": { deleted: { audit_log: 12 } },
   "/api/services/calendar/test": { service: "calendar", ok: false, detail: "CalendarError: Calendar server returned HTTP 404.", checked_at: "2026-11-24T10:00:00" },
   "/api/memories/review": { stale: [{ id: 2, kind: "fact", category: "academic", topic: "supervisor", content: "Dr. Khan", importance: "medium", source: "user", created_at: "2025-01-01T00:00:00", updated_at: "2025-01-01T00:00:00", confirmed_at: "2025-01-01T00:00:00", last_used_at: null, needs_review: true }], conflicts: [] },
   "/api/analytics": { weeks: Array.from({ length: 8 }, (_, i) => week(i)), streak: { current_days: 4, longest_days: 9, window_days: 90 }, commitments: { done: 3, dropped: 1, overdue: 1, kept_rate: 0.6 }, estimates: { tasks_measured: 5, median_actual_vs_estimate: 1.4 }, postponement: { total: 6, avg_before_completion: 1.5, top_reasons: [{ reason: "too big", count: 3 }] }, completions_by_weekday: { Mon: 1, Tue: 2, Wed: 0, Thu: 3, Fri: 1, Sat: 0, Sun: 0 } },
@@ -260,6 +263,24 @@ describe("dashboard smoke tests", () => {
     expect(await screen.findByText(/agent-20261123-031500.keelbak · 51 KB/)).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Back up now" }));
     await waitFor(() => expect(calls).toContainEqual({ method: "POST", path: "/api/backups" }));
+    expect(errors).toEqual([]);
+  });
+
+  it("Services tab switches an integration off and sets a retention rule", async () => {
+    const rows = [{ id: "gmail", name: "Gmail", status: "connected", details: [], access: "Reads mail.", setup: "GMAIL_CLIENT_ID", testable: false, switch: { id: "gmail", label: "Gmail", on: true } }];
+    const calls = mockFetch({ "/api/services": rows });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Services" }));
+    await user.click(await screen.findByRole("checkbox", { name: "Gmail on" }));
+    await waitFor(() => expect(calls).toContainEqual({ method: "PUT", path: "/api/switches/gmail" }));
+    expect(screen.queryByRole("option", { name: "7 days" }, )).toBeTruthy();  // conversations may be 7 days
+    await user.selectOptions(screen.getByLabelText("Chat conversations"), "30");
+    await waitFor(() => expect(calls).toContainEqual({ method: "PUT", path: "/api/retention" }));
+    await user.click(screen.getByRole("button", { name: "Delete expired now…" }));
+    await waitFor(() => expect(calls).toContainEqual({ method: "POST", path: "/api/retention/apply" }));
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining("12 × Audit log"));
     expect(errors).toEqual([]);
   });
 

@@ -10,6 +10,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from app.agent.prompts import build_system_prompt
+from app.integrations.browser import BrowserSession
 from app.integrations.gcal import GoogleCalendar
 from app.integrations.github import GitHubClient
 from app.integrations.gmail import GmailClient
@@ -35,6 +36,7 @@ def full_registry():
         github_user="me", notes_enabled=True, notes_dir="notes",
         gmail=GmailClient("unused.apps.googleusercontent.com", None, Path("unused-token.json")),
         google_calendar=GoogleCalendar(GoogleAuth("unused", None, Path("unused-token.json"))),
+        browser=BrowserSession(fixtures={}),  # never started: only the tool specs matter here
     )
 
 

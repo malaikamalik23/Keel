@@ -118,6 +118,16 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
    you approve, nothing happens; the write itself is conditional on that version (If-Match). Guests are never emailed
    (sendUpdates=none). A day's plan is never added twice. The red-team suite reads a poisoned invite and tries to
    create, move and delete events.
+   Keel's browser (off by default) is a separate Chromium with a fresh profile per start. Every request a page makes
+   (scripts, images, forms) goes through a guard that refuses non-public addresses, so a page can't reach Keel's own
+   API, the router or cloud metadata. Page text is untrusted and hidden text is left out. Clicks that only navigate
+   are free; a click that would post a form or reads like a consequential action is refused, and the only way to do it
+   is `browser_submit`, which is high impact: the approval shows the site, the button and every value the form holds,
+   and it is recomputed at approval time, so a form changed in between isn't sent. Typing into a page and attaching a
+   file are high impact too (page scripts can read typed text, so it is disclosure). Password, payment, one-time-code
+   and ID-number fields are never filled, CAPTCHAs are never solved, and workflows can't use the browser. A real-
+   Chromium red-team test has a compromised model follow an attacker's page: nothing is posted, typed, attached or
+   fetched.
    Model providers see what Keel sends them. With `LLM_FALLBACK=gemini` on Google AI Studio's free tier, Google states
    that content is used to improve its products; the Services tab shows that note whenever Gemini is configured, and
    the install guide recommends the paid tier or a local fallback for sensitive data. The fallback only switches on a

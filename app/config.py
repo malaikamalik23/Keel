@@ -107,6 +107,11 @@ class Settings(BaseSettings):
     google_calendar_enabled: bool = False
     google_calendar_id: str = "primary"
 
+    # ---- Keel's own browser (Playwright Chromium; separate from yours): open sites, fill forms, download documents.
+    # Needs: pip install playwright && python -m playwright install chromium. Submitting always needs your approval.
+    browser_enabled: bool = False
+    browser_headless: bool = True  # false = you can watch the window (and log in to sites yourself in it)
+
     rate_limit_per_minute: int = 30  # per client, for endpoints that call the LLM (/api/chat, /api/scheduler/tick). 0 = off
 
     # Built dashboard (frontend/dist). Served at / when the directory exists; blank/None disables.

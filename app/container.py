@@ -67,6 +67,15 @@ def _google(settings: Settings):
     return GmailClient.from_auth(auth), cal
 
 
+def _browser(settings: Settings):
+    if not settings.browser_enabled:
+        return None
+    from app.integrations.browser import BrowserSession
+
+    return BrowserSession(headless=settings.browser_headless, allowed_domains=csv_list(settings.web_allowed_domains),
+                          blocked_domains=csv_list(settings.web_blocked_domains))
+
+
 def build_container(
     settings: Settings | None = None, llm: LLMClient | None = None, notifier: Notifier | None = None
 ) -> Container:
@@ -86,7 +95,7 @@ def build_container(
         notes_enabled=bool(settings.notes_dir) and settings.database_url.startswith("sqlite"),
         workday=(settings.workday_start, settings.workday_end),
         workflow_engine=(workflow_holder := {}),
-        gmail=gmail, google_calendar=google_calendar, gmail_send=settings.gmail_send_enabled, gmail_max_sends=settings.gmail_max_sends_per_day,
+        gmail=gmail, google_calendar=google_calendar, browser=_browser(settings), gmail_send=settings.gmail_send_enabled, gmail_max_sends=settings.gmail_max_sends_per_day,
         notes_dir=settings.notes_dir,
     )
     executor = ToolExecutor(

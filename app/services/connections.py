@@ -181,8 +181,25 @@ def check_google_calendar(s: Settings) -> str:
     return f"{len(cal.events(now, now + timedelta(days=7)))} event(s) in the next 7 days (read only; nothing changed)"
 
 
+def check_browser(s: Settings) -> str:
+    """Starts Keel's browser and opens a blank page: no website is contacted."""
+    if not s.browser_enabled:
+        raise Skip("BROWSER_ENABLED is false")
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        raise RuntimeError("Playwright isn't installed: pip install playwright && python -m playwright install chromium") from None
+    with sync_playwright() as p:
+        b = p.chromium.launch(headless=True)
+        version = b.version
+        b.new_page().goto("about:blank")
+        b.close()
+    return f"Chromium {version} starts (no site was contacted)"
+
+
 CHECKS: dict[str, Callable[[Settings], str]] = {
     "model": check_model,
+    "browser": check_browser,
     "google_calendar": check_google_calendar,
     "gmail": check_gmail,
     "search": check_brave, "github": check_github, "notes": check_notes,
@@ -290,6 +307,13 @@ def describe(s: Settings, indexed_documents: int | None = None) -> list[dict]:
                     if s.web_fetch_enabled else [],
          "access": "Fetches a page you or a search result named. Never private network addresses. Pages are untrusted.",
          "setup": "WEB_FETCH_ENABLED, WEB_ALLOWED_DOMAINS, WEB_BLOCKED_DOMAINS"},
+        {"id": "browser", "name": "Keel's browser", "status": "connected" if s.browser_enabled else "off",
+         "details": (["Its own Chromium with a fresh private profile each start; never your browser",
+                      "Window visible (you can log in to sites in it)" if not s.browser_headless else "Runs hidden (BROWSER_HEADLESS=true)"]
+                     if s.browser_enabled else []),
+         "access": "Opens sites, clicks links, fills forms and downloads documents. Typing into a page and submitting wait for "
+                   "your approval; it never types passwords, payment or ID numbers, or solves CAPTCHAs. No private network addresses.",
+         "setup": "BROWSER_ENABLED=true, then: pip install playwright && python -m playwright install chromium"},
         {"id": "notes", "name": "Notes folder", "status": "connected" if s.notes_dir else "not_set_up",
          "details": ([f"Folder “{Path(s.notes_dir).expanduser().name}”"] if s.notes_dir else [])
                     + ([f"{indexed_documents} document(s) indexed"] if s.notes_dir and indexed_documents is not None else []),

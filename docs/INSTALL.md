@@ -139,6 +139,22 @@ Uses the same Google project and sign-in as Gmail (do "Connect Gmail" first).
 Keel can then list, add, move, edit and delete events in that calendar, and add a day's plan to it; every change
 waits for your approval in Keel. It never emails guests and can't change calendar settings or sharing.
 
+### Keel's browser
+
+For sites that need clicking, forms or downloads (application portals, for example). It is a separate Chromium with
+a fresh private profile each time Keel starts, never your own browser.
+
+1. `pip install playwright` and `python -m playwright install chromium` (about 150 MB, once).
+2. In `.env`: `BROWSER_ENABLED=true`. Optionally `BROWSER_HEADLESS=false` to see the window: then you can watch, log in
+   to a site yourself in that window, solve a CAPTCHA, or press the final button yourself.
+3. Restart Keel. The Services tab's "Check connection" starts the browser on a blank page (no site is contacted).
+
+What it does on its own: open a page you named (or a search found), read it, click links, tabs and menus. What waits
+for your approval: opening any other address, typing into a field, attaching one of your documents, and submitting.
+Each approval shows the exact site, values or file, and it is checked again when you approve. What it never does:
+type passwords, payment details, one-time codes or ID numbers (CNIC, passport), solve CAPTCHAs, or reach addresses on
+your own network.
+
 ### Use two models (Groq and Gemini)
 
 Groq's free tier allows about 200,000 tokens a day, which a long day of chatting can use up. A free Google AI Studio

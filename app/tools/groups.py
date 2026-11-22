@@ -32,18 +32,19 @@ LOAD_TOOLS = "load_tools"
 GROUP_INFO: dict[str, str] = {
     "tasks": "tasks: create, list, update, complete, delete (always loaded)",
     "plan": "plan: today's briefing, build/show today's plan, skip plan items, log time worked",
-    "accountability": "accountability: what slipped or was avoided, weekly review, history of a task",
+    "accountability": "accountability: what slipped or was avoided, weekly review, task history",
     "commitments": "commitments: promises with deadlines, check-ins",
     "goals": "goals: goals, milestones, projects (reports, blockers, decisions)",
-    "memory": "memory: save, search, review, edit or forget facts, preferences and decisions about the user",
+    "memory": "memory: save, review or forget facts and preferences about the user",
     "reminders": "reminders: schedule, list or cancel a reminder; important dates (exams, birthdays)",
-    "calendar": "calendar: read, add, move, delete events",
+    "calendar": "calendar: events, free time",
     "web": "web: search the web, read a web page",
     "github": "github: repos, READMEs, issues, PRs, commits",
     "notes": "notes: search, read, compare documents; deadlines, action items",
     "applications": "applications: jobs, scholarships, SOPs",
     "workflows": "workflows: when X happens, do Y",
     "email": "email: Gmail read, draft, send",
+    "browser": "browser: sites, forms, downloads",
 }
 
 TOOL_GROUP: dict[str, str] = {
@@ -56,6 +57,7 @@ TOOL_GROUP: dict[str, str] = {
     **dict.fromkeys(["create_reminder", "list_reminders", "cancel_reminder", "add_important_date", "list_important_dates", "delete_important_date"], "reminders"),
     **dict.fromkeys(["add_opportunity", "list_opportunities", "update_opportunity", "delete_opportunity", "prepare_application", "save_draft", "list_drafts"], "applications"),
     **dict.fromkeys(["create_workflow", "list_workflows", "run_workflow", "set_workflow_enabled", "workflow_history"], "workflows"),
+    **dict.fromkeys(["browser_open", "browser_read", "browser_click", "browser_fill", "browser_attach", "browser_submit", "browser_download", "browser_close"], "browser"),
     **dict.fromkeys(["gmail_search", "gmail_read", "gmail_triage", "gmail_extract", "gmail_draft", "gmail_send", "gmail_save_attachment"], "email"),
     **dict.fromkeys(["read_calendar", "gcal_list_events", "gcal_create_event", "gcal_update_event", "gcal_delete_event", "gcal_add_plan"], "calendar"),
     **dict.fromkeys(["web_fetch", "web_search"], "web"),
@@ -104,6 +106,10 @@ KEYWORDS: dict[str, re.Pattern[str]] = {
     "email": _rx(r"\be-?mails?\b", r"\bmail\b", r"\bgmail\b", r"\binbox\b", r"\bmessages? from\b", r"\bwrote to me\b", r"\breply\b", r"\brepl(y|ied) to\b",
                  r"\bdrafts?\b", r"\bsend (him|her|them|it|a|an|the)\b", r"\bforward\b", r"\bunread\b", r"\battachments?\b", r"\bfollow[- ]?ups?\b",
                  r"\b[\w.+-]+@[\w-]+\.[\w.]+\b"),
+    "browser": _rx(r"\bbrowser\b", r"\bwebsites?\b", r"\bportal\b", r"\bfill (in|out)\b", r"\b(online|web|application|registration) forms?\b",
+                   r"\b(the|this|open) form\b", r"\bdownload\b", r"\bclick\b", r"\bopen (the|this|that) (site|page|link|portal)\b", r"\bon (the|their) (site|website)\b",
+                   r"\b(page|form|tab|site) you (have|'ve got) open\b", r"\bopen (page|form|tab)\b", r"\bsubmit (the|my|this) (application|form)\b",
+                   r"\be\d{1,3}\b"),  # e12: an element on the page Keel has open
     "calendar": _rx(r"\bcalendar\b", r"\bmeetings?\b", r"\bappointments?\b", r"\bfree time\b", r"\bbusy\b", r"\bavailabilit\w*", r"\bam i free\b", r"\bany(thing| plans)? on (mon|tues|wednes|thurs|fri|satur|sun)day\b", r"\bnext (week|few days)\b", r"\bwhat'?s on (my )?(day|week|schedule)\b", r"\b(re)?schedul\w*", r"\bevents?\b", r"\bbook (a|an|the|time)\b", r"\bmove (the|my) \w+ (to|from)\b",
                     r"\bput (it|this|that|my plan) (in|on|into) (my |the )?calendar\b"),
     "web": _rx(r"\bsearch\b", r"\bgoogle\b", r"\blook(ing)? up\b", r"\bonline\b", r"\bweb\b", r"\binternet\b", r"\blatest\b", r"\bnews\b", r"\bpapers?\b",

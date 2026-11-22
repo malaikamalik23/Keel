@@ -21,6 +21,7 @@ const FIXTURES: Record<string, unknown> = {
   "/api/briefing": { date: "2026-11-18", weekday: "Wednesday", next_action: { id: 1, title: "Write FYP intro", priority: "high" }, plan: { exists: true, items_left: 1, items_total: 2 }, due_today: [], overdue: [], coming_up: [{ id: 4, title: "GRE set 4", priority: "medium", due: "2026-11-20" }], commitments_due_soon: [], follow_ups_due: [{ title: "Revise chapter 2", waiting_on: "Dr. Khan", since: "2026-11-18" }], waiting_count: 1, blocked_count: 0, slipping: [], calendar: [{ title: "Supervisor meeting", time: "10:00-10:30", minutes: 30 }], text: "", important_dates: [{ title: "GRE exam", date: "2026-11-21", days_left: 3 }], calendar_warnings: ["Tomorrow: 1 pair(s) of calendar events overlap. You can't be in both."] },
   "/api/opportunities": [{ id: 1, kind: "internship", title: "Google STEP", organization: "Google", url: "javascript:alert(1)", location: null, deadline: "2026-12-15", status: "preparing", documents: [{ name: "CV", status: "ready" }, { name: "Recommendation letter", status: "requested", from: "Dr. Khan" }], missing: ["Recommendation letter (Dr. Khan)"], next_step: null, next_step_date: null, applied_on: null, days_left: 24, eligibility: null, notes: null, drafts: [{ id: 3, kind: "cover_letter", title: "Cover letter v1", content: "Dear team, [ADD: your CGPA]" }] }],
   "/api/documents": [{ id: 1, path: "uploads/cfp.docx", size: 12000, chunk_count: 4, indexed_at: "2026-11-21T10:00:00", pages: 3, pages_estimated: true, hidden_skipped: 0 }, { id: 2, path: "papers/fl.pdf", size: 400000, chunk_count: 30, indexed_at: "2026-11-21T10:00:00", pages: 12, pages_estimated: false, hidden_skipped: 0 }],
+  "/api/document-links": { "uploads/cfp.docx": [{ id: 4, to: "opportunity", title: "DAAD EPOS", note: "call for papers" }, { id: "p2", to: "project", title: "FYP", note: null }] },
   "/api/documents/upload": { id: 3, path: "uploads/brief.docx", size: 9000, chunk_count: 2, indexed_at: "2026-11-21T10:00:00", pages: 1, pages_estimated: false, hidden_skipped: 1 },
   "/api/workflows": [{ id: 1, name: "Interview: prepare", enabled: true, trigger: { type: "event", event: "opportunity_status", status: "interview" }, steps: [{ tool: "create_task", args: {} }, { tool: "delete_task", args: { task_id: 1 }, approve: true }], description: "When an application moves to 'interview': 1. create_task {} 2. delete_task {\"task_id\": 1} [waits for your approval]", runs: [{ id: 9, workflow_id: 1, status: "waiting_approval", step: 2, event: {}, attempts: 0, error: null, started: "2026-11-21T10:00", finished: null, log: [{ step: 0, state: "started", at: "t" }, { step: 0, state: "ok", at: "t" }] }, { id: 8, workflow_id: 1, status: "failed", step: 1, event: {}, attempts: 3, error: "No task with id 5.", started: "2026-11-20T10:00", finished: "2026-11-20T10:40", log: [] }] }],
   "/api/workflow-templates": [{ key: "weekly-review", name: "Sunday evening: week in numbers", trigger: { type: "schedule" }, steps: [{ notify: "hi" }], description: "When every sun at 20:00: 1. tell you: hi" }, { key: "interview-prep", name: "Interview: prepare", trigger: {}, steps: [], description: "x" }],
@@ -189,6 +190,18 @@ describe("dashboard smoke tests", () => {
     await user.click(screen.getByRole("button", { name: "What's ready?" }));
     expect(await screen.findByText(/Waiting for Dr\. Khan\./)).toBeTruthy();
     expect(calls.some((c) => c.path === "/api/opportunities/1/readiness")).toBe(true);
+    expect(errors).toEqual([]);
+  });
+
+  it("Documents tab shows what each document is linked to and unlinks one", async () => {
+    const calls = mockFetch();
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: /^Documents/ }));
+    expect(await screen.findByText(/DAAD EPOS/)).toBeTruthy();
+    expect(screen.getByText("opportunity")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Unlink uploads/cfp.docx from FYP" }));
+    await waitFor(() => expect(calls).toContainEqual({ method: "DELETE", path: "/api/document-links/p2" }));
     expect(errors).toEqual([]);
   });
 

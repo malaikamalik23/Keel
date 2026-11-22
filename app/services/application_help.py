@@ -182,15 +182,20 @@ def doc_kind(name: str) -> str | None:
     return next((k for k, (aliases, _) in DOC_KINDS.items() if any(a in low for a in aliases)), None)
 
 
-def readiness(o: Opportunity, documents: list[Document], drafts: list[ApplicationDraft]) -> dict:
+def readiness(o: Opportunity, documents: list[Document], drafts: list[ApplicationDraft], linked: list[dict] | None = None) -> dict:
+    """`linked`: documents the user connected to this application (link_document); those count first."""
+    linked = [x for x in (linked or []) if not x.get("missing")]
     items = []
     for d in o.documents or []:
         kind = doc_kind(d["name"])
         aliases, draft_kind = DOC_KINDS.get(kind, ((), None)) if kind else ((), None)
-        files = [doc.path for doc in documents if kind and any(a in doc.path.lower().replace("_", " ").replace("-", " ") for a in aliases)][:5]
+        mine_linked = [x["path"] for x in linked if kind and (any(a in x["path"].lower().replace("_", " ").replace("-", " ") for a in aliases)
+                                                    or any(a in (x.get("note") or "").lower() for a in aliases))]
+        files = list(dict.fromkeys(mine_linked + [doc.path for doc in documents if kind and any(a in doc.path.lower().replace("_", " ").replace("-", " ") for a in aliases)]))[:5]
         mine = [{"id": x.id, "title": x.title} for x in drafts if draft_kind and x.kind == draft_kind and x.opportunity_id in (o.id, None)][:5]
         status = d.get("status", "needed")
-        item = {"name": d["name"], "status": status, "files_in_notes": files, "drafts": mine}
+        item = {"name": d["name"], "status": status, "files_in_notes": files, "drafts": mine,
+                **({"linked": mine_linked} if mine_linked else {})}
         if d.get("from"):
             item["from"] = d["from"]
         if status in ("ready", "received"):

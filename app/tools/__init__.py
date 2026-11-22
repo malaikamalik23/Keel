@@ -19,6 +19,7 @@ from app.tools import (
     workflows,
 )
 from app.tools import browser as browser_tools
+from app.tools import files as file_tools
 from app.tools import gcal as gcal_tools
 from app.tools import github as github_tools
 from app.tools import gmail as gmail_tools
@@ -51,6 +52,8 @@ def build_default_registry(
         github_tools.register(registry, github, github_user)
     if notes_enabled:
         notes.register(registry)
+        if notes_dir:
+            file_tools.register(registry, notes_dir, gmail=gmail)
     if gmail is not None:
         gmail_tools.register(registry, gmail, send_enabled=gmail_send, notes_dir=notes_dir if notes_enabled else None,
                              max_sends_per_day=gmail_max_sends)

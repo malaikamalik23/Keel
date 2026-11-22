@@ -133,6 +133,10 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
    the user eligible. Discovery results from the web and email are untrusted like any other external text. The form
    plan proposes values only from saved facts and drafts, leaves password, payment and ID fields to the user, and
    fills nothing itself: browser_fill does that, after the user approves.
+   File management stays inside NOTES_DIR (paths resolved, hidden folders and symlink escapes refused) and never
+   overwrites. Moving a file is high impact (other apps may point at it). Editing is limited to text notes, must match
+   exactly one passage, keeps the old version in `.keel-backups/` (not indexed), and waits for approval once untrusted
+   text has been read; workflows can't move or edit files. Links are stored by path and survive re-indexing.
    Model providers see what Keel sends them. With `LLM_FALLBACK=gemini` on Google AI Studio's free tier, Google states
    that content is used to improve its products; the Services tab shows that note whenever Gemini is configured, and
    the install guide recommends the paid tier or a local fallback for sensitive data. The fallback only switches on a

@@ -40,7 +40,7 @@ GROUP_INFO: dict[str, str] = {
     "calendar": "calendar: events, free time",
     "web": "web: search the web, read a web page",
     "github": "github: repos, READMEs, issues, PRs, commits",
-    "notes": "notes: search, read, compare documents; deadlines, action items",
+    "notes": "notes: search, read, edit, link and organize documents",
     "applications": "applications: jobs, scholarships, SOPs",
     "workflows": "workflows: when X happens, do Y",
     "email": "email: Gmail read, draft, send",
@@ -63,7 +63,8 @@ TOOL_GROUP: dict[str, str] = {
     **dict.fromkeys(["read_calendar", "gcal_list_events", "gcal_create_event", "gcal_update_event", "gcal_delete_event", "gcal_add_plan"], "calendar"),
     **dict.fromkeys(["web_fetch", "web_search"], "web"),
     **dict.fromkeys(["github_list_repos", "github_get_readme", "github_list_issues", "github_list_pulls", "github_recent_commits"], "github"),
-    **dict.fromkeys(["notes_search", "read_note", "note_outline", "extract_from_note", "compare_notes"], "notes"),
+    **dict.fromkeys(["notes_search", "read_note", "note_outline", "extract_from_note", "compare_notes",
+                     "link_document", "unlink_document", "document_links", "move_document", "create_note", "edit_note"], "notes"),
 }
 
 

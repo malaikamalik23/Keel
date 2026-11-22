@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Integer, MetaData, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Index, Integer, MetaData, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -153,6 +153,21 @@ class ProjectEntry(Base):
     rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     resolution: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class DocumentLink(Base):
+    """A file in NOTES_DIR connected to an application, task or email. Keyed by path (see migration 0018)."""
+
+    __tablename__ = "document_links"
+    __table_args__ = (UniqueConstraint("path", "target_type", "target_id"), Index("ix_document_links_target", "target_type", "target_id"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    path: Mapped[str] = mapped_column(String(500), index=True)
+    target_type: Mapped[str] = mapped_column(String(16))  # opportunity|task|email
+    target_id: Mapped[str] = mapped_column(String(120))  # an id, or a Gmail message id
+    title: Mapped[str | None] = mapped_column(String(200), nullable=True)  # what it was linked to, as seen then
+    note: Mapped[str | None] = mapped_column(String(300), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 

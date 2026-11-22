@@ -51,7 +51,10 @@ def register(registry: ToolRegistry, *, search=None, gmail=None, browser=None) -
 
     def application_readiness(ctx: ToolContext, p: OpportunityRef) -> dict:
         o = _find(ctx, p)
-        return readiness(o, list(ctx.db.scalars(select(Document))), list(ctx.db.scalars(select(ApplicationDraft))))
+        from app.tools.files import documents_linked_to
+
+        return readiness(o, list(ctx.db.scalars(select(Document))), list(ctx.db.scalars(select(ApplicationDraft))),
+                         documents_linked_to(ctx.db, "opportunity", str(o.id)))
 
     registry.register(Tool(name="check_eligibility", permission=Permission.READ, input_model=OpportunityRef, handler=check_eligibility,
                            description="Check a tracked posting's requirements (CGPA, IELTS/TOEFL, degree, age, nationality, "

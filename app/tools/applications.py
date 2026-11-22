@@ -200,6 +200,12 @@ class PrepareApplicationInput(BaseModel):
 PROFILE_LIMIT = 30
 
 
+def _linked(ctx: ToolContext, o: Opportunity) -> list[dict]:
+    from app.tools.files import documents_linked_to
+
+    return documents_linked_to(ctx.db, "opportunity", str(o.id))
+
+
 def prepare_application(ctx: ToolContext, p: PrepareApplicationInput) -> dict:
     """Everything needed to draft for this opportunity, and nothing invented: the posting, the checklist, the user's
     own profile and background, and the drafts already written."""
@@ -221,6 +227,7 @@ def prepare_application(ctx: ToolContext, p: PrepareApplicationInput) -> dict:
         **({} if o else {"note": "This posting isn't tracked: draft from the profile, ask for the posting's requirements, and offer add_opportunity."}),
         "user_profile": profile,
         "existing_drafts": drafts,
+        **({"linked_documents": _linked(ctx, o)} if o else {}),
         "rules": (
             "Use only facts in user_profile or that the user has told you in this conversation. Never invent grades, "
             "degrees, jobs, skills, awards, dates or numbers. Where a needed fact is missing, write [ADD: what is needed] "

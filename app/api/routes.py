@@ -455,7 +455,10 @@ def opportunity_readiness(opportunity_id: int, db: Session = Depends(get_db)):
     o = db.get(Opportunity, opportunity_id)
     if o is None:
         raise NotFoundError(f"No opportunity with id {opportunity_id}.")
-    return readiness(o, list(db.scalars(select(Document))), list(db.scalars(select(ApplicationDraft))))
+    from app.tools.files import documents_linked_to
+
+    return readiness(o, list(db.scalars(select(Document))), list(db.scalars(select(ApplicationDraft))),
+                     documents_linked_to(db, "opportunity", str(o.id)))
 
 
 @router.delete("/opportunities/{opportunity_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -463,6 +466,33 @@ def delete_opportunity(opportunity_id: int, db: Session = Depends(get_db), c: Co
     if db.get(Opportunity, opportunity_id) is None:
         raise NotFoundError(f"No opportunity with id {opportunity_id}.")
     _run_user_tool(c, db, "delete_opportunity", {"opportunity_id": opportunity_id})
+
+
+@router.get("/document-links")
+def all_document_links(db: Session = Depends(get_db)):
+    """Every document's connections, by path: applications, tasks, emails and projects."""
+    from app.db.models import DocumentLink, Project, ProjectLink
+
+    out: dict[str, list[dict]] = {}
+    for link in db.scalars(select(DocumentLink).order_by(DocumentLink.id)):
+        out.setdefault(link.path, []).append({"id": link.id, "to": link.target_type, "title": link.title, "note": link.note})
+    for link in db.scalars(select(ProjectLink).where(ProjectLink.kind == "note").order_by(ProjectLink.id)):
+        proj = db.get(Project, link.project_id)
+        out.setdefault(link.target, []).append({"id": f"p{link.id}", "to": "project", "title": proj.name if proj else None, "note": link.title})
+    return out
+
+
+@router.delete("/document-links/{link_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_document_link(link_id: str, db: Session = Depends(get_db)):
+    """Remove one connection (the file itself is untouched). Project links have ids like 'p3'."""
+    from app.db.models import DocumentLink, ProjectLink
+
+    row = db.get(ProjectLink, int(link_id[1:])) if link_id.startswith("p") and link_id[1:].isdigit() else \
+        db.get(DocumentLink, int(link_id)) if link_id.isdigit() else None
+    if row is None:
+        raise NotFoundError(f"No link {link_id}.")
+    db.delete(row)
+    db.commit()
 
 
 @router.delete("/drafts/{draft_id}", status_code=status.HTTP_204_NO_CONTENT)

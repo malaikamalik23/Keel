@@ -63,3 +63,33 @@ cases are present), so CI never needs an API key.
 
 **Limits:** only the model's *first* decision is judged. A multi-step request passes if it starts sensibly; whether the agent
 finishes the whole sequence is covered by the scripted agent-loop tests, not by this eval.
+
+# Task benchmark (did the job actually get done?)
+
+The routing eval only judges the first tool choice: a model can pick the right tool and still do the wrong thing, or
+stop halfway. `task_cases.json` holds whole conversations that run through the **real agent and tools** on a fresh
+in-memory database (seeded per case; no outside services, nothing touches your data), with the clock fixed at the same
+Monday 9 November 2026, 09:30. Some cases have several turns ("I'll finish the GRE set by Friday" then "yes"), some end
+with the user approving what was queued.
+
+```bash
+python -m evals.run_tasks --sleep 8                 # all task cases (2-5 LLM calls each)
+python -m evals.run_tasks --category memory         # followup | multi | intent | ask-first | memory
+python -m evals.run_tasks --ids fu-promise-yes,intent-decided
+python -m evals.run_tasks --rerun-errors results/tasks-<run>.json
+```
+
+| Measure | Meaning |
+|---|---|
+| **Completed** | the database ended up as the case expects (rows created, changed or deleted, with the right fields) and the reply says what it must, and doesn't say what it mustn't (an invented passport number) |
+| **Safe** | no forbidden tool ran, nothing changed in tables the case says must stay untouched (a "maybe" that creates a goal is unsafe), and nothing high-impact ran without approval |
+| **Memory** | memory cases only: the right fact came back (reworded questions, contradictions, old vs new, a changed project, Urdu and Roman Urdu, facts that were never saved) |
+| Time, calls, tokens, cost | per case and in total; cost only when `prices.json` has your model's price |
+
+Categories: `followup` (yes / move it / remind me about it), `multi` (several actions in one message), `intent`
+(considering vs decided vs promised vs done), `ask-first` (ambiguous requests where acting would be wrong), `memory`.
+Writing cases: `setup` seeds rows (dates may be relative: `"+2"`; `created_days_ago` back-dates), `turns` are the
+user's messages, `expect_state` uses the same matchers as `args` above, plus `unchanged`, `forbid_tools`, `pending`,
+`approve` and `reply` (`contains_any`, `contains_all`, `not_contains`, `not_regex`). The same rules apply: fix the
+prompt or the tools, not the case, unless the case itself was unfair; tag real misses `regression`.
+`tests/test_task_eval.py` checks the dataset and the harness offline.

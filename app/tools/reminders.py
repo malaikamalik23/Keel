@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, WithJsonSchema
 from sqlalchemy import select
 
-from app.db.models import Reminder, utcnow
+from app.db.models import Reminder
 from app.services.timeutil import local_to_naive_utc, naive_utc_to_local
 from app.tools.base import Permission, Tool, ToolContext, ToolError, ToolRegistry
 
@@ -30,7 +30,7 @@ class CreateReminderInput(BaseModel):
 
 def create_reminder(ctx: ToolContext, p: CreateReminderInput) -> dict:
     fire_at = local_to_naive_utc(p.remind_at, ctx.tz)
-    if fire_at <= utcnow():
+    if fire_at <= ctx.now().astimezone(UTC).replace(tzinfo=None):  # the turn's clock, like every other date the tools resolve
         raise ToolError("That time is in the past. Ask the user for a future time.")
     if (p.linked_type is None) != (p.linked_id is None):
         raise ToolError("linked_type and linked_id must be given together.")

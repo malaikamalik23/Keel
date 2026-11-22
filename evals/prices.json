@@ -1,0 +1,6 @@
+{
+ "_note": "US dollars per million tokens, used by evals/run_tasks.py for the cost column. null = unknown (no cost is shown). Free tiers cost nothing but have daily limits; put the paid-tier price here to see what a run would cost. Check your provider's pricing page: these change.",
+ "openai/gpt-oss-120b": {"input_per_million": null, "output_per_million": null},
+ "gemini/gemini-3.6-flash": {"input_per_million": null, "output_per_million": null},
+ "claude-sonnet-5": {"input_per_million": null, "output_per_million": null}
+}

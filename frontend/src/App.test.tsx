@@ -24,6 +24,12 @@ const FIXTURES: Record<string, unknown> = {
   "/api/documents/upload": { id: 3, path: "uploads/brief.docx", size: 9000, chunk_count: 2, indexed_at: "2026-11-21T10:00:00", pages: 1, pages_estimated: false, hidden_skipped: 1 },
   "/api/workflows": [{ id: 1, name: "Interview: prepare", enabled: true, trigger: { type: "event", event: "opportunity_status", status: "interview" }, steps: [{ tool: "create_task", args: {} }, { tool: "delete_task", args: { task_id: 1 }, approve: true }], description: "When an application moves to 'interview': 1. create_task {} 2. delete_task {\"task_id\": 1} [waits for your approval]", runs: [{ id: 9, workflow_id: 1, status: "waiting_approval", step: 2, event: {}, attempts: 0, error: null, started: "2026-11-21T10:00", finished: null, log: [{ step: 0, state: "started", at: "t" }, { step: 0, state: "ok", at: "t" }] }, { id: 8, workflow_id: 1, status: "failed", step: 1, event: {}, attempts: 3, error: "No task with id 5.", started: "2026-11-20T10:00", finished: "2026-11-20T10:40", log: [] }] }],
   "/api/workflow-templates": [{ key: "weekly-review", name: "Sunday evening: week in numbers", trigger: { type: "schedule" }, steps: [{ notify: "hi" }], description: "When every sun at 20:00: 1. tell you: hi" }, { key: "interview-prep", name: "Interview: prepare", trigger: {}, steps: [], description: "x" }],
+  "/api/opportunities/1/eligibility": { verdict: "Nothing checked fails, but some can't be confirmed yet.", counts: { met: 1, not_met: 0, unknown: 1, check: 0 },
+    checks: [{ requirement: "Minimum CGPA 3.0 out of 4.0.", kind: "cgpa", needs: "CGPA 3/4", you: "3.4", status: "met", why: "" },
+             { requirement: "IELTS 6.5 overall.", kind: "ielts", needs: "IELTS 6.5", you: null, status: "unknown", why: "No IELTS score saved." }],
+    ask_user: ["Save your ielts (save_memory with topic 'ielts')"] },
+  "/api/opportunities/1/readiness": { documents: [{ name: "CV", status: "ready", files_in_notes: ["cv/Malaika_CV.pdf"], drafts: [], next: "Done." },
+    { name: "Recommendation letter", status: "requested", from: "Dr. Khan", files_in_notes: [], drafts: [], next: "Waiting for Dr. Khan." }], still_needed: ["Recommendation letter"], ready: false },
   "/api/calendar": { start: "2026-11-23", end: "2026-11-29", today: "2026-11-24", calendar: "ok", calendar_error: null, events_truncated: false, workday: ["09:00", "21:00"],
     overdue: [{ id: 2, title: "Old form", due: "2026-11-20" }],
     days: ["2026-11-23", "2026-11-24", "2026-11-25", "2026-11-26", "2026-11-27", "2026-11-28", "2026-11-29"].map((date, i) => ({
@@ -168,6 +174,21 @@ describe("dashboard smoke tests", () => {
     expect(screen.getByRole("button", { name: "Added" })).toBeTruthy();  // the interview template is already in use
     await user.click(screen.getByRole("button", { name: "Add" }));
     await waitFor(() => expect(calls).toContainEqual({ method: "POST", path: "/api/workflows" }));
+    expect(errors).toEqual([]);
+  });
+
+  it("Applications tab checks eligibility and readiness on request", async () => {
+    const calls = mockFetch();
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: /^Applications/ }));
+    await user.click(await screen.findByRole("button", { name: "Check eligibility" }));
+    expect(await screen.findByText(/Nothing checked fails/)).toBeTruthy();
+    expect(screen.getByText("unknown")).toBeTruthy();
+    expect(screen.getByText(/tell Keel: Save your ielts\./)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "What's ready?" }));
+    expect(await screen.findByText(/Waiting for Dr\. Khan\./)).toBeTruthy();
+    expect(calls.some((c) => c.path === "/api/opportunities/1/readiness")).toBe(true);
     expect(errors).toEqual([]);
   });
 

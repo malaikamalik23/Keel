@@ -54,11 +54,15 @@ TZ = ZoneInfo("Asia/Karachi")
 
 @pytest.fixture(scope="module")
 def session():
+    from app.integrations.browser import BrowserError
+
     s = BrowserSession(fixtures=FIXTURES)
     try:
         s.open(f"{SITE}/")
-    except Exception as exc:  # noqa: BLE001
-        pytest.skip(f"Chromium is not available: {str(exc)[:80]}")
+    except BrowserError as exc:
+        if "isn't installed" not in str(exc):
+            raise  # a real failure (e.g. a slow start) must fail the run, not hide as a skip
+        pytest.skip(str(exc))
     yield s
     s.close()
 

@@ -2,6 +2,7 @@ from collections.abc import Callable
 
 from app.services.notifications import parse_hhmm
 from app.tools import (
+    application_help,
     applications,
     calendar,
     commitments,
@@ -53,6 +54,7 @@ def build_default_registry(
     if gmail is not None:
         gmail_tools.register(registry, gmail, send_enabled=gmail_send, notes_dir=notes_dir if notes_enabled else None,
                              max_sends_per_day=gmail_max_sends)
+    application_help.register(registry, search=search, gmail=gmail, browser=browser)
     if browser is not None:
         browser_tools.register(registry, browser, notes_dir=notes_dir if notes_enabled else None)
     if google_calendar is not None:

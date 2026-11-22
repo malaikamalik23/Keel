@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api } from "../api";
 import { useAction, useLoad } from "../hooks";
-import type { Opportunity } from "../types";
+import type { Eligibility, Opportunity, Readiness } from "../types";
 import { Badge, Card, Empty, ErrorNote, Loading, fmtDate } from "../ui";
 
 const STATUSES = ["interested", "preparing", "applied", "interview", "offer", "accepted", "rejected", "withdrawn"];
@@ -11,6 +11,62 @@ const NEXT_DOC_STATUS: Record<string, string> = { needed: "drafting", drafting: 
 function safeLink(url: string | null): string | null {
   // Only plain http(s) links become clickable; anything else is shown as text.
   return url && /^https?:\/\//i.test(url) ? url : null;
+}
+
+const CHECK: Record<string, [string, string]> = { met: ["met", "ok"], not_met: ["not met", "bad"], unknown: ["unknown", "warn"], check: ["check yourself", ""] };
+
+function Insight({ id }: { id: number }) {
+  const [view, setView] = useState<"eligibility" | "readiness" | null>(null);
+  const [elig, setElig] = useState<Eligibility | null>(null);
+  const [ready, setReady] = useState<Readiness | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const show = async (which: "eligibility" | "readiness") => {
+    if (view === which) { setView(null); return; }
+    setError(null);
+    try {
+      if (which === "eligibility") setElig(await api.get<Eligibility>(`/api/opportunities/${id}/eligibility`));
+      else setReady(await api.get<Readiness>(`/api/opportunities/${id}/readiness`));
+      setView(which);
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+  };
+  return (
+    <div className="insight">
+      <div className="toolbar">
+        <button className="ghost" aria-pressed={view === "eligibility"} onClick={() => void show("eligibility")}>Check eligibility</button>{" "}
+        <button className="ghost" aria-pressed={view === "readiness"} onClick={() => void show("readiness")}>What's ready?</button>
+      </div>
+      <ErrorNote error={error} />
+      {view === "eligibility" && elig && (
+        <div>
+          <p className="small"><strong>{elig.verdict}</strong>{elig.deadline?.passed && <> · <span className="error">the deadline has passed</span></>}</p>
+          <ul className="list small">
+            {elig.checks.map((c, i) => (
+              <li key={i} style={{ display: "block" }}>
+                <Badge tone={CHECK[c.status][1]}>{CHECK[c.status][0]}</Badge> {c.requirement}
+                {c.you && <span className="muted"> · you: {c.you}</span>}{c.why && <span className="muted"> · {c.why}</span>}
+              </li>
+            ))}
+          </ul>
+          {elig.ask_user && <p className="small muted">To check the rest, tell Keel: {elig.ask_user.map((a) => a.replace(/ \(save_memory.*\)$/, "")).join("; ")}.</p>}
+        </div>
+      )}
+      {view === "readiness" && ready && (
+        <div>
+          {ready.note && <p className="small muted">{ready.note}</p>}
+          <ul className="list small">
+            {ready.documents.map((d) => (
+              <li key={d.name} style={{ display: "block" }}>
+                <Badge tone={["ready", "received"].includes(d.status) ? "ok" : ""}>{d.status}</Badge> <strong>{d.name}</strong>{d.from ? ` (${d.from})` : ""}: {d.next}
+                {d.files_in_notes.length > 0 && <span className="muted"> · files: {d.files_in_notes.join(", ")}</span>}
+                {d.drafts.length > 0 && <span className="muted"> · drafts: {d.drafts.map((x) => x.title).join(", ")}</span>}
+              </li>
+            ))}
+          </ul>
+          {ready.ready && <p className="small ok-text">Every document is ready. Keel prepares; you submit.</p>}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function OpportunityCard({ o, onChange }: { o: Opportunity; onChange: () => Promise<void> }) {
@@ -62,6 +118,7 @@ function OpportunityCard({ o, onChange }: { o: Opportunity; onChange: () => Prom
           </ul>
         </>
       )}
+      <Insight id={o.id} />
       <ErrorNote error={error} />
     </Card>
   );

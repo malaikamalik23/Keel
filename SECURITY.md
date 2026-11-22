@@ -128,6 +128,11 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
    and ID-number fields are never filled, CAPTCHAs are never solved, and workflows can't use the browser. A real-
    Chromium red-team test has a compromised model follow an attacker's page: nothing is posted, typed, attached or
    fetched.
+   Application help only reads. Eligibility is computed from the user's saved profile against the stated requirements
+   and reports unknowns as unknown (a requirement it can't parse is "check yourself"), so a model can't simply declare
+   the user eligible. Discovery results from the web and email are untrusted like any other external text. The form
+   plan proposes values only from saved facts and drafts, leaves password, payment and ID fields to the user, and
+   fills nothing itself: browser_fill does that, after the user approves.
    Model providers see what Keel sends them. With `LLM_FALLBACK=gemini` on Google AI Studio's free tier, Google states
    that content is used to improve its products; the Services tab shows that note whenever Gemini is configured, and
    the install guide recommends the paid tier or a local fallback for sensitive data. The fallback only switches on a

@@ -12,6 +12,10 @@ export interface ProjectReport {
   links: { id: number; kind: string; target: string; title: string | null }[]; days_to_deadline?: number;
 }
 export interface DocumentRow { id: number; path: string; size: number; chunk_count: number; indexed_at: string; pages: number | null; pages_estimated: boolean; hidden_skipped: number; }
+export interface EligibilityCheck { requirement: string; kind: string; needs: string; you: string | null; status: "met" | "not_met" | "unknown" | "check"; why: string; }
+export interface Eligibility { verdict: string; counts: Record<string, number>; checks: EligibilityCheck[]; deadline?: { date: string; days_left: number; passed?: boolean }; ask_user?: string[]; }
+export interface ReadinessItem { name: string; status: string; from?: string; files_in_notes: string[]; drafts: { id: number; title: string }[]; next: string; }
+export interface Readiness { documents: ReadinessItem[]; still_needed: string[]; ready: boolean; note?: string; }
 export interface CalendarItem {
   kind: "event" | "block" | "task" | "promise" | "application" | "project" | "reminder" | "date";
   title: string; id?: number; task_id?: number | null; status?: string; priority?: string; type?: string; category?: string;

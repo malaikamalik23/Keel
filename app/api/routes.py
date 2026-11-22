@@ -438,6 +438,26 @@ def update_opportunity(opportunity_id: int, body: dict, db: Session = Depends(ge
     return _run_user_tool(c, db, "update_opportunity", {**body, "opportunity_id": opportunity_id})
 
 
+@router.get("/opportunities/{opportunity_id}/eligibility")
+def opportunity_eligibility(opportunity_id: int, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    from app.services.application_help import eligibility_report
+
+    o = db.get(Opportunity, opportunity_id)
+    if o is None:
+        raise NotFoundError(f"No opportunity with id {opportunity_id}.")
+    return eligibility_report(o, list(db.scalars(select(Memory))), datetime.now(ZoneInfo(c.settings.agent_timezone)).date())
+
+
+@router.get("/opportunities/{opportunity_id}/readiness")
+def opportunity_readiness(opportunity_id: int, db: Session = Depends(get_db)):
+    from app.services.application_help import readiness
+
+    o = db.get(Opportunity, opportunity_id)
+    if o is None:
+        raise NotFoundError(f"No opportunity with id {opportunity_id}.")
+    return readiness(o, list(db.scalars(select(Document))), list(db.scalars(select(ApplicationDraft))))
+
+
 @router.delete("/opportunities/{opportunity_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_opportunity(opportunity_id: int, db: Session = Depends(get_db), c: Container = Depends(get_container)):
     if db.get(Opportunity, opportunity_id) is None:

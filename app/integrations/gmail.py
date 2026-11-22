@@ -190,10 +190,14 @@ class GmailClient:
         return self.auth.connected
 
     def _call(self, method: str, path: str, **kw) -> dict:
-        try:
-            resp = self._http.request(method, API + path, headers={"Authorization": f"Bearer {self.auth.token()}"}, **kw)
-        except httpx.HTTPError as exc:
-            raise GmailError(f"Gmail request failed ({type(exc).__name__}).") from None
+        for attempt in (1, 2):
+            try:
+                resp = self._http.request(method, API + path, headers={"Authorization": f"Bearer {self.auth.token()}"}, **kw)
+            except httpx.HTTPError as exc:
+                raise GmailError(f"Gmail request failed ({type(exc).__name__}).") from None
+            if resp.status_code != 401 or attempt == 2:
+                break
+            self.auth.forget()  # the access token was rejected early; a 401 did nothing, so refresh and send it once more
         if resp.status_code == 404:
             raise GmailError("Gmail has no message, thread or attachment with that id.")
         if resp.status_code == 401:

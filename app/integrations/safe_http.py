@@ -19,6 +19,7 @@ own network. Every hop is therefore validated *before* any request is made:
 from __future__ import annotations
 
 import ipaddress
+import re
 import socket
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -137,9 +138,25 @@ _VOID = {"br", "hr", "img", "input", "meta", "link", "area", "base", "col", "emb
 _BLOCK = {"p", "div", "section", "article", "header", "footer", "li", "ul", "ol", "tr", "table", "h1", "h2", "h3", "h4", "h5", "h6", "pre", "blockquote", "br", "hr"}
 
 
+# Inline styles that make text invisible to a person. Stylesheets and classes can't be seen without rendering the page
+# (Keel's browser does that, see app/integrations/browser.py); these cover what emails, invites and simple pages use.
+_HIDING_STYLE = re.compile(
+    r"display:none|visibility:(hidden|collapse)|opacity:0?\.?0*(;|$|!)|font-size:0*\.?[01](\.\d+)?(px|pt)?(;|$|!)|font-size:0"
+    r"|color:(transparent|rgba\([^)]*,0?\.?0*\))|(left|top|text-indent):-\d{3,}|clip:rect\(0[^)]*\)|mso-hide:all"
+)
+_ZERO_BOX = re.compile(r"(^|;)(max-)?(height|width):0*\.?0*(px|em|rem|%)?(;|$)")
+
+
+def _hides(style: str) -> bool:
+    if _HIDING_STYLE.search(style):
+        return True
+    return bool(_ZERO_BOX.search(style)) and "overflow:hidden" in style
+
+
 class _TextExtractor(HTMLParser):
-    """Visible text only. Drops scripts/styles and elements hidden from humans (hidden attr, aria-hidden,
-    display:none, visibility:hidden) -- a favourite place to stash instructions aimed at AI agents."""
+    """Visible text only. Drops scripts/styles and elements hidden from humans (hidden attr, aria-hidden, and inline
+    styles: display:none, visibility, opacity 0, zero or tiny font, transparent colour, off-page positions, clipping,
+    zero-size boxes) -- a favourite place to stash instructions aimed at AI agents."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -160,7 +177,7 @@ class _TextExtractor(HTMLParser):
                 self.parts.append("\n")
             return
         style = a.get("style", "").replace(" ", "").lower()
-        hidden = "hidden" in a or a.get("aria-hidden", "").lower() == "true" or "display:none" in style or "visibility:hidden" in style
+        hidden = "hidden" in a or a.get("aria-hidden", "").lower() == "true" or _hides(style)
         self._stack.append((tag, self._skipped() or hidden or (tag in _SKIP_TAGS and tag != "head")))
         if tag in _BLOCK and not self._skipped():
             self.parts.append("\n")

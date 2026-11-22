@@ -6,13 +6,12 @@ What is verified for real and what is only tested with mocks is in [STATUS.md](S
 
 ## Next
 
-1. **Release checklist with real services.** Turn the manual smoke tests into a repeatable checklist and script:
-   Gmail draft and an approved send, a Google Calendar change, the browser on a real portal (stopping before submit),
-   Telegram over several days, every model provider, and the failure cases (expired key, no internet, rate limit,
-   restarting while an approval or workflow waits).
-2. **More adversarial tests.** Malicious Gmail attachments and documents, instructions hidden in calendar invitations
-   and web pages read by Keel's browser, OAuth token expiry and revocation, concurrent approvals and interrupted
-   workflows.
+1. **Run the release checklist's guided steps for real** ([RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)): a Gmail
+   draft and an approved send, a Google Calendar change, the browser on a real portal (stopping before submit), and
+   Telegram over several days. The automated local and read-only parts already pass.
+2. **An independent security review.** The adversarial suites (attachments, invitations, hidden page text, OAuth
+   expiry and revocation, concurrent approvals, interrupted workflows) were written alongside the defences they test;
+   someone who didn't build Keel should try to break it.
 3. **A broader benchmark.** Beyond "right tool, right arguments": did the task actually happen, did it stay safe, did
    it retrieve the right memory, how long and how many tokens. New cases for follow-ups ("do that", "yes"), several
    actions in one message, considering vs decided vs promised vs done, and Urdu / Roman Urdu memory lookups.
@@ -37,5 +36,6 @@ What is verified for real and what is only tested with mocks is in [STATUS.md](S
 | Gmail | Your own Google Cloud project in Testing mode signs you out every 7 days unless you publish it (unverified, for your use only). |
 | Calendars | The iCal feed is read-only; changes need Google Calendar. Outlook works through its iCal feed only. |
 | Telegram | Not yet tried with a real bot. |
-| Fetcher | Not a firewall: on a server, also block private ranges with an egress firewall. |
+| Fetcher and browser | Not a firewall: the browser's address check can in principle be raced by DNS rebinding; on a server, also block private ranges with an egress firewall. |
+| Hidden text | Detected by rules (styles, attributes, rendering); a page can still hide text in ways no rule recognises. |
 | Phone | Usable in a phone browser; not installable yet and not tested on real phones. |

@@ -3,10 +3,13 @@ downloads documents, and stops before anything consequential.
 
 * It runs on one dedicated thread (Playwright objects belong to the thread that made them), with a fresh private
   profile each time Keel starts: no saved logins, cookies or history carry over.
-* Every request the page makes, including scripts and images, goes through a guard that refuses anything that isn't
-  plain http(s) on the public internet: a page can't reach Keel's own API, the router or cloud metadata.
-* A snapshot is what the model sees: the page's visible text (hidden text is left out) and its links, buttons and
-  fields, each with a short ref like "e12". The tools decide what is safe to click (app/tools/browser.py).
+* Every request the page makes, including scripts, images and WebSockets, goes through a guard that refuses anything
+  that isn't http(s)/ws(s) on the public internet: a page can't reach Keel's own API, the router or cloud metadata.
+  Service workers are blocked (their requests wouldn't pass through the guard).
+* A snapshot is what the model sees: the page's visible text and its links, buttons and fields, each with a short ref
+  like "e12". Text a person couldn't see is left out: display:none, visibility, opacity 0, zero or tiny font, transparent
+  colour, clipped, off the page, inside a zero-size box, or aria-hidden, the usual ways pages hide instructions for a
+  model. The tools decide what is safe to click (app/tools/browser.py).
 """
 from __future__ import annotations
 
@@ -30,9 +33,38 @@ CALL_TIMEOUT = 90
 # Collects visible interactive elements and tags each with data-keel-ref so a later call can find it again.
 SNAPSHOT_JS = r"""
 () => {
+  const hasText = (el) => Array.from(el.childNodes).some(n => n.nodeType === 3 && n.textContent.trim());
+  // Hidden by this element itself (its descendants inherit it). Errs towards hiding: a person can't see it either.
+  const hiddenSelf = (el) => {
+    const s = getComputedStyle(el);
+    if (s.display === 'none' || s.visibility === 'hidden' || s.visibility === 'collapse') return true;
+    if (parseFloat(s.opacity) === 0 || el.getAttribute('aria-hidden') === 'true') return true;
+    if (/inset\((4\d|50)%|circle\(0|polygon\(0px 0px\)/.test(s.clipPath || '')) return true;
+    const r = el.getBoundingClientRect();
+    const clips = /hidden|clip/.test(s.overflow + s.overflowX + s.overflowY) || s.clip.startsWith('rect');
+    if (clips && (r.width < 2 || r.height < 2)) return true;
+    if (r.right + window.scrollX <= 0 || r.bottom + window.scrollY <= 0) return true;  // pushed off the page
+    if (parseFloat(s.textIndent) < -999) return true;
+    if (hasText(el)) {
+      if (parseFloat(s.fontSize) < 4) return true;
+      if (s.color === 'transparent' || /rgba\([^)]*,\s*0\)$/.test(s.color)) return true;
+      if (r.width < 2 || r.height < 2) return true;
+    }
+    return false;
+  };
   const visible = (el) => {
-    const s = getComputedStyle(el); const r = el.getBoundingClientRect();
-    return s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0' && r.width > 0 && r.height > 0;
+    for (let e = el; e && e !== document.body && e !== document.documentElement; e = e.parentElement) if (hiddenSelf(e)) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  };
+  // The page's text as a person sees it: hide what they can't see for the moment it takes to read innerText.
+  const visibleText = () => {
+    if (!document.body) return '';
+    const hidden = Array.from(document.body.querySelectorAll('*')).filter(hiddenSelf);
+    const saved = hidden.map(e => [e, e.style.getPropertyValue('display'), e.style.getPropertyPriority('display')]);
+    hidden.forEach(e => e.style.setProperty('display', 'none', 'important'));
+    try { return document.body.innerText; }
+    finally { saved.forEach(([e, v, pr]) => v ? e.style.setProperty('display', v, pr) : e.style.removeProperty('display')); }
   };
   const labelOf = (el) => {
     if (el.labels && el.labels.length) return el.labels[0].innerText;
@@ -65,7 +97,7 @@ SNAPSHOT_JS = r"""
     });
   }
   const captcha = !!document.querySelector('iframe[src*="recaptcha"], iframe[src*="hcaptcha"], iframe[src*="turnstile"], .g-recaptcha, .h-captcha, .cf-turnstile');
-  return {title: document.title, url: location.href, text: document.body ? document.body.innerText : '', elements: out, captcha};
+  return {title: document.title, url: location.href, text: visibleText(), elements: out, captcha};
 }
 """.replace("%MAX%", str(MAX_ELEMENTS))
 
@@ -137,8 +169,10 @@ class BrowserSession:
                 self._pw.stop()
                 self._pw = None
                 raise BrowserError("Keel's browser isn't installed: run `python -m playwright install chromium`.") from exc
-            self._context = self._browser.new_context(accept_downloads=True, java_script_enabled=True)
+            # Service workers make requests the route guard never sees, so they are off.
+            self._context = self._browser.new_context(accept_downloads=True, java_script_enabled=True, service_workers="block")
             self._context.route("**/*", self._guard)
+            self._context.route_web_socket("**/*", self._ws_guard)  # WebSockets don't pass through route()
             self._page = self._context.new_page()
             self._page.set_default_timeout(30_000)
         self._last_used = time.monotonic()
@@ -165,6 +199,22 @@ class BrowserSession:
             self.blocked_requests.append(url)
             return route.abort("blockedbyclient")
         return route.continue_()
+
+    def _ws_guard(self, ws):
+        url = ws.url
+        if self.fixtures is None:
+            parts = urlsplit(url)
+            try:
+                if parts.scheme not in ("ws", "wss"):
+                    raise UnsafeURLError("scheme")
+                public_addresses(parts.hostname or "", self._resolver)
+            except UnsafeURLError:
+                pass
+            else:
+                ws.connect_to_server()
+                return
+        self.blocked_requests.append(url)  # tests: no WebSocket goes anywhere
+        ws.close()
 
     def _shutdown(self):
         for obj in (self._context, self._browser):

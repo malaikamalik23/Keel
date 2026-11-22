@@ -9,15 +9,17 @@ from __future__ import annotations
 
 import logging
 import threading
+import uuid
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.agent.loop import Agent
 from app.config import Settings
-from app.db.models import Checkin, Conversation, Reminder, utcnow
+from app.db.models import Checkin, Conversation, Reminder, UserSetting, utcnow
 from app.integrations.notifier import Notifier, TelegramNotifier
 from app.integrations.telegram_bot import TelegramInbox
 from app.scheduler.checkins import build_facts, checkins_due, fallback_text
@@ -29,6 +31,7 @@ from app.services.timeutil import local_to_naive_utc
 logger = logging.getLogger(__name__)
 CALENDAR_EVERY = timedelta(minutes=30)
 REMINDER_MAX_LATE = timedelta(hours=24)
+LEASE_KEY = "scheduler:lease"
 RESPONSE_WINDOW = timedelta(hours=6)
 
 
@@ -47,6 +50,7 @@ class Scheduler:
         self.notifications = notifications
         self.notifier = notifier
         self.tz = ZoneInfo(settings.agent_timezone)
+        self._lease_id = uuid.uuid4().hex  # which scheduler holds the lease (see _take_lease)
         self._aps = None
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -57,6 +61,9 @@ class Scheduler:
         now_local = now.astimezone(self.tz) if now and now.tzinfo else (now.replace(tzinfo=self.tz) if now else datetime.now(self.tz))
         report: dict = {"reminders_sent": 0, "checkins_sent": [], "nudges_sent": 0, "blocked": {}}
         with self.session_factory() as db:
+            if not self._take_lease(db):
+                report["skipped"] = "another_scheduler"  # two Keel processes on one database: only one sends
+                return report
             for step in (self._reminders, self._calendar, self._workflows, self._checkins, self._nudges, self._retention):
                 try:
                     step(db, now_local, report)
@@ -64,6 +71,38 @@ class Scheduler:
                     db.rollback()
                     logger.exception("Scheduler step %s failed", step.__name__)
         return report
+
+    def _take_lease(self, db: Session) -> bool:
+        """Only one scheduler may tick a database at a time, even if two Keel processes run by mistake (the server and
+        `python -m app.scheduler`, or two terminals): otherwise both would send the same reminder. The lease is a row
+        claimed with one atomic UPDATE; it is renewed every tick and lapses a few minutes after its holder stops."""
+        now = utcnow()
+        until = now + timedelta(seconds=max(180, 3 * self.settings.scheduler_tick_seconds))
+        value = {"holder": self._lease_id, "until": until.isoformat()}
+        res = db.execute(update(UserSetting).where(UserSetting.key == LEASE_KEY, or_(
+            func.json_extract(UserSetting.value, "$.holder") == self._lease_id,
+            func.json_extract(UserSetting.value, "$.until") < now.isoformat(),
+        )).values(value=value, updated_at=now).execution_options(synchronize_session=False))
+        if res.rowcount == 1:
+            db.commit()
+            return True
+        db.rollback()
+        if db.get(UserSetting, LEASE_KEY) is not None:
+            return False  # someone else holds it
+        db.add(UserSetting(key=LEASE_KEY, value=value, updated_at=now))
+        try:
+            db.commit()
+            return True
+        except IntegrityError:  # another scheduler created it at the same moment
+            db.rollback()
+            return False
+
+    def _release_lease(self) -> None:
+        with self.session_factory() as db:
+            row = db.get(UserSetting, LEASE_KEY)
+            if row is not None and isinstance(row.value, dict) and row.value.get("holder") == self._lease_id:
+                db.delete(row)
+                db.commit()
 
     def _retention(self, db: Session, now_local: datetime, report: dict) -> None:
         """Your retention rules (Services tab), at most once a day. Nothing happens until you set one."""
@@ -227,6 +266,10 @@ class Scheduler:
         if self._aps is not None:
             self._aps.shutdown(wait=False)
             self._aps = None
+        try:
+            self._release_lease()  # so a restarted Keel doesn't wait for the lease to lapse
+        except Exception:  # noqa: BLE001 - shutting down anyway
+            logger.debug("lease release failed", exc_info=True)
 
     def _safe_tick(self) -> None:
         try:

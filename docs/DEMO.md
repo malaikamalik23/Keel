@@ -94,8 +94,9 @@ Prints a per-category score and every misrouted prompt.
 
 ## First real-keys smoke test (checklist)
 
-The integrations are tested against mocks. Confirm each once with your own credentials (what has already been confirmed
-is in [STATUS.md](STATUS.md)):
+`python -m scripts.release_check` (and `--interactive` for the steps that send or change something) automates most of
+this; the full list is in [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md). By hand, confirm each once with your own
+credentials (what has already been confirmed is in [STATUS.md](STATUS.md)):
 
 - [ ] Models: one chat on each provider you use; with `LLM_FALLBACK` set, the second one answers when the first is rate-limited
 - [ ] Gmail: search, read, a draft appears in Drafts; one approved send to yourself arrives

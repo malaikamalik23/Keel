@@ -20,6 +20,7 @@ from app.services.documents import MAX_FILE_BYTES
 
 UPLOAD_DIR = "uploads"
 ALLOWED = TEXT_EXT | {PDF_EXT, DOCX_EXT}
+WINDOWS_DEVICES = re.compile(r"^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³]|conin\$|conout\$)(\.|$)", re.IGNORECASE)
 
 
 class UploadRejected(Exception):
@@ -37,6 +38,8 @@ def clean_name(name: str) -> str:
     stem, dot, ext = name.rpartition(".")
     if not dot or f".{ext.lower()}" not in ALLOWED:
         raise UploadRejected(f"Only {', '.join(sorted(ALLOWED))} files can be uploaded.")
+    if WINDOWS_DEVICES.match(stem):  # CON.md, nul.txt, COM1.pdf: device names on Windows, whatever the extension
+        stem = "_" + stem
     return f"{stem[:100]}.{ext.lower()}"
 
 

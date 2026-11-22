@@ -24,7 +24,7 @@ from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, field_validator, model_validator
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -38,6 +38,8 @@ BACKOFF = (timedelta(minutes=1), timedelta(minutes=5), timedelta(minutes=30))
 WAIT_FOR_QUIET = timedelta(minutes=15)
 SCHEDULE_GRACE = timedelta(hours=3)
 ACTIVE = ("running", "retrying")
+CLAIM = timedelta(minutes=5)  # how long a step may run before another process may treat it as interrupted
+FINISHED = ("done", "failed", "cancelled")
 WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 EVENTS = ("task_completed", "opportunity_added", "opportunity_status", "blocker_logged")
 # Tools a workflow may never use: the workflow tools themselves (no workflows that build or start workflows).
@@ -284,20 +286,28 @@ class Engine:
                     return done + self._pause(db, run, i, now_local, why="was interrupted (the app stopped mid-step); check it ran or not, then approve to run it")
             if step.get("approve") and run.approved_step != i:
                 return done + self._pause(db, run, i, now_local, why="needs your approval")
-            self._log(db, run, {"step": i, "state": "started"})
-            ok, result, error = self._run_step(db, run, i, step, scope, now_local)
-            if ok is None:  # a message held back by quiet hours or the daily budget: try again later, not a failure
-                run.log = run.log[:-1]
-                run.next_attempt_at = local_to_naive_utc(now_local + WAIT_FOR_QUIET, self.tz)
-                db.commit()
+            if not self._claim_step(db, run, i):  # another process (or thread) is running this step right now
                 return done
-            if not ok:
-                return done + self._fail_step(db, run, i, error or "failed", now_local)
-            self._log(db, run, {"step": i, "state": "ok", "result": result})
-            scope["steps"].append(result)
-            run.step_index, run.attempts, run.approved_step, run.next_attempt_at, run.error = i + 1, 0, None, None, None
-            db.commit()
-            done += 1
+            try:
+                self._log(db, run, {"step": i, "state": "started"})
+                ok, result, error = self._run_step(db, run, i, step, scope, now_local)
+                if ok is None:  # a message held back by quiet hours or the daily budget: try again later, not a failure
+                    run.log = run.log[:-1]
+                    run.next_attempt_at = local_to_naive_utc(now_local + WAIT_FOR_QUIET, self.tz)
+                    db.commit()
+                    return done
+                if not ok:
+                    return done + self._fail_step(db, run, i, error or "failed", now_local)
+                self._log(db, run, {"step": i, "state": "ok", "result": result})
+                scope["steps"].append(result)
+                run.step_index, run.attempts, run.approved_step, run.next_attempt_at, run.error = i + 1, 0, None, None, None
+                run.claimed_until = None
+                db.commit()
+                done += 1
+            finally:
+                if run.claimed_until is not None:
+                    run.claimed_until = None
+                    db.commit()
         if run.status in ACTIVE and run.step_index >= len(steps):
             run.status, run.finished_at = "done", utcnow()
             db.commit()
@@ -348,27 +358,50 @@ class Engine:
         db.commit()
         return 0
 
+    def _claim_step(self, db: Session, run: WorkflowRun, i: int) -> bool:
+        """One atomic UPDATE: only the process whose UPDATE matched may run step i. SQLite's write lock makes a second
+        claim wait for the first, and then it no longer matches."""
+        now = utcnow()
+        res = db.execute(update(WorkflowRun).where(
+            WorkflowRun.id == run.id, WorkflowRun.step_index == i, WorkflowRun.status.in_(ACTIVE),
+            (WorkflowRun.claimed_until.is_(None)) | (WorkflowRun.claimed_until < now),
+        ).values(claimed_until=now + CLAIM).execution_options(synchronize_session=False))
+        db.commit()
+        db.refresh(run)
+        return res.rowcount == 1
+
+    def _decide(self, db: Session, run: WorkflowRun, allowed: tuple[str, ...], values: dict, refusal: str) -> None:
+        """Move the run on only if it is still in the state the user saw (a stale second click is refused)."""
+        res = db.execute(update(WorkflowRun).where(
+            WorkflowRun.id == run.id, WorkflowRun.status.in_(allowed), WorkflowRun.step_index == run.step_index,
+        ).values(**values).execution_options(synchronize_session=False))
+        db.commit()
+        db.refresh(run)
+        if res.rowcount != 1:
+            raise ValueError(refusal)
+
     # -- the user's decisions (API only)
     def approve(self, db: Session, run: WorkflowRun, now_local: datetime) -> WorkflowRun:
         if run.status != "waiting_approval":
             raise ValueError("This run is not waiting for approval.")
-        run.status, run.approved_step, run.next_attempt_at = "running", run.step_index, None
-        db.commit()
+        self._decide(db, run, ("waiting_approval",), {"status": "running", "approved_step": run.step_index, "next_attempt_at": None},
+                     "This run was already approved, cancelled or changed elsewhere.")
         self.advance(db, run, now_local)
         return run
 
     def cancel(self, db: Session, run: WorkflowRun) -> WorkflowRun:
-        if run.status in ("done", "failed", "cancelled"):
+        if run.status in FINISHED:
             raise ValueError("This run has already finished.")
-        run.status, run.finished_at = "cancelled", utcnow()
+        self._decide(db, run, (run.status,), {"status": "cancelled", "finished_at": utcnow()},
+                     "This run changed since you looked at it (it may have finished); nothing was cancelled.")
         self._log(db, run, {"step": run.step_index, "state": "cancelled"})
         return run
 
     def retry(self, db: Session, run: WorkflowRun, now_local: datetime) -> WorkflowRun:
         if run.status != "failed":
             raise ValueError("Only a failed run can be retried.")
-        run.status, run.attempts, run.next_attempt_at, run.finished_at = "running", 0, None, None
-        db.commit()
+        self._decide(db, run, ("failed",), {"status": "running", "attempts": 0, "next_attempt_at": None, "finished_at": None},
+                     "This run was already retried elsewhere.")
         self.advance(db, run, now_local)
         return run
 

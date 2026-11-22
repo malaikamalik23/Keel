@@ -115,7 +115,8 @@ you> Remind me tomorrow at 9 to email my supervisor
 More in **[docs/DEMO.md](docs/DEMO.md)**. Step-by-step install, every integration's setup and fixes for common problems
 (including Windows): **[docs/INSTALL.md](docs/INSTALL.md)**. What is verified against real services and what is only
 tested with mocks: **[docs/STATUS.md](docs/STATUS.md)**. The HTTP API: **[docs/API.md](docs/API.md)**. What's next and
-the known limitations: **[docs/ROADMAP.md](docs/ROADMAP.md)**.
+the known limitations: **[docs/ROADMAP.md](docs/ROADMAP.md)**. Before a release: **[docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md)**
+(`python -m scripts.release_check`).
 
 ## Configuration
 

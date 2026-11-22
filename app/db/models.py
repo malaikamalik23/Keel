@@ -223,6 +223,7 @@ class WorkflowRun(Base):
     approved_step: Mapped[int | None] = mapped_column(Integer, nullable=True)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    claimed_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # a step is being run (migration 0020)
     log: Mapped[list] = mapped_column(JSON, default=list)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

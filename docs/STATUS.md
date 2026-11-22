@@ -11,7 +11,7 @@ the same way. "Live" means it was run against the real service with a real accou
 | ⏳ Needs you | Built and tested, but checking it for real needs your account, device or an action only you should take |
 | 🔬 Experimental | Works, with known gaps in quality |
 
-Last updated: 23 November 2026.
+Last updated: 23 November 2026. Re-check with `python -m scripts.release_check` ([RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)).
 
 ## Core
 
@@ -36,7 +36,7 @@ Last updated: 23 November 2026.
 | Ollama (local) | ✅ Live | `qwen2.5:3b` on a laptop CPU: 22/25 routing cases; slow (5 s median, a minute cold) |
 | Anthropic | 🧪 Tested | Adapter tests only; no Anthropic key has been used yet |
 | Switching provider when one is rate-limited | ✅ Live | Groq's daily limit → Gemini answered; cooldown parsed from Groq's message |
-| Expired or wrong key, no internet | 🧪 Tested | Error paths unit-tested; not yet in a release checklist |
+| Expired or wrong key, no internet | 🧪 Tested | Error paths unit-tested (Google sign-in expiry, early rejection and revocation included); not yet in a release checklist |
 
 ## Integrations
 
@@ -61,6 +61,8 @@ Last updated: 23 November 2026.
 | Feature | Status | Evidence / what's missing |
 |---|---|---|
 | Permission tiers, taint, URL gate, fencing | ✅ Live | Red-team suite (15 channels × 7 payloads, 268 tests); `scripts/security_demo` (12 attacks) |
+| Hostile attachments, invitations, hidden page text, OAuth expiry and revocation | 🧪 Tested | `tests/test_attachment_attacks.py`, `tests/test_invite_and_oauth_attacks.py`, `tests/e2e/test_browser_attacks.py` |
+| Concurrent approvals, restarts mid-workflow, two schedulers | 🧪 Tested | `tests/test_pending_concurrency.py`, `tests/test_interruptions.py` (real threads on a file database) |
 | Encrypted backups, verify, restore | ✅ Live | A copy of the real database backed up, verified and restored; CI does the same inside Docker |
 | Retention rules | 🧪 Tested | `tests/test_switches_retention.py`; the migration was run on a copy of real data |
 | Per-integration switches | 🧪 Tested | Same tests; refusals of already-queued approvals included |

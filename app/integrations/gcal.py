@@ -73,12 +73,21 @@ def normalize(raw: dict, tz: ZoneInfo) -> dict:
         "end": e.isoformat(timespec="minutes") if isinstance(e, datetime) else e.isoformat(),
         "all_day": all_day, "minutes": 0 if all_day else int((e - s).total_seconds() // 60),
         "location": str(raw.get("location", ""))[:200] or None,
-        "description": str(raw.get("description", ""))[:1000] or None,
+        "description": _visible(str(raw.get("description", "")))[:1000] or None,
         "guests": len(others), "organizer_is_you": bool((raw.get("organizer") or {}).get("self", True)),
         "recurring": bool(raw.get("recurringEventId")), "updated": raw.get("updated", ""),
         "created_by_keel": ((raw.get("extendedProperties") or {}).get("private") or {}).get(KEEL_KEY),
     }
     return out
+
+
+def _visible(description: str) -> str:
+    """Google stores invitation text as HTML, written by whoever sent the invite: keep only what a person would see."""
+    if "<" not in description:
+        return description
+    from app.integrations.safe_http import html_to_text
+
+    return html_to_text(description)[1]
 
 
 class GoogleCalendar:
@@ -94,11 +103,17 @@ class GoogleCalendar:
         if not self.can_write:
             raise CalendarWriteError("Google Calendar isn't connected yet: set GOOGLE_CALENDAR_ENABLED=true, then run "
                                      "`python -m scripts.gmail_connect` again and allow the calendar permission.")
-        try:
-            resp = self.auth.http.request(method, f"{API}/calendars/{self.calendar_id}{path}",
-                                          headers={**(headers or {}), "Authorization": f"Bearer {self.auth.token()}"}, **kw)
-        except httpx.HTTPError as exc:
-            raise CalendarWriteError(f"Google Calendar request failed ({type(exc).__name__}).") from None
+        for attempt in (1, 2):
+            try:
+                resp = self.auth.http.request(method, f"{API}/calendars/{self.calendar_id}{path}",
+                                              headers={**(headers or {}), "Authorization": f"Bearer {self.auth.token()}"}, **kw)
+            except httpx.HTTPError as exc:
+                raise CalendarWriteError(f"Google Calendar request failed ({type(exc).__name__}).") from None
+            if resp.status_code != 401 or attempt == 2:
+                break
+            # Google stopped accepting the access token early (password change, security event). A 401 means the
+            # request did nothing, so get a fresh token and send it once more; a revoked sign-in fails at refresh.
+            self.auth.forget()
         if resp.status_code in (404, 410):
             raise CalendarWriteError("Google Calendar has no event with that id (it may have been deleted).")
         if resp.status_code == 401:

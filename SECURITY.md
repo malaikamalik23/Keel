@@ -54,7 +54,11 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
    (case/whitespace-insensitive) so content cannot break out, and the system prompt says the contents are data.
 4. **Invisible-text stripping.** Unicode format/private-use/control characters (including the "tag" block used for
    ASCII smuggling, zero-width characters and bidi overrides) are removed from all external text. Text hidden from humans in
-   HTML (`display:none`, `hidden`, `aria-hidden`, `<script>`, comments…) never reaches the model.
+   HTML never reaches the model: `<script>`, comments, the `hidden` and `aria-hidden` attributes, and inline styles that
+   hide it (`display:none`, visibility, opacity 0, zero or 1px fonts, transparent colour, off-page positions, `clip`,
+   zero-size boxes, Outlook's `mso-hide`). That covers web pages, Gmail and Google Calendar invitations, whose
+   description is HTML written by whoever sent the invite. Keel's browser renders the page and leaves out anything a
+   person couldn't see, including text hidden by stylesheets.
 5. **Exfiltration gate.** In a tainted conversation `web_fetch` runs without approval only for URLs the *user typed*
    and the result URLs of a `web_search`. Everything else is queued for approval: a URL the model assembled itself (the
    way data gets smuggled out in a query string), and a link found *inside* external text (a fetched page, a search
@@ -119,8 +123,9 @@ choosing to behave. The red-team suite simulates a model that obeys every inject
    (sendUpdates=none). A day's plan is never added twice. The red-team suite reads a poisoned invite and tries to
    create, move and delete events.
    Keel's browser (off by default) is a separate Chromium with a fresh profile per start. Every request a page makes
-   (scripts, images, forms) goes through a guard that refuses non-public addresses, so a page can't reach Keel's own
-   API, the router or cloud metadata. Page text is untrusted and hidden text is left out. Clicks that only navigate
+   (scripts, images, forms, WebSockets) goes through a guard that refuses non-public addresses, so a page can't reach
+   Keel's own API, the router or cloud metadata; service workers are blocked, because their requests would bypass the
+   guard. Page text is untrusted and hidden text is left out. Clicks that only navigate
    are free; a click that would post a form or reads like a consequential action is refused, and the only way to do it
    is `browser_submit`, which is high impact: the approval shows the site, the button and every value the form holds,
    and it is recomputed at approval time, so a form changed in between isn't sent. Typing into a page and attaching a
@@ -205,6 +210,23 @@ Further suites cover the cases that are about *time* rather than one turn:
   attacker's host; search results and URLs you type still open freely.
 - `tests/test_pending_concurrency.py`: two approvals at once, approve vs reject in both orders, and 8 real threads
   approving the same action against a file database. Exactly one run, every time.
+- `tests/test_interruptions.py`: the same for workflow steps (6 threads approving one step; a stale second click or a
+  late cancel is refused), a restart while an approval and a workflow step are waiting (both still answerable), and two
+  schedulers ticking one database at the same moment (one lease: nothing is sent twice; the other takes over when the
+  first stops or dies). Before these fixes, all six approvals ran the step and both schedulers sent the reminder.
+- `tests/test_attachment_attacks.py`: email attachments named to escape the notes folder (`../`, absolute and Windows
+  paths, device names such as `CON.md`), disguised (`invoice\u202efdp.exe`, `report.pdf.exe`), lying about their type,
+  zip bombs, binary text and oversized files; a poisoned attachment saved after reading the email waits for approval and
+  is fenced when read; broken PDFs are skipped, not fatal.
+- `tests/test_invite_and_oauth_attacks.py`: a poisoned invitation (instructions in hidden HTML, the location and a
+  guest's name) is read as visible text with no guest addresses, and a model obeying it changes nothing; inline-style
+  hiding in HTML; an access token that expires or that Google stops accepting early (refreshed and retried once; an
+  approved email is still sent exactly once); a sign-in revoked between queueing and approving (nothing happens, the
+  approval fails with how to reconnect); Google unreachable or a corrupt token file.
+- `tests/e2e/test_browser_attacks.py`: eleven ways a page hides instructions (opacity, tiny fonts, transparent text,
+  clipping, off-page, zero-size boxes, aria-hidden...), invisible buttons and links, and a page that opens a WebSocket
+  to this computer and registers a service worker that fetches it. Before the fixes, ten of the eleven hidden texts
+  reached the model and the page reached a local port.
 - `tests/test_dns_pinning.py`: a resolver that answers public first and `127.0.0.1` / `10.x` / `169.254.169.254` /
   `::1` second is refused before any socket opens; the connection goes to the checked IP; HTTPS keeps the hostname for
   certificate checks; and a guard fails if an httpx upgrade silently removes the pinning.
@@ -223,9 +245,14 @@ old memory handling or the pinning switched off, they fail. A test that can't fa
 - **Taint is coarse and sticky.** Once a conversation has read untrusted content, *all* writes need approval, even
   ones you asked for in plain words, and it lasts for the rest of that conversation. Correct but sometimes annoying:
   start a new chat after research.
-- **The fetcher is not a firewall.** DNS pinning closes rebinding for `web_fetch`, which is the only component that fetches
-  URLs the model chooses. Other integrations (GitHub, Brave, Telegram, your calendar URL) go to fixed hosts you configured.
-  For defence in depth on a server, still block private ranges with an egress firewall or network policy.
+- **The fetcher is not a firewall.** DNS pinning closes rebinding for `web_fetch`. Keel's browser checks every request's
+  address too, but Chromium then resolves the name again itself, so a DNS-rebinding site could in principle switch to a
+  private address between the check and the connection. Other integrations (GitHub, Brave, Telegram, your calendar URL)
+  go to fixed hosts you configured. For defence in depth, especially on a server, block private ranges with an egress
+  firewall or network policy.
+- **Hidden-text detection is heuristic.** Pages can hide text in ways a rule doesn't recognise (white text on a white
+  image, text behind another element). The browser leaves out what its checks find; the rest is still fenced and still
+  can't act without your approval.
 - **Following a link inside a page needs your approval** once a conversation is tainted. That is the price of closing
   the link-choice leak (a page listing ten links could otherwise learn a digit from *which* one an injected model
   opens). Search results and URLs you type are unaffected. What remains: an injected model can still choose *which

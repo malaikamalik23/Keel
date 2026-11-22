@@ -68,7 +68,9 @@ uvicorn app.api.main:create_app --factory
 ```
 
 Open **http://127.0.0.1:8000**. The database is created at `data/agent.db` on first start, and upgraded automatically
-after every update.
+after every update. The first time, Keel asks a few questions (your name, time zone, working hours, goals, preferences,
+check-in times); skip any of them, and change them later with the **Profile** button. Time zone and hours set there take
+priority over `.env`.
 
 Prefer the terminal? `python -m app.cli` gives you the same agent without the dashboard (`/help` lists its commands).
 

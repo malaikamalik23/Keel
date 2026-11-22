@@ -45,6 +45,14 @@ const FIXTURES: Record<string, unknown> = {
     { id: "browser", name: "Keel's browser", status: "off", details: [], access: "Opens sites.", setup: "BROWSER_ENABLED=true", testable: false },
   ],
   "/api/backups": { enabled: true, folder: "data/backups", backups: [{ name: "agent-20261123-031500.keelbak", size: 52224, created: "2026-11-23T03:15:00+00:00", encrypted: true }] },
+  "/api/profile": { state: "done", name: "Malaika", address_as: "Mali", goals: ["Finish my FYP"], responsibilities: [], preferences: ["Keep messages short"],
+    settings: { agent_timezone: "Asia/Karachi", workday_start: "09:00", workday_end: "21:00", quiet_hours_start: "22:00", quiet_hours_end: "07:00",
+      morning_checkin_time: "08:00", evening_checkin_time: "20:00", notification_max_per_day: 5, weekly_checkin_weekday: 6 }, overridden: [] },
+  "/api/inbox": { new: [
+      { id: 7, text: "remind me at 6pm to call the bank", status: "new", filed_as: null, created_at: "2026-11-09T09:30:00",
+        suggestion: { kind: "reminder", fields: { text: "Call the bank", remind_at: "2026-11-09T18:00" }, why: "Has a time (at 6pm), so a reminder.", alternatives: ["task", "memory", "note"] } }],
+    recent: [{ id: 3, text: "Renew my passport", status: "filed", filed_as: "task #12", suggestion: null, created_at: "2026-11-08T10:00:00" }],
+    projects: [], notes: true },
   "/api/retention": { categories: [{ id: "conversations", label: "Chat conversations", min_days: 7, note: "Whole conversations", days: null }, { id: "audit_log", label: "Audit log", min_days: 30, note: "Every tool call", days: 90 }], last_run: null },
   "/api/retention/preview": { would_delete: { audit_log: 12 } },
   "/api/retention/apply": { deleted: { audit_log: 12 } },
@@ -281,6 +289,56 @@ describe("dashboard smoke tests", () => {
     await user.click(screen.getByRole("button", { name: "Delete expired now…" }));
     await waitFor(() => expect(calls).toContainEqual({ method: "POST", path: "/api/retention/apply" }));
     expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining("12 × Audit log"));
+    expect(errors).toEqual([]);
+  });
+
+  it("first run opens the setup questions, every step can be skipped, and the answers are saved", async () => {
+    const fresh = { ...(FIXTURES["/api/profile"] as object), state: "new", name: "", address_as: "", goals: [], preferences: [] };
+    const sent: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: string, init?: RequestInit) => {
+      const path = String(input).split("?")[0];
+      if (path === "/api/profile" && init?.method === "POST") sent.push(JSON.parse(String(init.body)));
+      const body = path === "/api/profile" ? fresh : path in FIXTURES ? FIXTURES[path] : {};
+      return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+    }));
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByText("Welcome to Keel")).toBeTruthy();
+    await user.type(screen.getByLabelText("Your name"), "Malaika");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Skip this step" }));  // time zone and hours left as they are
+    await user.type(screen.getByLabelText(/^Main goals/), "Finish my FYP{enter}Get a scholarship");
+    for (let i = 0; i < 3; i++) await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Save and finish" }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    const body = sent[0] as { state: string; answers: { name: string; goals: string[] }; settings: object };
+    expect(body.state).toBe("done");
+    expect(body.answers.name).toBe("Malaika");
+    expect(body.answers.goals).toEqual(["Finish my FYP", "Get a scholarship"]);
+    expect(body.settings).toEqual({});  // nothing changed, so nothing overrides .env
+    expect(await screen.findByRole("button", { name: "Profile" })).toBeTruthy();
+    expect(errors).toEqual([]);
+  });
+
+  it("Inbox captures anything, shows Keel's suggestion and why, and files only when asked, as the type you choose", async () => {
+    const posts: { path: string; body: unknown }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: string, init?: RequestInit) => {
+      const path = String(input).split("?")[0];
+      if (init?.method === "POST") posts.push({ path, body: init.body ? JSON.parse(String(init.body)) : null });
+      const body = path in FIXTURES ? FIXTURES[path] : {};
+      return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+    }));
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Inbox" }));
+    expect(await screen.findByText("Has a time (at 6pm), so a reminder.")).toBeTruthy();
+    expect(screen.getByText(/task #12/)).toBeTruthy();
+    await user.type(screen.getByLabelText("Capture"), "Renew my passport{enter}");
+    await waitFor(() => expect(posts).toContainEqual({ path: "/api/inbox", body: { text: "Renew my passport" } }));
+    expect(posts.some((p) => p.path.includes("/file"))).toBe(false);  // capturing files nothing
+    await user.selectOptions(screen.getByLabelText("Type for: remind me at 6pm to call the bank"), "task");
+    await user.click(screen.getByRole("button", { name: "File as task" }));
+    await waitFor(() => expect(posts).toContainEqual({ path: "/api/inbox/7/file", body: { kind: "task", fields: { title: "Call the bank", due_date: "2026-11-09" } } }));
     expect(errors).toEqual([]);
   });
 

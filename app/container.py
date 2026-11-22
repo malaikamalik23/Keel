@@ -75,12 +75,26 @@ def _browser(settings: Settings):
                           blocked_domains=csv_list(settings.web_blocked_domains))
 
 
+def _with_personal_settings(settings: Settings, engine) -> Settings:
+    """Timezone, working hours and the like, as set in the dashboard (they take priority over .env)."""
+    from sqlalchemy.orm import Session
+
+    from app.services.profile import setting_overrides
+
+    with Session(engine) as db:
+        overrides = setting_overrides(db)
+    return settings.model_copy(update=overrides) if overrides else settings
+
+
 def build_container(
-    settings: Settings | None = None, llm: LLMClient | None = None, notifier: Notifier | None = None
+    settings: Settings | None = None, llm: LLMClient | None = None, notifier: Notifier | None = None, engine=None
 ) -> Container:
+    """`engine`: reuse an open database (the API does when personal settings change, see app/api/main.py)."""
     settings = settings or get_settings()
-    engine = make_engine(settings.database_url)
-    init_db(engine)
+    if engine is None:
+        engine = make_engine(settings.database_url)
+        init_db(engine)
+    settings = _with_personal_settings(settings, engine)
     calendar_url = settings.calendar_ics_url
     calendar_source = (lambda: fetch_ics(calendar_url)) if calendar_url else None
     gmail, google_calendar = _google(settings)

@@ -11,13 +11,15 @@ import ErrorBoundary from "./ErrorBoundary";
 import Chat from "./views/Chat";
 import Commitments from "./views/Commitments";
 import Goals from "./views/Goals";
+import Inbox from "./views/Inbox";
 import Insights from "./views/Insights";
 import MemoryView from "./views/MemoryView";
+import Onboarding, { type Profile } from "./views/Onboarding";
 import Projects from "./views/Projects";
 import Today from "./views/Today";
 import type { PendingAction } from "./types";
 
-const TABS = ["Today", "Calendar", "Goals", "Projects", "Commitments", "Applications", "Documents", "Workflows", "Memory", "Chat", "Insights", "Activity", "Services", "Approvals"] as const;
+const TABS = ["Today", "Inbox", "Calendar", "Goals", "Projects", "Commitments", "Applications", "Documents", "Workflows", "Memory", "Chat", "Insights", "Activity", "Services", "Approvals"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function App() {
@@ -26,6 +28,11 @@ export default function App() {
   const [needsKey, setNeedsKey] = useState(false);
   const [keyInput, setKeyInput] = useState(getApiKey());
   const [version, setVersion] = useState(0); // bump to remount views after the agent changes data
+  const [profileOpen, setProfileOpen] = useState(false);
+
+  useEffect(() => {  // first run: open the setup questions once (skippable); later they're under "Profile"
+    api.get<Profile>("/api/profile").then((p) => { if (p?.state === "new") setProfileOpen(true); }).catch(() => undefined);
+  }, []);
 
   const refreshPending = useCallback(async () => {
     try { setPending((await api.get<PendingAction[]>("/api/pending-actions")).length); setNeedsKey(false); }
@@ -47,6 +54,10 @@ export default function App() {
     );
   }
 
+  if (profileOpen) {
+    return <main className="gate wide"><Onboarding onDone={() => { setProfileOpen(false); changed(); }} /></main>;
+  }
+
   return (
     <div className="app">
       <nav>
@@ -56,12 +67,14 @@ export default function App() {
             {t}{t === "Approvals" && pending > 0 && <span className="pill">{pending}</span>}
           </button>
         ))}
+        <button className="ghost" onClick={() => setProfileOpen(true)}>Profile</button>
       </nav>
       {/* Chat stays mounted (just hidden) so the conversation survives tab switches and data refreshes. */}
       <main hidden={tab !== "Chat"} className="chat-pane"><ErrorBoundary><Chat onChange={changed} /></ErrorBoundary></main>
       <main hidden={tab === "Chat"} key={`${tab}-${version}`}>
         <ErrorBoundary>
         {tab === "Today" && <Today />}
+        {tab === "Inbox" && <Inbox onChange={changed} />}
         {tab === "Calendar" && <Calendar />}
         {tab === "Goals" && <Goals />}
         {tab === "Projects" && <Projects />}

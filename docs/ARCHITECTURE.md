@@ -34,7 +34,7 @@ database and in code, not in the prompt.
                      ┌────────────────────────┼──────────────────────────────────────────┐
 ┌────────────────────▼──────────────┐  ┌──────▼─────────────────────────────────────────────────────┐
 │ SQLite (SQLAlchemy 2, Alembic      │  │ Integrations (app/integrations): Gmail · Google Calendar ·   │
-│ 0001-0019) + FTS5 notes index      │  │ Google OAuth · iCal · Keel's browser (Playwright) · safe     │
+│ 0001-0021) + FTS5 notes index      │  │ Google OAuth · iCal · Keel's browser (Playwright) · safe     │
 └────────────────────▲──────────────┘  │ HTTP fetcher · GitHub · SMTP                                 │
                      │ same services    └─────────────────────────────────────────────────────────────┘
 ┌────────────────────┴──────────────────────────────────────────────────────────────────────────┐
@@ -63,7 +63,7 @@ database and in code, not in the prompt.
 
 ## 2. Data model
 
-Hand-written Alembic migrations `0001`–`0019`; SQLite today, SQLAlchemy keeps PostgreSQL a URL change (notes search needs FTS5, so it is SQLite-only).
+Hand-written Alembic migrations `0001`–`0021`; SQLite today, SQLAlchemy keeps PostgreSQL a URL change (notes search needs FTS5, so it is SQLite-only).
 
 | Table | Purpose |
 |---|---|
@@ -83,7 +83,8 @@ Hand-written Alembic migrations `0001`–`0019`; SQLite today, SQLAlchemy keeps 
 | `project_entries`, `project_links` | A project's updates, blockers and decisions; its notes and links |
 | `document_links` | A file in `NOTES_DIR` connected to an application, task or email, keyed by path so it survives re-indexing |
 | `workflows`, `workflow_runs` | "When X, do these steps" rules and each run's step log, approvals and retries (one run per event: a dedupe key) |
-| `user_settings` | Set from the dashboard: integration switches and retention rules (key-value) |
+| `user_settings` | Set from the dashboard: integration switches, retention rules, personal settings and the onboarding state (key-value) |
+| `inbox_items` | The capture inbox: what you typed, the rule-based suggestion, and what it was filed as once you approved it |
 
 **Why `task_events` matters:** `postponement_count` is a cache. The event history (when, how far, *why*) is what lets the
 accountability layer say "you've postponed GRE four times, citing 'too big' twice" without inventing anything.
@@ -201,7 +202,7 @@ they are tested (the red-team suite, mutation-checked) and the known limitations
 ```
 app/{agent,api,db,integrations,llm,scheduler,security,services,tools}/   backend
 frontend/         React + Vite + TypeScript dashboard (served by FastAPI from frontend/dist)
-migrations/       hand-written Alembic migrations 0001-0019
+migrations/       hand-written Alembic migrations 0001-0021
 tests/            unit/API tests; tests/injection = red team
 evals/            tool-routing eval        scripts/   backup, Gmail connect, smoke checks, doc generators
 docs/             ARCHITECTURE · TOOLS (generated) · INSTALL · DEPLOY · DEMO · API · STATUS · ROADMAP

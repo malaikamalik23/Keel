@@ -34,6 +34,7 @@ from app.db.models import (
     Task,
     TaskEvent,
     WorkSession,
+    utcnow,
 )
 from app.errors import ConflictError, NotFoundError
 from app.services import accountability as accountability_svc
@@ -869,3 +870,149 @@ def apply_retention(db: Session = Depends(get_db), c: Container = Depends(get_co
     from app.services import retention
 
     return {"deleted": retention.apply(db, notes_dir=c.settings.notes_dir)}
+
+
+# ---------- personal onboarding and profile (only the dashboard can change these; there is no tool for it)
+@router.get("/profile")
+def get_profile(db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    from app.services import profile as profile_svc
+
+    return profile_svc.profile(db, c.settings)
+
+
+@router.post("/profile")
+def post_profile(body: dict, request: Request, db: Session = Depends(get_db)):
+    """{"answers": {...}, "settings": {...}, "state": "done" | "skipped"}. Settings are checked before anything is saved."""
+    from app.api.main import reload_container
+    from app.services import profile as profile_svc
+
+    settings = body.get("settings") or {}
+    answers = body.get("answers") or {}
+    state = body.get("state")
+    if not isinstance(settings, dict) or not isinstance(answers, dict) or state not in (None, "done", "skipped"):
+        raise HTTPException(422, "Send answers and settings as objects, and state as done or skipped.")
+    try:
+        clean = {name: profile_svc.PERSONAL_SETTINGS[name](v) for name, v in settings.items() if name in profile_svc.PERSONAL_SETTINGS}
+        unknown = sorted(set(settings) - set(profile_svc.PERSONAL_SETTINGS))
+        if unknown:
+            raise ValueError(f"{', '.join(unknown)} can't be changed here.")
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    saved = profile_svc.save_profile(db, answers)
+    if clean:
+        profile_svc.save_settings(db, clean)
+    if state:
+        profile_svc.set_state(db, state)
+    if clean:
+        reload_container(request.app)
+    return {"saved": saved, "settings_changed": sorted(clean), **profile_svc.profile(db, request.app.state.container.settings)}
+
+
+# ---------- capture inbox (rule-based suggestions; nothing is filed until the user approves it here)
+def _inbox_dict(item) -> dict:
+    return {"id": item.id, "text": item.text, "status": item.status, "suggestion": item.suggestion, "filed_as": item.filed_as,
+            "created_at": item.created_at.isoformat(timespec="seconds")}
+
+
+def _capture_context(db: Session, c: Container):
+    from app.db.models import Project
+
+    projects = [(p.id, p.name) for p in db.scalars(select(Project).where(Project.status.in_(("active", "paused"))).order_by(Project.id))]
+    return projects, c.registry.get("create_note") is not None
+
+
+@router.get("/inbox")
+def list_inbox(db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    from app.db.models import InboxItem
+
+    new = db.scalars(select(InboxItem).where(InboxItem.status == "new").order_by(InboxItem.id.desc())).all()
+    recent = db.scalars(select(InboxItem).where(InboxItem.status != "new").order_by(InboxItem.id.desc()).limit(10)).all()
+    projects, notes = _capture_context(db, c)
+    return {"new": [_inbox_dict(i) for i in new], "recent": [_inbox_dict(i) for i in recent],
+            "projects": [{"id": pid, "name": name} for pid, name in projects], "notes": notes}
+
+
+@router.post("/inbox", status_code=status.HTTP_201_CREATED)
+def capture(body: dict, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    from app.db.models import InboxItem
+    from app.services.capture import suggest
+
+    text = " ".join(str(body.get("text") or "").split())
+    if not text or len(text) > 2000:
+        raise HTTPException(422, "Type something (up to 2,000 characters).")
+    projects, notes = _capture_context(db, c)
+    item = InboxItem(text=text, suggestion=suggest(text, datetime.now(ZoneInfo(c.settings.agent_timezone)), projects, notes=notes))
+    db.add(item)
+    db.commit()
+    return _inbox_dict(item)
+
+
+def _filing(kind: str, fields: dict, c: Container) -> tuple[str, dict]:
+    """The tool and arguments that file an item. Only the fields each tool needs are passed on."""
+    from app.services.capture import note_path
+
+    def get(name, default=None):
+        v = fields.get(name, default)
+        return v.strip() if isinstance(v, str) else v
+
+    if kind == "task":
+        args = {"title": get("title"), "due_date": get("due_date") or None, "project_id": get("project_id") or None}
+        return "create_task", {k: v for k, v in args.items() if v is not None}
+    if kind == "reminder":
+        return "create_reminder", {"text": get("text"), "remind_at": get("remind_at")}
+    if kind == "memory":
+        return "save_memory", {"content": get("content"), "kind": get("kind") or "fact"}
+    if kind == "note":
+        title = get("title") or "Note"
+        now = datetime.now(ZoneInfo(c.settings.agent_timezone))
+        return "create_note", {"path": note_path(title, now), "content": f"# {title}\n\n{get('content') or title}\n"}
+    if kind == "project_update":
+        return "log_project_entry", {"project_id": get("project_id"), "kind": get("kind") or "update", "text": get("text")}
+    raise HTTPException(422, f"Unknown type '{kind}'.")
+
+
+def _filed_label(kind: str, result: dict) -> str:
+    for key in ("task", "reminder", "memory", "entry"):
+        if isinstance(result.get(key), dict) and result[key].get("id") is not None:
+            return f"{kind.replace('_', ' ')} #{result[key]['id']}"
+    return f"note {result['created']}" if result.get("created") else kind
+
+
+@router.post("/inbox/{item_id}/file")
+def file_inbox_item(item_id: int, body: dict, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    """File it as the type and fields the user approved (Keel's suggestion or their correction), through the same tool
+    chat uses: validated, audited as the user, and refused if that integration is switched off."""
+    from app.db.models import InboxItem
+
+    item = db.get(InboxItem, item_id)
+    if item is None:
+        raise NotFoundError(f"No inbox item {item_id}.")
+    if item.status != "new":
+        raise ConflictError("This item was already filed or dismissed.")
+    kind, fields = body.get("kind"), body.get("fields") or {}
+    if not isinstance(fields, dict):
+        raise HTTPException(422, "fields must be an object.")
+    tool, args = _filing(str(kind), fields, c)
+    if c.registry.get(tool) is None:
+        raise ConflictError("Notes need a notes folder (NOTES_DIR)." if kind == "note" else f"'{tool}' isn't available.")
+    out = c.executor.run_as_user(ToolContext(db=db, tz=ZoneInfo(c.settings.agent_timezone)), tool, args)
+    if out.status != "ok":
+        db.rollback()
+        raise HTTPException(422, str(out.result.get("error") or out.result)[:300])
+    item = db.get(InboxItem, item_id)
+    item.status, item.filed_as, item.filed_at = "filed", _filed_label(kind, out.result), utcnow()
+    db.commit()
+    return _inbox_dict(item)
+
+
+@router.post("/inbox/{item_id}/dismiss")
+def dismiss_inbox_item(item_id: int, db: Session = Depends(get_db)):
+    from app.db.models import InboxItem
+
+    item = db.get(InboxItem, item_id)
+    if item is None:
+        raise NotFoundError(f"No inbox item {item_id}.")
+    if item.status == "new":
+        item.status = "dismissed"
+        db.commit()
+    return _inbox_dict(item)

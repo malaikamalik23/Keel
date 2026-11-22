@@ -71,3 +71,18 @@ def create_app(settings: Settings | None = None, llm: LLMClient | None = None, n
         if (dist / "index.html").is_file():
             app.mount("/", StaticFiles(directory=dist, html=True), name="dashboard")
     return app
+
+
+def reload_container(app: FastAPI) -> None:
+    """Rebuild everything that read the settings at startup (the timezone in the agent, the scheduler, the planner's
+    working hours), after they were changed in the dashboard. Same database, same model client, same notifier; the
+    scheduler is handed over without a gap in the lease."""
+    from app.container import build_container
+
+    old = app.state.container
+    was_running = old.scheduler._aps is not None
+    new = build_container(old.settings, llm=old.agent.llm, notifier=old.notifier, engine=old.engine)
+    if was_running:
+        old.scheduler.stop()
+        new.scheduler.start()
+    app.state.container = new

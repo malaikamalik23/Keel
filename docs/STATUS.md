@@ -17,6 +17,8 @@ Last updated: 23 November 2026. Re-check with `python -m scripts.release_check` 
 
 | Feature | Status | Evidence / what's missing |
 |---|---|---|
+| Personal onboarding and profile (name, time zone, hours, goals, preferences, check-in times) | 🧪 Tested | `tests/test_profile.py`, dashboard test; settings apply without a restart |
+| Capture inbox (rule-based suggestions; filed only when you approve) | 🧪 Tested | `tests/test_inbox.py`, dashboard test; checked in a browser |
 | Chat (dashboard, CLI), tool loop, approvals, audit log | ✅ Live | Daily use; every eval run; `tests/test_agent.py`, e2e chat → delete → approve |
 | Tasks, goals, milestones, projects, commitments, routines, waiting on others | ✅ Live | Routing eval (242 cases) on Groq and Gemini; unit tests |
 | Daily and weekly planning, accountability, insights | ✅ Live | Planner guarantees unit-tested; eval cases |

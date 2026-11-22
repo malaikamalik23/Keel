@@ -19,6 +19,12 @@ def say(page, message, expect):
     page.get_by_text(expect).wait_for(timeout=15000)
 
 
+def _skip_first_run_setup(page) -> None:
+    """A fresh database opens the welcome questions first, as for a real new user; skip them like one would."""
+    page.get_by_role("heading", name="Welcome to Keel").wait_for(timeout=10000)
+    page.get_by_role("button", name="Skip setup for now").click()
+
+
 def test_full_user_flow_in_a_real_browser_without_any_console_errors(browser, serve):
     url, _ = serve(SCRIPT, agent_timezone="Asia/Karachi")
     ctx = browser.new_context(timezone_id="Asia/Karachi", viewport={"width": 1280, "height": 800})
@@ -29,6 +35,7 @@ def test_full_user_flow_in_a_real_browser_without_any_console_errors(browser, se
     page.on("requestfailed", lambda r: problems.append(f"request failed: {r.url}"))
 
     page.goto(url)
+    _skip_first_run_setup(page)
     page.wait_for_selector("nav")
 
     # every tab renders (no blank page, no crash)
@@ -83,6 +90,7 @@ def test_dashboard_shows_a_message_instead_of_a_blank_page_when_a_view_crashes(b
     # make the API return the wrong shape for one endpoint, as a buggy server might
     page.route("**/api/accountability*", lambda route: route.fulfill(status=200, content_type="application/json", body="[]"))
     page.goto(url)
+    _skip_first_run_setup(page)
     page.get_by_text("Something went wrong in this view").wait_for(timeout=10000)
     page.get_by_role("button", name="Goals").click()  # navigation still works
     page.get_by_text(re.compile("No active goals")).wait_for()

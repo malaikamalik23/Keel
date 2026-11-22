@@ -156,6 +156,20 @@ class ProjectEntry(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class InboxItem(Base):
+    """Something typed into the capture inbox, with Keel's suggestion, until the user files or dismisses it (0021)."""
+
+    __tablename__ = "inbox_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    text: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(12), default="new", index=True)  # new|filed|dismissed
+    suggestion: Mapped[Any] = mapped_column(JSON, nullable=True)
+    filed_as: Mapped[str | None] = mapped_column(String(80), nullable=True)  # e.g. "task #12"
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    filed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class UserSetting(Base):
     """A setting changed from the dashboard: integration switches, retention rules (see migration 0019)."""
 

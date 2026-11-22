@@ -102,3 +102,15 @@ code { font-size: 12px; background: var(--bg); border: 1px solid var(--border); 
 .doc-link { white-space: nowrap; font-size: 13px; } .doc-link button.small { padding: 0 6px; font-size: 12px; margin-left: 2px; }
 
 .svc-switch { display: inline-flex; align-items: center; gap: 4px; margin-right: 8px; } table.retention { width: 100%; border-collapse: collapse; } table.retention td { padding: 6px 4px; vertical-align: top; border-top: 1px solid var(--border, #ddd); } table.retention td:last-child { width: 1%; white-space: nowrap; }
+
+.gate.wide { max-width: 720px; }
+.onboarding h1 { margin-bottom: 4px; }
+.ob-steps { display: flex; flex-wrap: wrap; gap: 4px; list-style: none; padding: 0; margin: 12px 0; }
+.ob-steps li.active button { font-weight: 600; text-decoration: underline; }
+.ob-steps li.done button { opacity: 0.7; }
+.ob-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.ob-field input, .ob-field textarea { width: 100%; box-sizing: border-box; }
+.ob-row { display: flex; gap: 12px; flex-wrap: wrap; } .ob-row .ob-field { flex: 1 1 140px; }
+.ob-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+.capture { display: flex; gap: 8px; margin-bottom: 6px; } .capture input { flex: 1; min-width: 0; }

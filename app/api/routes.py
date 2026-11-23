@@ -533,6 +533,29 @@ def complete_task(task_id: int, db: Session = Depends(get_db), c: Container = De
     return db.get(Task, task_id)
 
 
+@router.post("/tasks", response_model=schemas.TaskOut, status_code=status.HTTP_201_CREATED)
+def create_task(body: dict, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    """Add a task from the dashboard (quick add). Same tool as chat: validated and audited as the user."""
+    allowed = {k: body[k] for k in ("title", "due_date", "priority", "project_id", "estimated_minutes") if body.get(k) not in (None, "")}
+    result = _run_user_tool(c, db, "create_task", allowed)
+    db.expire_all()
+    return db.get(Task, result["task"]["id"])
+
+
+@router.patch("/tasks/{task_id}", response_model=schemas.TaskOut)
+def edit_task(task_id: int, body: dict, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    """Change a task from the dashboard: reopen it (Undo after ticking it), move its date, rename it, change priority.
+    Moving a date later counts as a postponement, as in chat."""
+    if db.get(Task, task_id) is None:
+        raise NotFoundError(f"No task with id {task_id}.")
+    changes = {k: body[k] for k in ("title", "due_date", "priority", "status", "reason") if k in body}
+    if not changes:
+        raise HTTPException(422, "Nothing to change.")
+    _run_user_tool(c, db, "update_task", {"task_id": task_id, **changes})
+    db.expire_all()
+    return db.get(Task, task_id)
+
+
 @router.patch("/plan-items/{item_id}", response_model=schemas.PlanItemOut)
 def update_plan_item(item_id: int, body: schemas.PlanItemUpdate, db: Session = Depends(get_db), c: Container = Depends(get_container)):
     if db.get(PlanItem, item_id) is None:
@@ -1051,3 +1074,83 @@ def unlink_memories(memory_id: int, other_id: int, db: Session = Depends(get_db)
         raise NotFoundError("Those memories aren't linked.")
     db.delete(link)
     db.commit()
+
+
+# ---------- push notifications (devices are added from the dashboard; nothing here is reachable by the model)
+def _push_notifier(c: Container):
+    from app.integrations.push import CombinedNotifier, PushNotifier
+
+    n = c.notifier
+    parts = n.parts if isinstance(n, CombinedNotifier) else [n]
+    return next((p for p in parts if isinstance(p, PushNotifier)), None)
+
+
+@router.get("/push")
+def push_status(db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    from pathlib import Path
+
+    from app.db.models import PushSubscription
+    from app.integrations.push import public_key
+
+    if not c.settings.push_enabled:
+        return {"enabled": False, "devices": []}
+    devices = [{"id": d.id, "label": d.label, "created_at": d.created_at.isoformat(timespec="seconds"),
+                "last_ok_at": d.last_ok_at.isoformat(timespec="seconds") if d.last_ok_at else None}
+               for d in db.scalars(select(PushSubscription).order_by(PushSubscription.id))]
+    return {"enabled": True, "public_key": public_key(Path(c.settings.push_key_path)), "devices": devices}
+
+
+@router.post("/push/subscribe", status_code=status.HTTP_201_CREATED)
+def push_subscribe(body: dict, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    from app.db.models import PushSubscription
+    from app.integrations.push import PushError, check_endpoint, check_keys
+
+    if not c.settings.push_enabled:
+        raise ConflictError("Push notifications are off (PUSH_ENABLED=false).")
+    sub_info = body.get("subscription") if isinstance(body.get("subscription"), dict) else {}
+    keys = sub_info.get("keys") if isinstance(sub_info.get("keys"), dict) else {}
+    try:
+        endpoint = check_endpoint(str(sub_info.get("endpoint") or ""))
+        p256dh, auth = check_keys(str(keys.get("p256dh") or ""), str(keys.get("auth") or ""))
+    except PushError as exc:
+        raise HTTPException(422, str(exc)) from None
+    label = " ".join(str(body.get("label") or "").split())[:80] or None
+    row = db.scalars(select(PushSubscription).where(PushSubscription.endpoint == endpoint)).first()
+    if row is None:
+        row = PushSubscription(endpoint=endpoint, p256dh=p256dh, auth=auth, label=label)
+        db.add(row)
+    else:
+        row.p256dh, row.auth, row.label, row.failures = p256dh, auth, label or row.label, 0
+    db.commit()
+    if (push := _push_notifier(c)) is not None:
+        push.reload()
+    return {"id": row.id, "label": row.label}
+
+
+@router.delete("/push/devices/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
+def push_forget(device_id: int, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    from app.db.models import PushSubscription
+
+    row = db.get(PushSubscription, device_id)
+    if row is None:
+        raise NotFoundError(f"No device {device_id}.")
+    db.delete(row)
+    db.commit()
+    if (push := _push_notifier(c)) is not None:
+        push.reload()
+
+
+@router.post("/push/test", dependencies=[Depends(rate_limit)])
+def push_test(c: Container = Depends(get_container)):
+    from app.integrations.notifier import NotificationError
+
+    push = _push_notifier(c)
+    if push is None:
+        raise ConflictError("Push notifications are off (PUSH_ENABLED=false).")
+    try:
+        sent = push.send("Test from Keel: notifications work on this device.", title="Keel")
+    except NotificationError as exc:
+        raise ConflictError(str(exc)) from None
+    if not sent:
+        raise ConflictError("No device has notifications turned on yet.")
+    return {"sent_to": sent}

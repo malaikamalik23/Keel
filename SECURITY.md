@@ -295,6 +295,14 @@ conversation). "Delete expired now" shows how many rows each rule would remove b
 scheduler on, the rules run once a day. Deletion uses SQLite's `secure_delete`, so removed rows are overwritten in the
 file; backups taken earlier keep them until they are rotated out (`BACKUP_KEEP`).
 
+**Push notifications.** Devices are added only from the dashboard (there is no tool for it). Each message is encrypted
+for its device (Web Push, RFC 8291) and signed with Keel's own key, created on first use in `data/push_vapid.pem`
+(owner-only) and never sent anywhere. The relaying push service sees only that a message was sent, its size and time.
+Keel contacts only the real push services (Google, Apple, Mozilla, Microsoft hosts over https), checked when a device
+subscribes and again on every send, so a crafted subscription can't make Keel send requests elsewhere. A device that
+unsubscribed is forgotten; one that keeps failing is dropped. The installed dashboard's service worker caches only the
+app itself, never anything from `/api`.
+
 **Integration switches.** Each connected integration on the Services tab (Gmail, Google Calendar, Keel's browser, web
 pages, GitHub, the notes folder, and reminders/check-ins) has an on/off switch. Off takes effect at once:
 its tools aren't offered to the model, and the executor refuses them for chat, for workflow steps and for approvals

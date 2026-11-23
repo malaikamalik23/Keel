@@ -117,7 +117,14 @@ def build_container(
     )
     agent = Agent(llm or build_llm(settings), executor, settings)
     session_factory = make_session_factory(engine)
-    notifier = notifier or build_notifier(settings)
+    if notifier is None:
+        notifier = build_notifier(settings)
+        if settings.push_enabled:  # email (if set up) plus every device that turned notifications on
+            from app.integrations.notifier import LogNotifier
+            from app.integrations.push import CombinedNotifier, PushNotifier
+
+            push = PushNotifier(session_factory, Path(settings.push_key_path), settings.push_contact)
+            notifier = CombinedNotifier(None if isinstance(notifier, LogNotifier) else notifier, push)
     notifications = NotificationService(notifier, settings)
     from zoneinfo import ZoneInfo
 

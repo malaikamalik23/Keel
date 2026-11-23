@@ -108,6 +108,12 @@ class Settings(BaseSettings):
     browser_enabled: bool = False
     browser_headless: bool = True  # false = you can watch the window (and log in to sites yourself in it)
 
+    # ---- Push notifications to the devices where you turn them on (Settings > Services). Each message is encrypted for
+    # that device; the browser's push service (Google, Apple, Mozilla, Microsoft) relays it without being able to read it.
+    push_enabled: bool = True
+    push_key_path: str = "data/push_vapid.pem"  # Keel's own signing key, created on first use; never committed
+    push_contact: str = "mailto:keel@localhost"  # sent to push services with each message, as the standard asks
+
     # ---- Encrypted backups (`python -m scripts.backup`; restore with `python -m scripts.backup restore FILE`) ----
     # With a passphrase, backups are one encrypted file holding the database and your notes folder. Keep the passphrase
     # in your password manager too: without it a backup can't be opened, by anyone, including you.

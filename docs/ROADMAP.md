@@ -17,8 +17,8 @@ What is verified for real and what is only tested with mocks is in [STATUS.md](S
    actions in one message, considering vs decided vs promised vs done, and Urdu / Roman Urdu memory lookups.
 4. **Easier setup.** A first-run setup page for the model key and timezone, guided Gmail and Calendar connection,
    clearer messages when a service disconnects.
-5. **Phone.** An installable dashboard (PWA), tested on Android and iOS browsers, and a documented private way to
-   reach it from your phone (a VPN such as Tailscale, or the server guide in [DEPLOY.md](DEPLOY.md)).
+5. **Phone, for real.** Install the app on your phone through Tailscale and confirm notifications arrive on Android and
+   iPhone; then contextual recommendations and people memory (Phase 2).
 6. **v1.1 release** with release notes, issue templates, and a short demo video.
 
 ## Known limitations
@@ -39,4 +39,4 @@ What is verified for real and what is only tested with mocks is in [STATUS.md](S
 | Messages | Reminders and check-ins come by email only. |
 | Fetcher and browser | Not a firewall: the browser's address check can in principle be raced by DNS rebinding; on a server, also block private ranges with an egress firewall. |
 | Hidden text | Detected by rules (styles, attributes, rendering); a page can still hide text in ways no rule recognises. |
-| Phone | Usable in a phone browser; not installable yet and not tested on real phones. |
+| Phone | Installable with notifications, but only through https (Tailscale `serve`) and while the laptop runs Keel; not yet tested on a real phone. The API key is asked again in each new app session. |

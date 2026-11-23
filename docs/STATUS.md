@@ -76,5 +76,5 @@ Last updated: 23 November 2026. Re-check with `python -m scripts.release_check` 
 | Feature | Status | Evidence / what's missing |
 |---|---|---|
 | Dashboard: 15 pages in 7 sections (Home, Assistant, My Life, Memory, Automations, Insights, Settings) | ✅ Live | 38 jsdom tests, 13 real-Chromium e2e tests, checked at desktop and phone width |
-| Phone layout | 🔬 Experimental | Responsive CSS checked at phone width in a desktop browser; not tested on a real phone |
-| Install on phone (PWA), access from other devices | Not built | See [ROADMAP.md](ROADMAP.md) |
+| Phone layout | 🔬 Experimental | Checked at phone width in a desktop browser; not yet on a real phone |
+| Installable app (PWA) and push notifications | 🧪 Tested | `tests/test_push.py` (real Web Push encryption, decrypted in the test), dashboard test; manifest and service worker checked in Chromium. ⏳ Needs you: install on your phone through Tailscale and send a test |

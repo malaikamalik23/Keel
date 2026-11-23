@@ -170,6 +170,21 @@ class InboxItem(Base):
     filed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class PushSubscription(Base):
+    """A device where the user turned on notifications (migration 0023)."""
+
+    __tablename__ = "push_subscriptions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    endpoint: Mapped[str] = mapped_column(String(1000), unique=True)
+    p256dh: Mapped[str] = mapped_column(String(200))
+    auth: Mapped[str] = mapped_column(String(100))
+    label: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    last_ok_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    failures: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+
 class UserSetting(Base):
     """A setting changed from the dashboard: integration switches, retention rules (see migration 0019)."""
 

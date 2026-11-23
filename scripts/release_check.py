@@ -383,12 +383,17 @@ def interactive(s: Settings, tmp: Path) -> list[tuple[str, str, str]]:
     else:
         rows.append(("browser", SKIP, "BROWSER_ENABLED is false"))
 
-    if c.notifier.channel != "log" and _ask(f"Messages: send one test message through {c.notifier.channel} to you?"):
-        try:
-            c.notifier.send(f"Keel release check {stamp}: if you can read this, messages work.")
-            rows.append((f"{c.notifier.channel} message", PASS, "sent; check that it arrived"))
-        except Exception as exc:  # noqa: BLE001
-            rows.append((f"{c.notifier.channel} message", FAIL, _scrub(str(exc), s)[:160]))
+    from app.integrations.push import CombinedNotifier, PushNotifier
+
+    parts = c.notifier.parts if isinstance(c.notifier, CombinedNotifier) else [c.notifier]
+    usable = [p for p in parts if p.channel != "log" and not (isinstance(p, PushNotifier) and p.devices() == 0)]
+    for p in usable:  # only channels that can actually deliver: email if set up, push if a device signed up
+        if _ask(f"Messages: send one test message by {p.channel} to you?"):
+            try:
+                p.send(f"Keel release check {stamp}: if you can read this, messages work.")
+                rows.append((f"{p.channel} message", PASS, "sent; check that it arrived"))
+            except Exception as exc:  # noqa: BLE001
+                rows.append((f"{p.channel} message", FAIL, _scrub(str(exc), s)[:160]))
     c.engine.dispose()
     return rows
 

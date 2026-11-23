@@ -224,6 +224,34 @@ connection, as plain text. With Gmail:
 Email is one-way: you get reminders and check-ins, and reply in the dashboard or the CLI. The daily budget, quiet hours
 and de-duplication decide what is sent.
 
+### Keel on your phone (installable app and notifications)
+
+Keel runs on your laptop; your phone reaches it privately through [Tailscale](https://tailscale.com) (free for personal
+use). Browsers only let you install a web app and receive notifications over **https**, and Tailscale provides that.
+
+1. Install Tailscale on the laptop and on the phone, and sign in to the same account on both.
+2. In the Tailscale admin console, under **DNS**, turn on **MagicDNS** and **HTTPS certificates**.
+3. In `.env`, set a long random `API_KEY` (`python -c "import secrets; print(secrets.token_urlsafe(32))"`) and restart
+   Keel. Without it, Keel answers only this computer.
+4. On the laptop, with Keel running on port 8000:
+
+   ```powershell
+   tailscale serve --bg 8000
+   ```
+
+   It prints an address like `https://my-laptop.tail1234.ts.net`. Only devices signed in to your Tailscale can open it.
+5. On the phone, open that address and enter the API key once (it is kept for that tab only).
+   - **Android (Chrome):** menu ⋮ → **Install app** (or **Add to Home screen**).
+   - **iPhone (Safari, iOS 16.4 or newer):** Share → **Add to Home Screen**, then open Keel from the Home Screen.
+6. In the installed app: **Settings → Services → Notifications on your devices → Turn on notifications on this device**,
+   then **Send a test notification**.
+
+Reminders, check-ins and nudges then arrive on every device you turned notifications on for, as well as by email if
+that is set up. Each message is encrypted for that device: the phone maker's push service (Google, Apple, Mozilla or
+Microsoft) relays it without being able to read it, though it sees that a message was sent and when. Remove a device
+under the same card. The laptop must be on and running Keel; reminders due while it was off are sent when it's back,
+within a day. To stop sharing Keel with your phone: `tailscale serve --https=443 off`.
+
 ### Encrypted backups
 
 1. In `.env`: `BACKUP_PASSPHRASE=` a few random words (12+ characters). Save the same passphrase in your password

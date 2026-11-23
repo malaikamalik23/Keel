@@ -173,3 +173,16 @@ def test_reminders_reach_devices_even_when_email_fails(tmp_path):
     assert delivered and delivered[0]["body"] == "Reminder: Submit the form"
     with app.state.container.session_factory() as db:
         assert db.query(Notification).filter_by(kind="reminder").one().channel == "push"
+
+
+def test_a_localhost_contact_is_replaced_so_apple_accepts_the_messages():
+    from app.integrations.push import DEFAULT_CONTACT, usable_contact
+
+    assert usable_contact("mailto:keel@localhost") == DEFAULT_CONTACT  # Apple: 403 BadJwtToken
+    assert usable_contact("mailto:me@laptop") == DEFAULT_CONTACT and usable_contact("") == DEFAULT_CONTACT
+    assert usable_contact("https://localhost:8000") == DEFAULT_CONTACT and usable_contact("keel@example.com") == DEFAULT_CONTACT
+    assert usable_contact("mailto:me@uni.edu.pk") == "mailto:me@uni.edu.pk"
+    assert usable_contact("https://keel.example.org") == "https://keel.example.org"
+    from app.config import Settings
+
+    assert usable_contact(Settings.model_fields["push_contact"].default) == Settings.model_fields["push_contact"].default

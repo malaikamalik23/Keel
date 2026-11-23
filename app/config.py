@@ -112,7 +112,9 @@ class Settings(BaseSettings):
     # that device; the browser's push service (Google, Apple, Mozilla, Microsoft) relays it without being able to read it.
     push_enabled: bool = True
     push_key_path: str = "data/push_vapid.pem"  # Keel's own signing key, created on first use; never committed
-    push_contact: str = "mailto:keel@localhost"  # sent to push services with each message, as the standard asks
+    # Sent to push services with each message, as the standard asks. Must be a real-looking address: Apple rejects
+    # localhost (iPhones then get no notifications). Your own email works too, but it is then sent to the push services.
+    push_contact: str = "mailto:keel@example.com"
 
     # ---- Encrypted backups (`python -m scripts.backup`; restore with `python -m scripts.backup restore FILE`) ----
     # With a passphrase, backups are one encrypted file holding the database and your notes folder. Keep the passphrase

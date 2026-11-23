@@ -27,6 +27,21 @@ logger = logging.getLogger(__name__)
 PUSH_HOSTS = ("fcm.googleapis.com", "android.googleapis.com", "push.services.mozilla.com", "push.apple.com", "notify.windows.com")
 MAX_FAILURES = 5
 TTL_SECONDS = 12 * 3600  # a message for a phone that's off for longer than this is dropped, not delivered stale
+DEFAULT_CONTACT = "mailto:keel@example.com"
+
+
+def usable_contact(contact: str | None) -> str:
+    """The contact sent with each message. Apple's push service rejects a contact on localhost or a domain without a dot
+    (403 BadJwtToken, so iPhones get nothing) while Google and Mozilla accept it: fall back to a well-formed one."""
+    c = (contact or "").strip()
+    if c.startswith("https://") and "." in urlsplit(c).netloc and "localhost" not in urlsplit(c).netloc:
+        return c
+    if c.startswith("mailto:") and "@" in c:
+        domain = c.rsplit("@", 1)[1].lower()
+        if "." in domain and domain not in ("localhost", "localhost.localdomain") and not domain.endswith(".local"):
+            return c
+    logger.warning("PUSH_CONTACT %r would be rejected by Apple's push service; using %s", c, DEFAULT_CONTACT)
+    return DEFAULT_CONTACT
 
 
 class PushError(Exception):
@@ -87,7 +102,7 @@ class PushNotifier:
     def __init__(self, session_factory, key_path: Path, contact: str, sender=None, background: bool = True):
         self.session_factory = session_factory
         self.key_path = key_path
-        self.contact = contact
+        self.contact = usable_contact(contact)
         self._send = sender  # tests pass a fake; None = pywebpush
         self._background = background
         self._lock = threading.Lock()

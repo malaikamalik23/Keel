@@ -335,7 +335,7 @@ needs `API_KEY`. This check is what stops a website open in your browser from us
 Two different limits on the free tier:
 - *Tokens per minute.* Keep `TOOL_PROFILE=lean` and `HISTORY_MESSAGE_LIMIT=12`, and wait a minute.
 - *Tokens per day.* It frees up gradually over the following hours; nothing in Keel can speed that up. Long sessions
-  and the routing eval (`evals/`, 242 calls for a full run) are the usual cause. Set `GEMINI_API_KEY` and
+  and the routing eval (`evals/`, 248 calls for a full run) are the usual cause. Set `GEMINI_API_KEY` and
   `LLM_FALLBACK=gemini` so another model answers meanwhile ([above](#use-two-models-groq-and-gemini)).
 
 **The provider says the model does not exist, or does not support tools.**

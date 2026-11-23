@@ -79,3 +79,13 @@ export interface Analytics {
   postponement: { total: number; avg_before_completion: number | null; top_reasons: { reason: string; count: number }[] };
   completions_by_weekday: Record<string, number>;
 }
+export interface Suggestion { kind: "task" | "follow_up" | "promise" | "person"; id: number; title: string; minutes: number | null; priority?: string; due?: string | null; score: number; reasons: string[]; action: "complete" | "start" | "break_down" | "follow_up" | "keep" | "contacted"; }
+export interface Recommendations { now: string; part_of_day: string; energy: string | null; minutes: number | null; suggestions: Suggestion[]; note: string | null; free_until?: string | null; busy_now?: boolean; busy_until?: string | null; }
+export interface PersonRow { id: number; name: string; aliases: string[]; relation: string | null; notes: string | null; email: string | null; keep_in_touch_days: number | null; last_contact: string | null; days_since_contact: number | null; reconnect_due?: boolean; promises: number; waiting: number; overdue_promises: number; follow_ups_due: number; }
+export interface PersonSummary extends Omit<PersonRow, "promises" | "waiting" | "overdue_promises" | "follow_ups_due"> {
+  promises: { id: number; text: string; deadline: string | null; status: string; overdue?: boolean }[];
+  waiting_on_them: { id: number; title: string; follow_up_date: string | null; follow_up_due?: boolean }[];
+  tasks: { id: number; title: string; due: string | null; priority: string }[];
+  memories: { id: number; content: string }[];
+  interactions: { id: number; date: string; text: string }[];
+}

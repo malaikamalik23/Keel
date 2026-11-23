@@ -83,10 +83,12 @@ class Agent:
         hidden = hidden_tools(db, [t.name for t in registry.all()])  # integrations switched off on the Services tab
         available = registry.available_groups(hidden)
         if lean:  # advertise only the tools this message plausibly needs (see app/tools/groups.py)
-            from app.db.models import Project
+            from app.db.models import Person, Project
+            from app.services.people import name_variants
 
             names = db.scalars(select(Project.name).where(Project.status.in_(("active", "paused")))).all()
-            ctx.active_groups = select_groups(message, recent_groups(history), available, names)
+            person_names = [v for p in db.scalars(select(Person)) for v in name_variants(p)]
+            ctx.active_groups = select_groups(message, recent_groups(history), available, names, person_names)
 
         result = ChatResult(conversation_id=conv.id, reply="")
         for _ in range(self.settings.max_agent_steps):

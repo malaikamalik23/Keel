@@ -359,8 +359,35 @@ def get_briefing(ctx: ToolContext, p: GetBriefingInput) -> dict:
     return build_briefing(ctx.db, ctx.today())
 
 
+# ---------- what_next ----------
+class WhatNextInput(BaseModel):
+    energy: Literal["low", "ok", "high"] | None = Field(None, description="How the user says they feel: 'tired' = low, 'fresh/motivated' = high.")
+    minutes: int | None = Field(None, ge=5, le=600, description="Time the user has, if they said ('I have 30 minutes'). Leave empty to use the time until their next calendar event.")
+
+
+def _what_next(calendar_source: Callable[[], str] | None, workday: tuple[time, time]):
+    def what_next(ctx: ToolContext, p: WhatNextInput) -> dict:
+        from app.services.recommend import free_window, planned_task_ids, recommend
+
+        now = ctx.now()
+        window = free_window(calendar_source, now, ctx.tz, workday[1]) if p.minutes is None else {"minutes": p.minutes}
+        out = recommend(ctx.db, now, energy=p.energy, minutes=window.get("minutes"), planned_task_ids=planned_task_ids(ctx.db, now.date()))
+        return {**out, "free_until": window.get("until"), "in_a_meeting_now": window.get("busy_now", False)}
+    return what_next
+
+
 def register(registry: ToolRegistry, calendar_source: Callable[[], str] | None = None, workday: tuple[time, time] = DEFAULT_WORKDAY) -> None:
     for tool in (
+        Tool(
+            name="what_next",
+            description=(
+                "Suggest what the user should do right now, best first, with the reasons: weighs deadlines, priority, "
+                "today's plan, the time until their next calendar event (or the minutes they give), their energy, the "
+                "time of day, follow-ups and promises falling due, and people they wanted to keep in touch with. Use for "
+                "'what should I do now', 'I have 30 minutes', 'I'm tired, what can I do'."
+            ),
+            permission=Permission.READ, input_model=WhatNextInput, handler=_what_next(calendar_source, workday),
+        ),
         Tool(
             name="plan_week",
             description=(

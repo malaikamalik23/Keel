@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../api";
 import { useLoad } from "../hooks";
+import MicButton from "../MicButton";
 import { Badge, Card, Empty, ErrorNote, Loading } from "../ui";
 
 type Kind = "task" | "reminder" | "memory" | "note" | "project_update";
@@ -110,6 +111,7 @@ export default function Inbox({ onChange }: { onChange?: () => void }) {
       <form className="capture" onSubmit={(e) => { e.preventDefault(); void capture(); }}>
         <input value={text} onChange={(e) => setText(e.target.value)} maxLength={2000} aria-label="Capture"
           placeholder="Anything: “renew my passport”, “remind me at 6pm to call the bank”, “remember my CGPA is 3.6”…" />
+        <MicButton value={text} onChange={setText} onError={setProblem} label="Say what to capture" />
         <button type="submit" disabled={!text.trim()}>Capture</button>
       </form>
       <p className="small muted">Keel suggests a type from your words (no AI call, nothing sent anywhere). Nothing is saved until you file it, and you can change the type or any field first.</p>

@@ -1186,3 +1186,150 @@ def push_test(c: Container = Depends(get_container)):
     if not sent:
         raise ConflictError("No device has notifications turned on yet.")
     return {"sent_to": sent}
+
+
+# ---------------------------------------------------------------------------------- what to do now
+@router.get("/recommendations")
+def recommendations(
+    energy: Literal["low", "ok", "high"] | None = None,
+    minutes: int | None = Query(None, ge=5, le=600),
+    db: Session = Depends(get_db), c: Container = Depends(get_container),
+):
+    """What to do right now, best first, with reasons. Without `minutes`, the time until the next calendar event (or the
+    end of the working day) is used. Calendar event titles are never included."""
+    from app.services.recommend import free_window, planned_task_ids, recommend
+
+    tz = ZoneInfo(c.settings.agent_timezone)
+    now = datetime.now(tz)
+    window = free_window(c.calendar_source, now, tz, parse_hhmm(c.settings.workday_end)) if minutes is None else {"minutes": minutes}
+    out = recommend(db, now, energy=energy, minutes=window.get("minutes"), planned_task_ids=planned_task_ids(db, now.date()))
+    return {**out, "free_until": window.get("until"), "busy_now": window.get("busy_now", False), "busy_until": window.get("busy_until")}
+
+
+# ---------------------------------------------------------------------------------- people
+def _today(c: Container) -> date:
+    return datetime.now(ZoneInfo(c.settings.agent_timezone)).date()
+
+
+def _person(db: Session, person_id: int):
+    from app.db.models import Person
+
+    p = db.get(Person, person_id)
+    if p is None:
+        raise NotFoundError(f"No person with id {person_id}.")
+    return p
+
+
+@router.get("/people")
+def people_list(db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    """Everyone saved, people to get back in touch with first, with open promises and waits per person."""
+    from app.services import people as people_svc
+
+    return people_svc.overview(db, _today(c))
+
+
+@router.post("/people", status_code=status.HTTP_201_CREATED)
+def people_add(body: dict, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    """Add someone (or update them, if the name is already saved). Runs the remember_person tool, audited as the user."""
+    from app.services import people as people_svc
+
+    fields = {k: body[k] for k in ("name", "relation", "notes", "email", "aliases", "keep_in_touch_days") if body.get(k) not in (None, "")}
+    if not fields.get("name"):
+        raise HTTPException(422, "name is required.")
+    result = _run_user_tool(c, db, "remember_person", fields)
+    return people_svc.summary(db, _person(db, result["person"]["id"]), _today(c))
+
+
+@router.get("/people/{person_id}")
+def people_one(person_id: int, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    from app.services import people as people_svc
+
+    return people_svc.summary(db, _person(db, person_id), _today(c))
+
+
+@router.patch("/people/{person_id}")
+def people_edit(person_id: int, body: dict, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    """Edit someone: name, relation, notes, email, aliases (a list) or keep_in_touch_days (null to stop nudges)."""
+    from app.security.audit import record_audit
+    from app.services import people as people_svc
+
+    p = _person(db, person_id)
+    allowed = {"name": 120, "relation": 60, "notes": 2000, "email": 200}
+    changed: dict = {}
+    for key, limit in allowed.items():
+        if key in body:
+            value = body[key]
+            if value is not None and not isinstance(value, str):
+                raise HTTPException(422, f"{key} must be text.")
+            value = " ".join(value.split()) if key == "name" and value else (value.strip() if value else None)
+            if key == "name" and (not value or len(value) < 2):
+                raise HTTPException(422, "A name needs at least 2 characters.")
+            if value and len(value) > limit:
+                raise HTTPException(422, f"{key} is too long (max {limit}).")
+            if key == "name" and value.casefold() != p.name.casefold():
+                other = people_svc.find(db, value)
+                if other is not None and other.id != p.id:
+                    raise HTTPException(409, f"Someone called {value} is already saved.")
+            setattr(p, key, value)
+            changed[key] = value
+    if "aliases" in body:
+        aliases = body["aliases"]
+        if aliases is not None and (not isinstance(aliases, list) or not all(isinstance(a, str) for a in aliases) or len(aliases) > 10):
+            raise HTTPException(422, "aliases must be a list of up to 10 names.")
+        p.aliases = ", ".join(a.strip().replace(",", " ") for a in aliases or [] if a.strip())[:300] or None
+        changed["aliases"] = p.aliases
+    if "keep_in_touch_days" in body:
+        days = body["keep_in_touch_days"]
+        if days is not None and (not isinstance(days, int) or isinstance(days, bool) or not 1 <= days <= 730):
+            raise HTTPException(422, "keep_in_touch_days must be 1 to 730, or null.")
+        p.keep_in_touch_days = days
+        changed["keep_in_touch_days"] = days
+    if not changed:
+        raise HTTPException(422, "Nothing to change.")
+    record_audit(db, actor="user", tool_name="update_person", permission="write", params={"person_id": person_id, **changed}, status="ok", detail=p.name)
+    db.commit()
+    return people_svc.summary(db, p, _today(c))
+
+
+@router.delete("/people/{person_id}", status_code=status.HTTP_204_NO_CONTENT)
+def people_delete(person_id: int, db: Session = Depends(get_db)):
+    """Forget someone and their contact log. Promises and tasks that mention them are kept."""
+    from app.security.audit import record_audit
+
+    p = _person(db, person_id)
+    record_audit(db, actor="user", tool_name="delete_person", permission="write", params={"person_id": person_id}, status="ok", detail=p.name)
+    db.delete(p)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/people/{person_id}/contacts", status_code=status.HTTP_201_CREATED)
+def people_contact(person_id: int, body: dict | None = None, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    """Log that you talked to them (default today). Runs the log_contact tool, audited as the user."""
+    from app.services import people as people_svc
+
+    p = _person(db, person_id)
+    body = body or {}
+    payload = {"name": p.name, "note": body.get("note") or ""}
+    if body.get("on_date"):
+        payload["on_date"] = body["on_date"]
+    _run_user_tool(c, db, "log_contact", payload)
+    return people_svc.summary(db, p, _today(c))
+
+
+@router.delete("/person-contacts/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
+def people_contact_delete(contact_id: int, db: Session = Depends(get_db)):
+    """Remove a logged contact (Undo); when you last talked moves back to the one before."""
+    from app.db.models import PersonInteraction
+    from app.security.audit import record_audit
+    from app.services import people as people_svc
+
+    row = db.get(PersonInteraction, contact_id)
+    if row is None:
+        raise NotFoundError(f"No contact with id {contact_id}.")
+    person = _person(db, row.person_id)
+    record_audit(db, actor="user", tool_name="delete_contact", permission="write", params={"contact_id": contact_id}, status="ok", detail=person.name)
+    db.delete(row)
+    people_svc.refresh_last_contact(db, person)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

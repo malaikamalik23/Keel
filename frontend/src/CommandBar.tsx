@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import { Icon, PAGE_ICON } from "./icons";
+import MicButton from "./MicButton";
 import { useToast } from "./toast";
 
 type Command = { id: string; label: string; hint: string; icon: string; run: () => void | Promise<void> };
@@ -59,6 +60,7 @@ export default function CommandBar({ pages, go, ask, onCaptured }: {
               else if (e.key === "ArrowUp") { e.preventDefault(); setSel((s) => Math.max(s - 1, 0)); }
               else if (e.key === "Enter") { e.preventDefault(); void pick(commands[sel]); }
             }} />
+          <MicButton value={q} onChange={(t) => { setQ(t); setSel(0); input.current?.focus(); }} onError={(m) => toast(m, { tone: "bad" })} label="Say it: capture or ask by voice" />
           <kbd>Esc</kbd>
         </div>
         <ul className="cmd-list" role="listbox">

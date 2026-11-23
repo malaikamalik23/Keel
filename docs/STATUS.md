@@ -28,7 +28,9 @@ Last updated: 23 November 2026. Re-check with `python -m scripts.release_check` 
 | Workflows ("whenever X, do Y"), retries, approval steps | 🧪 Tested | `tests/test_workflows.py`; not yet run for days on a real schedule |
 | Documents: PDF/Word/text, pages, deadlines, compare | ✅ Live | Real notes folder indexed and searched |
 | File management: link, move, create, edit notes | 🧪 Tested | `tests/test_files.py`; 7/7 eval cases on Groq |
-| Voice: dictation and read-aloud | ⏳ Needs you | jsdom tests with a fake speech API; needs a real microphone in Chrome or Edge |
+| Voice: dictation and read-aloud in Chat, voice capture in Ctrl+K and the Inbox | ⏳ Needs you | jsdom tests with a fake speech API; needs a real microphone in Chrome or Edge |
+| "What now?": suggestions for the moment (time until the next event, energy, time of day, plan, follow-ups, promises, people) | 🧪 Tested | `tests/test_people_recommend.py`, dashboard test; checked in a browser. Not yet in the routing eval |
+| People: who someone is, last contact, promises to them and waits on them (found by name), keep-in-touch nudges in the briefing | 🧪 Tested | `tests/test_people_recommend.py`, dashboard test; checked in a browser. Not yet in the routing eval |
 
 ## Models
 

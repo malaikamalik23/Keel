@@ -372,6 +372,37 @@ class Memory(Base):
     replaced_by_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # the newer version of this fact
 
 
+class Person(Base):
+    """Someone in the user's life (a supervisor, a friend, a recruiter): who they are, how to reach them, when the user
+    last talked to them and how often they want to. Promises to them and things the user waits on them for are found by
+    name in commitments and tasks, so nothing has to be linked by hand."""
+
+    __tablename__ = "people"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), index=True)
+    aliases: Mapped[str | None] = mapped_column(String(300), nullable=True)  # other names, comma-separated: "Dr. Khan, Khan sahab"
+    relation: Mapped[str | None] = mapped_column(String(60), nullable=True)  # supervisor, friend, sister, recruiter...
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    email: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    keep_in_touch_days: Mapped[int | None] = mapped_column(Integer, nullable=True)  # nudge when it's been longer than this
+    last_contact: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class PersonInteraction(Base):
+    """One time the user talked to, met or heard from someone, with a line about it."""
+
+    __tablename__ = "person_interactions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    person_id: Mapped[int] = mapped_column(ForeignKey("people.id", ondelete="CASCADE"), index=True)
+    on_date: Mapped[date] = mapped_column(Date, index=True)
+    text: Mapped[str] = mapped_column(String(500), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class MemoryLink(Base):
     """Two memories that belong together (migration 0022). Stored once per pair, smaller id first."""
 

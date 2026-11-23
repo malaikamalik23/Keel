@@ -123,3 +123,34 @@ describe("voice", () => {
     expect(screen.queryByLabelText("Read replies aloud")).toBeNull();
   });
 });
+
+describe("MicButton (Ctrl+K and Inbox)", () => {
+  it("fills the box with what was heard, keeps what was typed, and never submits by itself", async () => {
+    vi.stubGlobal("webkitSpeechRecognition", FakeRecognition);
+    const { default: MicButton } = await import("./MicButton");
+    const seen: string[] = [];
+    const user = userEvent.setup();
+    render(<MicButton value="call" onChange={(t) => seen.push(t)} />);
+    await user.click(screen.getByRole("button", { name: "Start dictation" }));
+    act(() => FakeRecognition.last!.hear("the bank ", "at six"));
+    expect(seen[seen.length - 1]).toBe("call the bank at six");
+    await user.click(screen.getByRole("button", { name: "Stop dictation" }));
+    expect(FakeRecognition.last!.stopped).toBe(true);
+    expect(screen.getByRole("button", { name: "Start dictation" })).toBeTruthy();
+  });
+
+  it("explains a blocked microphone and hides itself when the browser has no dictation", async () => {
+    vi.stubGlobal("webkitSpeechRecognition", FakeRecognition);
+    const { default: MicButton } = await import("./MicButton");
+    const errs: string[] = [];
+    const user = userEvent.setup();
+    const { unmount } = render(<MicButton value="" onChange={() => undefined} onError={(m) => errs.push(m)} />);
+    await user.click(screen.getByRole("button", { name: "Start dictation" }));
+    act(() => FakeRecognition.last!.fail("not-allowed"));
+    expect(errs[0]).toMatch(/Microphone access was blocked/);
+    unmount();
+    vi.stubGlobal("webkitSpeechRecognition", undefined);
+    render(<MicButton value="" onChange={() => undefined} />);
+    expect(screen.queryByRole("button", { name: "Start dictation" })).toBeNull();
+  });
+});

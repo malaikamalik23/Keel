@@ -71,7 +71,18 @@ def build_briefing(db: Session, today: date) -> dict:
         "slipping": [{"title": t.title, "postponed": t.postponement_count} for t in open_tasks if t.postponement_count >= 2][:3],
         "important_dates": _upcoming_dates(db, today),
         "applications_due_soon": _applications_due(db, today),
+        "people_to_reconnect": _people_to_reconnect(db, today),
     }
+
+
+def _people_to_reconnect(db: Session, today: date) -> list[dict]:
+    """People the user asked to keep in touch with and hasn't for longer than that, longest gap first."""
+    from app.db.models import Person
+    from app.services.people import days_since, reconnect_due
+
+    due = [p for p in db.scalars(select(Person).where(Person.keep_in_touch_days.is_not(None))) if reconnect_due(p, today)]
+    due.sort(key=lambda p: -(days_since(p, today) if days_since(p, today) is not None else 10_000))
+    return [{"name": p.name, "days_since": days_since(p, today)} for p in due[:3]]
 
 
 def _applications_due(db: Session, today: date) -> list[dict]:
@@ -174,6 +185,9 @@ def briefing_text(b: dict, events: list[dict] | None = None) -> str:
             for a in b["applications_due_soon"][:3]) + ".")
     if b.get("important_dates"):
         lines.append("Dates: " + ", ".join(f"{d['title']} ({'today' if d['days_left'] == 0 else d['date']})" for d in b["important_dates"][:3]) + ".")
+    if b.get("people_to_reconnect"):
+        lines.append("Get in touch with: " + ", ".join(
+            f"{p['name']} ({p['days_since']} days)" if p["days_since"] is not None else p["name"] for p in b["people_to_reconnect"]) + ".")
     for warning in b.get("calendar_warnings", [])[:2]:
         lines.append(warning)
     text = " ".join(lines)

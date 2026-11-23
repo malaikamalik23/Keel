@@ -199,7 +199,7 @@ they are tested (the red-team suite, mutation-checked) and the known limitations
 |---|---|
 | `pytest` (~860) + `npm test` (35 dashboard tests) + `tests/e2e` (11, real Chromium) | Tools, executor, agent loop, planner, scheduler, workflows, API, notes, SSRF, backups, retention, switches; Gmail, Google, GitHub, email and model clients against mocked HTTP; the browser against local fixture pages; the LLM scripted |
 | `tests/injection` | The red-team suite: a compromised model against 14 channels (web pages, GitHub, notes, Word documents, both calendars, Gmail) × 7 payloads, plus memory poisoning, link choice and summary taint |
-| `evals/` | Tool-routing eval (242 cases, 89 with argument checks; reports missed, wrong and unsafe calls, latency and tokens), scored per category and tag, history and a dashboard tracked; the dataset itself is validated offline |
+| `evals/` | Tool-routing eval (248 cases, 92 with argument checks; reports missed, wrong and unsafe calls, latency and tokens), scored per category and tag, history and a dashboard tracked; the dataset itself is validated offline |
 | CI | ruff, Python 3.11/3.12, red-team suite, dashboard type-check + build, real-Chromium e2e, dependency audit, gitleaks secret scan, Bandit + Semgrep, Docker build + `/health`, the deployment guide's backup and restore (plain and encrypted) |
 
 ## 10. Folder structure

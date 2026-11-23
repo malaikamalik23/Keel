@@ -11,6 +11,7 @@ from app.tools import (
     groups,
     memory,
     notes,
+    people,
     planning,
     projects,
     reminders,
@@ -41,6 +42,7 @@ def build_default_registry(
     projects.register(registry)
     commitments.register(registry)
     memory.register(registry)
+    people.register(registry)
     planning.register(registry, calendar_source, (parse_hhmm(workday[0]), parse_hhmm(workday[1])))
     reminders.register(registry)
     dates.register(registry)

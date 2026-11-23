@@ -3,6 +3,7 @@ import { api } from "../api";
 import { useAction, useLoad } from "../hooks";
 import { Icon } from "../icons";
 import { useToast } from "../toast";
+import WhatNow from "./WhatNow";
 import type { Accountability, Briefing, Commitment, PendingAction, Plan, Task } from "../types";
 import { Badge, Card, Empty, ErrorNote, Loading, fmtDate, isOverdue } from "../ui";
 
@@ -92,6 +93,8 @@ export default function Today({ go, ask }: { go?: (page: string) => void; ask?: 
         {a && <span className="chip ok"><Icon name="check" size={16} /><b>{a.tasks.completed}</b> done this week</span>}
         {a && a.work.total_minutes > 0 && <span className="chip"><Icon name="activity" size={16} /><b>{Math.round(a.work.total_minutes / 6) / 10}</b> h logged</span>}
       </div>
+
+      <WhatNow ask={ask} onChange={refresh} />
 
       <div className="home-grid">
         <div className="stack">

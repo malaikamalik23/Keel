@@ -18,7 +18,7 @@ What is verified for real and what is only tested with mocks is in [STATUS.md](S
 4. **Easier setup.** A first-run setup page for the model key and timezone, guided Gmail and Calendar connection,
    clearer messages when a service disconnects.
 5. **Phone, for real.** Install the app on your phone through Tailscale and confirm notifications arrive on Android and
-   iPhone; then contextual recommendations and people memory (Phase 2).
+   iPhone. (Contextual recommendations and people memory are built: see STATUS.)
 6. **v1.1 release** with release notes, issue templates, and a short demo video.
 
 ## Known limitations

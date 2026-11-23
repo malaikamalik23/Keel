@@ -23,6 +23,8 @@ const PATHS: Record<string, string> = {
   bolt: "M13 2L4 14h7l-1 8 9-12h-7z",
   alert: "M12 3l10 18H2zM12 10v5M12 18h.01",
   sparkle: "M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z",
+  mic: "M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zM5 11a7 7 0 0 0 14 0M12 18v3",
+  people: "M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20a6.5 6.5 0 0 1 13 0M16 11a3 3 0 1 0 0-6M17.5 14.5A5.5 5.5 0 0 1 21.5 20",
 };
 
 export type IconName = keyof typeof PATHS;
@@ -37,7 +39,7 @@ export function Icon({ name, size = 18, className = "" }: { name: IconName | str
 }
 
 export const PAGE_ICON: Record<string, IconName> = {
-  Today: "home", Chat: "chat", Inbox: "inbox", Calendar: "calendar", Goals: "goal", Projects: "project", Commitments: "promise",
+  Today: "home", Chat: "chat", Inbox: "inbox", Calendar: "calendar", Goals: "goal", Projects: "project", Commitments: "promise", People: "people",
   Applications: "briefcase", Memory: "memory", Documents: "document", Workflows: "workflow", Approvals: "approve",
   Activity: "activity", Insights: "insights", Services: "settings", Profile: "user",
 };

@@ -603,3 +603,64 @@ describe("redesign pass 3: projects, memory, documents, workflows, insights", ()
     expect(errors).toEqual([]);
   });
 });
+
+describe("what now and people", () => {
+  const fetchUrls = () => (fetch as unknown as { mock: { calls: [string, RequestInit?][] } }).mock.calls.map(([u, i]) => `${i?.method ?? "GET"} ${u}`);
+  const REC = { now: "15:00", part_of_day: "afternoon", energy: null, minutes: 45, free_until: "15:45", busy_now: false, note: null, suggestions: [
+    { kind: "promise", id: 4, title: "Send the form to Hina", minutes: null, score: 95, reasons: ["you promised this, due today"], action: "keep" },
+    { kind: "task", id: 1, title: "Write FYP intro", minutes: 60, score: 90, reasons: ["overdue by 2 days", "postponed 3×: try just the first 10 minutes"], action: "break_down" },
+    { kind: "person", id: 7, title: "Get in touch with Ammi", minutes: 10, score: 40, reasons: ["last talked 9 days ago"], action: "contacted" },
+  ] };
+  const SARA = { id: 7, name: "Sara Ahmed", aliases: [], relation: "friend", notes: null, email: null, keep_in_touch_days: 7, last_contact: null, days_since_contact: null, reconnect_due: true };
+
+  it("Today's What now? shows reasons, filters by energy and time, and acts on a suggestion", async () => {
+    const calls = mockFetch({ "/api/recommendations": REC, "/api/people/7/contacts": { ...SARA, name: "Ammi", promises: [], waiting_on_them: [], tasks: [], memories: [], interactions: [{ id: 31, date: "2026-11-23", text: "" }] } });
+    const user = userEvent.setup();
+    const { ToastProvider } = await import("./toast");
+    render(<ToastProvider><App /></ToastProvider>);
+    expect(await screen.findByText("Send the form to Hina")).toBeTruthy();
+    expect(screen.getByText(/overdue by 2 days · postponed 3×/)).toBeTruthy();
+    expect(screen.getByText("Free until 15:45")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /Tired/ }));
+    await waitFor(() => expect(fetchUrls()).toContain("GET /api/recommendations?energy=low"));
+    await user.click(screen.getByRole("button", { name: "30 min" }));
+    await waitFor(() => expect(fetchUrls()).toContain("GET /api/recommendations?energy=low&minutes=30"));
+    await user.click(screen.getByRole("button", { name: "Kept: Send the form to Hina" }));
+    await waitFor(() => expect(calls).toContainEqual({ method: "PATCH", path: "/api/commitments/4" }));
+    await user.click(screen.getByRole("button", { name: "Talked today: Get in touch with Ammi" }));
+    await waitFor(() => expect(calls).toContainEqual({ method: "POST", path: "/api/people/7/contacts" }));
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "Undo" })).toHaveLength(2));
+    const undos = screen.getAllByRole("button", { name: "Undo" });
+    await user.click(undos[undos.length - 1]);  // the newest toast: the contact just logged
+    await waitFor(() => expect(calls).toContainEqual({ method: "DELETE", path: "/api/person-contacts/31" }));
+    expect(screen.getByRole("button", { name: "Break it down" })).toBeTruthy();
+    expect(errors).toEqual([]);
+  });
+
+  it("People lists who to get back to, logs a contact and adds someone", async () => {
+    const summary = { ...SARA, promises: [{ id: 2, text: "Send Sara the slides", deadline: "2026-11-01", status: "open", overdue: true }], waiting_on_them: [], tasks: [], memories: [{ id: 3, content: "Sara prefers WhatsApp" }], interactions: [] };
+    const calls = mockFetch({
+      "/api/people": [{ ...SARA, promises: 1, waiting: 0, overdue_promises: 1, follow_ups_due: 0 }],
+      "/api/people/7": summary,
+      "/api/people/7/contacts": { ...summary, interactions: [{ id: 40, date: "2026-11-23", text: "" }] },
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "People" }));
+    expect(await screen.findByText("Sara Ahmed")).toBeTruthy();
+    expect(screen.getByText(/no contact logged · you wanted every 7 days/)).toBeTruthy();
+    expect(screen.getByText("1 promise, 1 overdue")).toBeTruthy();
+    expect(screen.getByText((_, el) => el?.className === "chip warn" && el.textContent === "1 to get back to")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /Talked today/ }));
+    await waitFor(() => expect(calls).toContainEqual({ method: "POST", path: "/api/people/7/contacts" }));
+    await user.click(screen.getByRole("button", { name: "Details" }));
+    expect(await screen.findByText(/You promised: Send Sara the slides/)).toBeTruthy();
+    expect(screen.getByText(/Sara prefers WhatsApp/)).toBeTruthy();
+    await user.selectOptions(screen.getByLabelText("Keep in touch with Sara Ahmed"), "30");
+    await waitFor(() => expect(calls).toContainEqual({ method: "PATCH", path: "/api/people/7" }));
+    await user.type(screen.getByLabelText("Name"), "Dr. Khan");
+    await user.click(screen.getByRole("button", { name: /^Add$/ }));
+    await waitFor(() => expect(calls).toContainEqual({ method: "POST", path: "/api/people" }));
+    expect(errors).toEqual([]);
+  });
+});

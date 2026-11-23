@@ -31,11 +31,12 @@ LOAD_TOOLS = "load_tools"
 
 GROUP_INFO: dict[str, str] = {
     "tasks": "tasks: create, list, update, complete, delete (always loaded)",
-    "plan": "plan: today's briefing, build/show today's plan, skip plan items, log time worked",
+    "plan": "plan: briefing, what next, daily plan, time worked",
     "accountability": "accountability: what slipped or was avoided, weekly review, task history",
     "commitments": "commitments: promises with deadlines, check-ins",
     "goals": "goals: goals, milestones, projects (reports, blockers, decisions)",
     "memory": "memory: save, review or forget facts and preferences about the user",
+    "people": "people: contacts, keeping in touch",
     "reminders": "reminders: schedule, list or cancel a reminder; important dates (exams, birthdays)",
     "calendar": "calendar: events, free time",
     "web": "web: search the web, read a web page",
@@ -49,11 +50,12 @@ GROUP_INFO: dict[str, str] = {
 
 TOOL_GROUP: dict[str, str] = {
     **dict.fromkeys(["get_current_datetime", "create_task", "list_tasks", "update_task", "complete_task", "delete_task"], "tasks"),
-    **dict.fromkeys(["get_briefing", "get_week_overview", "plan_week", "create_daily_plan", "get_daily_plan", "update_plan_item", "log_work_session", "list_work_sessions"], "plan"),
+    **dict.fromkeys(["get_briefing", "what_next", "get_week_overview", "plan_week", "create_daily_plan", "get_daily_plan", "update_plan_item", "log_work_session", "list_work_sessions"], "plan"),
     **dict.fromkeys(["accountability_report", "task_history"], "accountability"),
     **dict.fromkeys(["propose_commitment", "confirm_commitment", "list_commitments", "update_commitment", "complete_commitment"], "commitments"),
     **dict.fromkeys(["create_goal", "list_goals", "update_goal", "add_milestones", "milestone_to_tasks", "create_project", "list_projects", "update_project", "project_report", "log_project_entry", "resolve_blocker", "link_project"], "goals"),
     **dict.fromkeys(["save_memory", "search_memories", "review_memories", "update_memory", "delete_memory"], "memory"),
+    **dict.fromkeys(["remember_person", "log_contact", "person_info", "list_people"], "people"),
     **dict.fromkeys(["create_reminder", "list_reminders", "cancel_reminder", "add_important_date", "list_important_dates", "delete_important_date"], "reminders"),
     **dict.fromkeys(["add_opportunity", "list_opportunities", "update_opportunity", "delete_opportunity", "prepare_application", "save_draft", "list_drafts",
                      "check_eligibility", "application_readiness", "find_opportunities", "application_fill_plan"], "applications"),
@@ -82,7 +84,7 @@ def _rx(*alts: str) -> re.Pattern[str]:
 KEYWORDS: dict[str, re.Pattern[str]] = {
     "plan": _rx(r"\bplan(s|ning|ned)?\b", r"\bbrief(ing)?\b", r"\bmy day\b", r"\b(important|on) today\b",
                 r"\b(this|my|next|the) week\b", r"\bfree time\b", r"\bfree (day|slot)s?\b", r"\bbusy\b", r"\bschedul\w*", r"\bagenda\b", r"\btimetable\b", r"\bworked\b", r"\bworking on\b", r"\bspent\b",
-                r"\blog(ged)?\b", r"\bsessions?\b", r"\b\d+ ?(mins?|minutes|hrs?|hours?) (on|of|for)\b", r"\bskip\b", r"\bfocus(ed)? (time|session)\b", r"\bwhat should i (do|work on)\b",
+                r"\blog(ged)?\b", r"\bsessions?\b", r"\b\d+ ?(mins?|minutes|hrs?|hours?) (on|of|for)\b", r"\bskip\b", r"\bfocus(ed)? (time|session)\b", r"\bwhat should i (do|work on)\b", r"\bfree (hour|\d+ ?min\w*)\b", r"\b(best|next) thing to (do|tackle|work on)\b", r"\bright now\b", r"\btackle\b",
                 r"\bhow much (time )?(did|have) i (work|stud)\w*", r"\bghant[ae]\w*", r"\bparh(a|i|ai)\b", r"\bkaam kiya\b"),  # Roman Urdu: hours, studied, worked
     "accountability": _rx(r"\bavoid\w*", r"\bslip\w*", r"\bpostpon\w*", r"\bprocrastinat\w*", r"\bput(ting)? (it )?off\b", r"\breview\b",
                           r"\bhow (am i|did i|was my|is my)\b", r"\bmy week\b", r"\bbehind\b", r"\bhistory\b", r"\bwhy (does|do|is|did)\b",
@@ -99,6 +101,11 @@ KEYWORDS: dict[str, re.Pattern[str]] = {
                   r"\bhow i (like|study|work|learn)\b", r"\bi (study|work|focus|learn|sleep|concentrate)( best| better| well)?\b", r"\bkeep in mind\b", r"\bfrom now on\b", r"\bdo you know\b",
                   r"\bfyi\b", r"\bmy (supervisor|advisor|mentor|teacher|manager|boss|roommate|sister|brother|mother|father) is\b", r"\b(tips|advice) (for|on)\b",
                   r"\byaad rakh\w*"),  # Roman Urdu: remember
+    "people": _rx(r"\bwho is\b", r"\bwho'?s\b", r"\btalk(ed|ing)? (to|with)\b", r"\bspoke (to|with)\b", r"\bspoken to\b", r"\bmet (with )?\w+", r"\bmeeting (with )?\w+",
+                   r"\bcall(ed)? (him|her|them|my)\b", r"\bhaven'?t (talked|spoken|called|heard)\b", r"\bkeep in touch\b", r"\bcheck in with\b", r"\b(supervisor|advisor|mentor)\b", r"\bget back to\b", r"\bcatch up\b",
+                   r"\bpeople\b", r"\bcontacts?\b", r"\bfriends?\b", r"\blast time i\b", r"\bpromised (him|her|them)\b", r"\bwaiting on\b",
+                   r"\bmy (supervisor|advisor|mentor|teacher|manager|boss|roommate|sister|brother|mother|father|mom|dad|ammi|abbu|cousin|colleague)\b",
+                   r"\bbaat (hui|ki)\b", r"\bmila\b", r"\bmili\b"),  # Roman Urdu: talked, met
     "applications": _rx(r"\bjobs?\b", r"\binternships?\b", r"\bscholarships?\b", r"\bfellowships?\b", r"\badmissions?\b", r"\bappl(y|ied|ying|ications?)\b", r"\bcover letter\b", r"\bsop\b", r"\bstatement of purpose\b", r"\b(cv|resume|résumé)\b", r"\brecommendation letters?\b", r"\binterviews?\b", r"\bposting\b", r"\bvacanc(y|ies)\b", r"\beligib\w*"),
     "workflows": _rx(r"\bworkflows?\b", r"\bautomat\w*", r"\bwhenever\b", r"\b(every|each) time\b", r"\bstanding rules?\b", r"\broutines?\b",
                       r"\bevery (day|morning|evening|night|week|weekday|monday|tuesday|wednesday|thursday|friday|saturday|sunday)s?\b",
@@ -137,15 +144,20 @@ def mentions_project(message: str, project_names: Iterable[str]) -> bool:
     return any(re.search(rf"(?<!\w){re.escape(v)}(?!\w)", text) for name in project_names for v in name_variants(name))
 
 
-def select_groups(message: str, recent: set[str], available: set[str], project_names: Iterable[str] = ()) -> set[str]:
+def select_groups(message: str, recent: set[str], available: set[str], project_names: Iterable[str] = (),
+                  person_names: Iterable[str] = ()) -> set[str]:
     """Groups to advertise for this message: core + keyword matches + recently used, limited to what exists.
-    Naming one of the user's projects ("my FYP is stuck") counts as talking about projects."""
+    Naming one of the user's projects ("my FYP is stuck") counts as talking about projects; naming a saved person
+    ("did I send Sara the slides?") counts as talking about people."""
     chosen = {CORE} | set(recent)
     for group, rx in KEYWORDS.items():
         if rx.search(message):
             chosen.add(group)
     if mentions_project(message, project_names):
         chosen.add("goals")
+    text = message.casefold()
+    if any(len(n) >= 3 and re.search(rf"(?<!\w){re.escape(n.casefold())}(?!\w)", text) for n in person_names):
+        chosen.add("people")
     return chosen & available
 
 

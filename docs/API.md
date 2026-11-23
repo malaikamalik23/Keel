@@ -69,8 +69,9 @@ why. An action whose integration was switched off meanwhile is refused too.
 |---|---|
 | Chat | `POST /api/chat` · `GET /api/conversations/{id}/messages` |
 | Approvals and audit | `GET /api/pending-actions` · `POST /api/pending-actions/{id}/confirm` · `POST /api/pending-actions/{id}/reject` · `GET /api/audit-log` |
-| Tasks and plans | `GET /api/tasks` · `POST /api/tasks/{id}/complete` · `GET /api/tasks/{id}/events` · `GET /api/plan` · `GET /api/plan.ics` · `PATCH /api/plan-items/{id}` · `GET /api/briefing` · `GET /api/work-sessions` |
-| Goals, projects, commitments | `GET /api/goals` · `GET /api/projects` · `GET /api/projects/{id}/report` · `POST /api/projects/{id}/entries` · `POST /api/projects/{id}/links` · `GET /api/commitments` · `PATCH /api/commitments/{id}` |
+| Tasks and plans | `GET /api/tasks` · `POST /api/tasks/{id}/complete` · `GET /api/tasks/{id}/events` · `GET /api/plan` · `GET /api/plan.ics` · `PATCH /api/plan-items/{id}` · `GET /api/briefing` · `GET /api/work-sessions` · `GET /api/recommendations?energy=low&minutes=30` (what to do now, with reasons) |
+| Goals, projects, commitments | `GET /api/goals` · `GET /api/projects` · `GET /api/projects/{id}/report` · `POST /api/projects/{id}/entries` · `POST /api/projects/{id}/links` · `GET /api/commitments` · `PATCH /api/commitments/{id}` · `PATCH /api/goals/{id}` · `PATCH /api/milestones/{id}` |
+| People | `GET /api/people` · `POST /api/people` · `GET /api/people/{id}` · `PATCH /api/people/{id}` · `DELETE /api/people/{id}` · `POST /api/people/{id}/contacts` (body `{"note": "...", "on_date": "2026-11-20"}`) · `DELETE /api/person-contacts/{id}` |
 | Memory | `GET /api/memories` · `GET /api/memories/review` · `POST /api/memories` · `PATCH /api/memories/{id}` · `DELETE /api/memories/{id}` |
 | Applications | `GET /api/opportunities` · `POST /api/opportunities` · `PATCH /api/opportunities/{id}` · `GET /api/opportunities/{id}/eligibility` · `GET /api/opportunities/{id}/readiness` · `DELETE /api/drafts/{id}` |
 | Documents | `GET /api/documents` · `POST /api/documents/upload` · `POST /api/documents/index` · `DELETE /api/documents/{id}` · `GET /api/document-links` · `DELETE /api/document-links/{id}` |

@@ -17,6 +17,7 @@ import Inbox from "./views/Inbox";
 import Insights from "./views/Insights";
 import MemoryView from "./views/MemoryView";
 import Onboarding, { type Profile } from "./views/Onboarding";
+import People from "./views/People";
 import Projects from "./views/Projects";
 import Today from "./views/Today";
 import type { PendingAction } from "./types";
@@ -25,7 +26,7 @@ import type { PendingAction } from "./types";
 const SECTIONS = [
   { name: "Home", pages: ["Today"] },
   { name: "Assistant", pages: ["Chat", "Inbox"] },
-  { name: "My Life", pages: ["Calendar", "Goals", "Projects", "Commitments", "Applications"] },
+  { name: "My Life", pages: ["Calendar", "Goals", "Projects", "Commitments", "People", "Applications"] },
   { name: "Memory", pages: ["Memory", "Documents"] },
   { name: "Automations", pages: ["Workflows", "Approvals", "Activity"] },
   { name: "Insights", pages: ["Insights"] },
@@ -111,6 +112,7 @@ export default function App() {
         {tab === "Goals" && <Goals ask={ask} />}
         {tab === "Projects" && <Projects ask={ask} />}
         {tab === "Commitments" && <Commitments />}
+        {tab === "People" && <People ask={ask} />}
         {tab === "Applications" && <Applications />}
         {tab === "Documents" && <Documents ask={ask} />}
         {tab === "Workflows" && <Workflows />}

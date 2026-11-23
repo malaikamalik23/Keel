@@ -109,10 +109,10 @@ export default function App() {
         {tab === "Inbox" && <Inbox onChange={changed} />}
         {tab === "Calendar" && <Calendar />}
         {tab === "Goals" && <Goals ask={ask} />}
-        {tab === "Projects" && <Projects />}
+        {tab === "Projects" && <Projects ask={ask} />}
         {tab === "Commitments" && <Commitments />}
         {tab === "Applications" && <Applications />}
-        {tab === "Documents" && <Documents />}
+        {tab === "Documents" && <Documents ask={ask} />}
         {tab === "Workflows" && <Workflows />}
         {tab === "Memory" && <MemoryView />}
         {tab === "Insights" && <Insights />}

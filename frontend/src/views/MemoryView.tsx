@@ -1,6 +1,8 @@
 import { useCallback, useState } from "react";
 import { api } from "../api";
 import { useAction, useLoad } from "../hooks";
+import { Icon } from "../icons";
+import { useToast } from "../toast";
 import type { Memory, MemoryReview } from "../types";
 import { Badge, Card, Empty, ErrorNote, Loading } from "../ui";
 
@@ -12,8 +14,14 @@ function Row({ m, onChange, others = [] }: { m: Memory; onChange: () => Promise<
   const [editing, setEditing] = useState<string | null>(null);
   const [more, setMore] = useState(false);
   const { run, error } = useAction(onChange);
+  const toast = useToast();
   const outdated = m.status === "outdated";
   const patch = (body: object) => run(() => api.patch(`/api/memories/${m.id}`, body));
+  const short = m.content.length > 50 ? `${m.content.slice(0, 50)}…` : m.content;
+  const setStatus = (s: "current" | "outdated") => run(async () => {
+    await api.patch(`/api/memories/${m.id}`, { status: s });
+    toast(s === "outdated" ? `Kept as history: ${short}` : `True again: ${short}`, { action: { label: "Undo", run: () => run(() => api.patch(`/api/memories/${m.id}`, { status: s === "outdated" ? "current" : "outdated" })) } });
+  });
   const byId = new Map(others.map((o) => [o.id, o]));
   return (
     <li>
@@ -21,7 +29,7 @@ function Row({ m, onChange, others = [] }: { m: Memory; onChange: () => Promise<
         <>
           <textarea name="content" value={editing} onChange={(e) => setEditing(e.target.value)} rows={2} aria-label="Edit memory" />
           <span className="actions">
-            <button onClick={() => run(async () => { await api.patch(`/api/memories/${m.id}`, { content: editing }); setEditing(null); })}>Save</button>
+            <button onClick={() => run(async () => { await api.patch(`/api/memories/${m.id}`, { content: editing }); setEditing(null); toast("Memory updated; the old wording is kept as history"); })}>Save</button>
             <button className="ghost" onClick={() => setEditing(null)}>Cancel</button>
           </span>
         </>
@@ -38,13 +46,13 @@ function Row({ m, onChange, others = [] }: { m: Memory; onChange: () => Promise<
             {(m.linked ?? []).length > 0 && <span className="muted small"> · linked to {(m.linked ?? []).map((id) => byId.get(id)?.content.slice(0, 40) ?? `#${id}`).join("; ")}</span>}
           </span>
           <span className="actions">
-            {m.needs_review && !outdated && <button onClick={() => patch({ confirm: true })}>Still true</button>}
+            {m.needs_review && !outdated && <button onClick={() => run(async () => { await api.patch(`/api/memories/${m.id}`, { confirm: true }); toast(`Confirmed: ${short}`); })}><Icon name="check" size={14} /> Still true</button>}
             {outdated
-              ? <button className="ghost" onClick={() => patch({ status: "current" })}>True again</button>
-              : <button className="ghost" onClick={() => patch({ status: "outdated" })}>No longer true</button>}
+              ? <button className="ghost" onClick={() => void setStatus("current")}>True again</button>
+              : <button className="ghost" onClick={() => void setStatus("outdated")}>No longer true</button>}
             <button className="ghost" onClick={() => setEditing(m.content)}>Edit</button>
             <button className="ghost" aria-expanded={more} onClick={() => setMore(!more)}>More</button>
-            <button className="ghost danger" onClick={() => window.confirm("Permanently delete this memory? (\"No longer true\" keeps it as history instead.)") && run(() => api.del(`/api/memories/${m.id}`))}>Delete</button>
+            <button className="ghost danger" onClick={() => window.confirm("Permanently delete this memory? (\"No longer true\" keeps it as history instead.)") && run(async () => { await api.del(`/api/memories/${m.id}`); toast(`Deleted: ${short}`, { tone: "info" }); })}>Delete</button>
           </span>
           {more && (
             <span className="mem-more small">
@@ -71,8 +79,10 @@ function AddMemory({ onAdded }: { onAdded: () => Promise<void> }) {
   const [category, setCategory] = useState("general");
   const [topic, setTopic] = useState("");
   const { run, error } = useAction(onAdded);
+  const toast = useToast();
   const add = () => run(async () => {
     await api.post("/api/memories", { content, kind, category, ...(topic.trim() ? { topic } : {}) });
+    toast("Memory saved");
     setContent(""); setTopic("");
   });
   return (
@@ -95,6 +105,7 @@ export default function MemoryView() {
   const [kind, setKind] = useState("all");
   const [category, setCategory] = useState("all");
   const [status, setStatus] = useState("current");
+  const [q, setQ] = useState("");
   const list = useLoad<Memory[]>(`/api/memories?kind=${kind}&category=${category}&status=${status}`);
   const all = useLoad<Memory[]>("/api/memories");
   const review = useLoad<MemoryReview>("/api/memories/review");
@@ -108,10 +119,20 @@ export default function MemoryView() {
   const topics = (all.data ?? []).filter((m) => m.topic);
   const stale = review.data?.stale ?? [];
   const conflicts = review.data?.conflicts ?? [];
+  const needle = q.trim().toLowerCase();
+  const shown = (list.data ?? []).filter((m) => !needle || `${m.topic ?? ""} ${m.content} ${m.kind} ${m.category}`.toLowerCase().includes(needle));
+  const current = (all.data ?? []).filter((m) => m.status !== "outdated").length;
+  const toReview = stale.length + conflicts.length;
 
   return (
     <div className="stack">
       <p className="muted small">Everything the agent remembers about you. Edit, confirm or delete anything; changes are audited. "No longer true" keeps a fact as history (a past job, an old address) without Keel treating it as current; editing keeps the old wording the same way.</p>
+
+      <div className="chips">
+        <span className="chip"><Icon name="memory" size={14} /><b>{current}</b> {current === 1 ? "thing" : "things"} Keel knows</span>
+        <span className="chip"><Icon name="user" size={14} /><b>{topics.length}</b> profile {topics.length === 1 ? "fact" : "facts"}</span>
+        {toReview > 0 && <button className="chip warn" onClick={() => document.getElementById("needs-review")?.scrollIntoView({ behavior: "smooth" })}><Icon name="alert" size={14} /><b>{toReview}</b> to review</button>}
+      </div>
 
       <Card title="Profile">
         {topics.length === 0 ? (
@@ -122,6 +143,7 @@ export default function MemoryView() {
       </Card>
 
       {(stale.length > 0 || conflicts.length > 0) && (
+        <div id="needs-review">
         <Card title="Needs review">
           {conflicts.map((group) => (
             <div key={group[0].id}>
@@ -132,6 +154,7 @@ export default function MemoryView() {
           {stale.length > 0 && <p className="small">Not confirmed for over six months, marked unsure, or past its end date. Still true?</p>}
           <ul className="list">{stale.map((m) => <Row key={m.id} m={m} onChange={reloadAll} others={all.data ?? []} />)}</ul>
         </Card>
+        </div>
       )}
 
       <AddMemory onAdded={reloadAll} />
@@ -147,9 +170,10 @@ export default function MemoryView() {
           </span>
         }
       >
+        <label className="search"><Icon name="search" size={15} /><input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search memories…" aria-label="Search memories" /></label>
         <Loading loading={list.loading} error={list.error} />
-        {list.data?.length === 0 && <Empty>No memories match.</Empty>}
-        <ul className="list">{list.data?.map((m) => <Row key={m.id} m={m} onChange={reloadAll} others={all.data ?? []} />)}</ul>
+        {list.data && shown.length === 0 && <Empty>{needle ? `Nothing matches “${q}”.` : "No memories match."}</Empty>}
+        <ul className="list">{shown.map((m) => <Row key={m.id} m={m} onChange={reloadAll} others={all.data ?? []} />)}</ul>
       </Card>
     </div>
   );

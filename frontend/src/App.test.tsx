@@ -532,3 +532,74 @@ describe("dashboard smoke tests", () => {
     expect(await screen.findByText(/Web pentesting/)).toBeTruthy();
   });
 });
+
+describe("redesign pass 3: projects, memory, documents, workflows, insights", () => {
+  const fetchUrls = () => (fetch as unknown as { mock: { calls: [string, RequestInit?][] } }).mock.calls.map(([u, i]) => `${i?.method ?? "GET"} ${u}`);
+
+  it("Memory search narrows the list, and No longer true offers Undo", async () => {
+    const mem = (id: number, content: string) => ({ id, kind: "fact", category: "professional", topic: null, content, importance: "medium", source: "chat",
+      created_at: "2026-01-01T00:00:00", updated_at: "2026-01-01T00:00:00", confirmed_at: "2026-01-01T00:00:00", last_used_at: null, needs_review: false, status: "current", confidence: "medium", linked: [] });
+    const calls = mockFetch({ "/api/memories": [mem(1, "Works at Arbisoft"), mem(2, "Team lead is Sara")], "/api/memories/review": { stale: [], conflicts: [] } });
+    const user = userEvent.setup();
+    const { ToastProvider } = await import("./toast");
+    render(<ToastProvider><App /></ToastProvider>);
+    await user.click(await screen.findByRole("button", { name: "Memory" }));
+    expect(await screen.findByText(/Team lead is Sara/)).toBeTruthy();
+    await user.type(screen.getByLabelText("Search memories"), "arbi");
+    expect(screen.queryByText(/Team lead is Sara/)).toBeNull();
+    await user.click(screen.getByRole("button", { name: "No longer true" }));
+    await user.click(await screen.findByRole("button", { name: "Undo" }));
+    await waitFor(() => expect(calls.filter((c) => c.method === "PATCH" && c.path === "/api/memories/1")).toHaveLength(2));
+    expect(errors).toEqual([]);
+  });
+
+  it("Workflows show the rule as a flow and the on/off switch patches with Undo", async () => {
+    const calls = mockFetch();
+    const user = userEvent.setup();
+    const { ToastProvider } = await import("./toast");
+    render(<ToastProvider><App /></ToastProvider>);
+    await user.click(await screen.findByRole("button", { name: "Workflows" }));
+    expect((await screen.findAllByText(/When opportunity status is interview/)).length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("switch", { name: "Interview: prepare enabled" }));
+    await waitFor(() => expect(calls).toContainEqual({ method: "PATCH", path: "/api/workflows/1" }));
+    expect(await screen.findByText("Interview: prepare is off")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /Run now/ }));
+    await waitFor(() => expect(calls).toContainEqual({ method: "POST", path: "/api/workflows/1/run" }));
+    expect(errors).toEqual([]);
+  });
+
+  it("Insights switches the time range and shows summary tiles", async () => {
+    mockFetch();
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: /^Insights/ }));
+    expect(await screen.findByText("days in a row")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "4 weeks" }));
+    await waitFor(() => expect(fetchUrls()).toContain("GET /api/analytics?weeks=4"));
+    expect(errors).toEqual([]);
+  });
+
+  it("Projects filter by status with buttons and offer Plan next steps", async () => {
+    mockFetch();
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: /^Projects/ }));
+    expect(await screen.findByText("1/4 tasks done")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "paused" }));
+    await waitFor(() => expect(fetchUrls()).toContain("GET /api/projects?status=paused"));
+    expect(errors).toEqual([]);
+  });
+
+  it("Documents filter by name and offer a Summarise shortcut", async () => {
+    mockFetch();
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Documents" }));
+    expect(await screen.findByText(/~3 pages \(estimated\)/)).toBeTruthy();
+    const before = screen.getAllByRole("button", { name: /^Ask Keel about/ }).length;
+    expect(before).toBeGreaterThan(1);
+    await user.type(screen.getByLabelText("Find a document"), "fl.pdf");
+    expect(screen.getAllByRole("button", { name: /^Ask Keel about/ })).toHaveLength(1);
+    expect(errors).toEqual([]);
+  });
+});

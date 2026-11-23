@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, api, getApiKey, setApiKey } from "./api";
 import Activity from "./views/Activity";
 import Applications from "./views/Applications";
+import CommandBar from "./CommandBar";
+import { Icon, PAGE_ICON } from "./icons";
 import Calendar from "./views/Calendar";
 import Documents from "./views/Documents";
 import Services from "./views/Services";
@@ -31,8 +33,14 @@ const SECTIONS = [
 ] as const;
 type Tab = (typeof SECTIONS)[number]["pages"][number];
 
+const PAGES: readonly string[] = SECTIONS.flatMap((s) => s.pages);
+const startPage = (): Tab => {  // the installed app's shortcuts open a page directly: /?page=Inbox
+  try { const p = new URLSearchParams(window.location.search).get("page"); return (p && PAGES.includes(p) ? p : "Today") as Tab; }
+  catch { return "Today"; }
+};
+
 export default function App() {
-  const [tab, setTab] = useState<Tab>("Today");
+  const [tab, setTab] = useState<Tab>(startPage);
   const [pending, setPending] = useState(0);
   const [needsKey, setNeedsKey] = useState(false);
   const [keyInput, setKeyInput] = useState(getApiKey());
@@ -49,6 +57,11 @@ export default function App() {
   }, []);
   useEffect(() => { void refreshPending(); }, [refreshPending]);
   const changed = useCallback(() => { setVersion((v) => v + 1); void refreshPending(); }, [refreshPending]);
+  const go = useCallback((page: string) => { if (page === "Profile") setProfileOpen(true); else if (PAGES.includes(page)) setTab(page as Tab); }, []);
+  const ask = useCallback((text: string) => {
+    setTab("Chat");
+    setTimeout(() => window.dispatchEvent(new CustomEvent("keel:ask", { detail: text })), 0);
+  }, []);
 
   if (needsKey) {
     return (
@@ -69,17 +82,21 @@ export default function App() {
 
   return (
     <div className="app">
+      <CommandBar pages={PAGES} go={go} ask={ask} onCaptured={changed} />
       <nav aria-label="Keel">
-        <strong>Keel</strong>
+        <strong><span className="logo"><Icon name="sparkle" size={15} /></span>Keel</strong>
+        <button className="search-btn" onClick={() => window.dispatchEvent(new Event("keel:command"))} aria-label="Search or capture (Ctrl+K)">
+          <Icon name="search" size={16} /> Search <kbd>Ctrl K</kbd>
+        </button>
         {SECTIONS.map((s) => (
           <div key={s.name} className="nav-section" role="group" aria-label={s.name}>
             <span className="nav-heading">{s.name}{s.name === "Automations" && pending > 0 && tab !== "Approvals" ? " •" : ""}</span>
             {s.pages.map((t) => (
               <button key={t} className={t === tab ? "active" : ""} aria-current={t === tab ? "page" : undefined} onClick={() => setTab(t)}>
-                {t}{t === "Approvals" && pending > 0 && <span className="pill">{pending}</span>}
+                <Icon name={PAGE_ICON[t]} />{t}{t === "Approvals" && pending > 0 && <span className="pill">{pending}</span>}
               </button>
             ))}
-            {s.name === "Settings" && <button onClick={() => setProfileOpen(true)}>Profile</button>}
+            {s.name === "Settings" && <button onClick={() => setProfileOpen(true)}><Icon name="user" />Profile</button>}
           </div>
         ))}
       </nav>
@@ -87,7 +104,7 @@ export default function App() {
       <main hidden={tab !== "Chat"} className="chat-pane"><ErrorBoundary><Chat onChange={changed} /></ErrorBoundary></main>
       <main hidden={tab === "Chat"} key={`${tab}-${version}`}>
         <ErrorBoundary>
-        {tab === "Today" && <Today />}
+        {tab === "Today" && <Today go={go} ask={ask} />}
         {tab === "Inbox" && <Inbox onChange={changed} />}
         {tab === "Calendar" && <Calendar />}
         {tab === "Goals" && <Goals />}

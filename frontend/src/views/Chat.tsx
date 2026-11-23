@@ -55,8 +55,8 @@ export default function Chat({ onChange }: { onChange: () => void }) {
     if (speak(text, { lang, onEnd: () => setSpeaking((s) => (s === i ? null : s)) })) setSpeaking(i);
   };
 
-  const send = async () => {
-    const message = input.trim();
+  const send = async (text?: string) => {
+    const message = (text ?? input).trim();
     if (!message || busy) return;
     rec.current?.abort();
     quiet();
@@ -72,6 +72,15 @@ export default function Chat({ onChange }: { onChange: () => void }) {
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
+
+  // "Ask Keel" from the command bar (Ctrl+K) or the Home page sends straight into this conversation.
+  const sendRef = useRef(send);
+  sendRef.current = send;
+  useEffect(() => {
+    const onAsk = (e: Event) => { const text = (e as CustomEvent<string>).detail; if (text) void sendRef.current(text); };
+    window.addEventListener("keel:ask", onAsk);
+    return () => window.removeEventListener("keel:ask", onAsk);
+  }, []);
 
   const resolve = async (id: number, action: "confirm" | "reject") => {
     try { await api.post(`/api/pending-actions/${id}/${action}`); setResolved((r) => ({ ...r, [id]: action === "confirm" ? "approved" : "rejected" })); onChange(); }

@@ -53,6 +53,8 @@ const FIXTURES: Record<string, unknown> = {
         suggestion: { kind: "reminder", fields: { text: "Call the bank", remind_at: "2026-11-09T18:00" }, why: "Has a time (at 6pm), so a reminder.", alternatives: ["task", "memory", "note"] } }],
     recent: [{ id: 3, text: "Renew my passport", status: "filed", filed_as: "task #12", suggestion: null, created_at: "2026-11-08T10:00:00" }],
     projects: [], notes: true },
+  "/api/push": { enabled: true, public_key: "BFakeKey", devices: [{ id: 1, label: "Android phone · Chrome", created_at: "2026-11-20T10:00:00", last_ok_at: "2026-11-22T08:00:00" }] },
+  "/api/push/test": { sent_to: 1 },
   "/api/retention": { categories: [{ id: "conversations", label: "Chat conversations", min_days: 7, note: "Whole conversations", days: null }, { id: "audit_log", label: "Audit log", min_days: 30, note: "Every tool call", days: 90 }], last_run: null },
   "/api/retention/preview": { would_delete: { audit_log: 12 } },
   "/api/retention/apply": { deleted: { audit_log: 12 } },
@@ -358,6 +360,54 @@ describe("dashboard smoke tests", () => {
     await waitFor(() => expect(calls).toContainEqual({ method: "PATCH", path: "/api/memories/1" }));
     await user.selectOptions(screen.getByLabelText("Memory status"), "outdated");
     await waitFor(() => expect(calls.some((c) => c.path === "/api/memories")).toBe(true));
+    expect(errors).toEqual([]);
+  });
+
+  it("Services lists the devices that get notifications and sends a test", async () => {
+    const calls = mockFetch();
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Services" }));
+    expect(await screen.findByText(/Android phone · Chrome/)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Send a test notification" }));
+    await waitFor(() => expect(calls).toContainEqual({ method: "POST", path: "/api/push/test" }));
+    expect(await screen.findByText("Test sent to 1 device(s).")).toBeTruthy();
+    expect(errors).toEqual([]);
+  });
+
+  it("Home: tick a task to finish it with Undo, and add a task right there", async () => {
+    const { ToastProvider } = await import("./toast");
+    const posts: { method: string; path: string; body: unknown }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: string, init?: RequestInit) => {
+      const path = String(input).split("?")[0];
+      if (init?.method && init.method !== "GET") posts.push({ method: init.method, path, body: init.body ? JSON.parse(String(init.body)) : null });
+      const body = path === "/api/tasks" && init?.method === "POST" ? { id: 9, title: "Renew passport", status: "todo" } : path in FIXTURES ? FIXTURES[path] : {};
+      return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+    }));
+    const user = userEvent.setup();
+    render(<ToastProvider><App /></ToastProvider>);
+    await user.click(await screen.findByRole("button", { name: "Done: Write FYP intro" }));
+    await waitFor(() => expect(posts).toContainEqual({ method: "POST", path: "/api/tasks/1/complete", body: {} }));
+    await user.click(await screen.findByRole("button", { name: "Undo" }));
+    await waitFor(() => expect(posts).toContainEqual({ method: "PATCH", path: "/api/tasks/1", body: { status: "todo" } }));
+    await user.type(screen.getByLabelText("New task"), "Renew passport{enter}");
+    await waitFor(() => expect(posts).toContainEqual({ method: "POST", path: "/api/tasks", body: { title: "Renew passport" } }));
+    expect(await screen.findByText("Added: Renew passport")).toBeTruthy();
+    expect(errors).toEqual([]);
+  });
+
+  it("Ctrl+K opens the command bar: jump to a page, or capture into the inbox", async () => {
+    const calls = mockFetch();
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText(/Today's plan/);
+    await user.keyboard("{Control>}k{/Control}");
+    await user.type(await screen.findByLabelText("Command"), "goals");
+    await user.click(screen.getByRole("option", { name: /Go to Goals/ }));
+    expect(await screen.findByText(/Web pentesting/)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /Search or capture/ }));
+    await user.type(await screen.findByLabelText("Command"), "renew passport{enter}");  // the first suggestion is Capture
+    await waitFor(() => expect(calls).toContainEqual({ method: "POST", path: "/api/inbox" }));
     expect(errors).toEqual([]);
   });
 

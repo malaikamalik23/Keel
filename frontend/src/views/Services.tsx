@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../api";
 import { useAction, useLoad } from "../hooks";
+import PushCard from "./PushCard";
 import type { ServiceCheck, ServiceRow } from "../types";
 import { Badge, Card, ErrorNote, Loading } from "../ui";
 
@@ -61,6 +62,7 @@ export default function Services() {
           );
         })}
       </div>
+      <PushCard />
       <Retention />
     </div>
   );

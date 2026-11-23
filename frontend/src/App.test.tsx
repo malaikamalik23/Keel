@@ -664,3 +664,25 @@ describe("what now and people", () => {
     expect(errors).toEqual([]);
   });
 });
+
+
+describe("API key", () => {
+  it("any request refused for a missing key opens the key screen, not a raw error", async () => {
+    let locked = false;
+    vi.stubGlobal("fetch", vi.fn(async (input: string, init?: RequestInit) => {
+      const key = (init?.headers as Record<string, string> | undefined)?.["X-API-Key"];
+      if (locked && key !== "secret") return new Response(JSON.stringify({ detail: "Missing or invalid X-API-Key header." }), { status: 401 });
+      return new Response(JSON.stringify(FIXTURES[String(input).split("?")[0]] ?? {}), { status: 200 });
+    }));
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByText(/Today's plan/)).toBeTruthy();
+    locked = true;  // Keel restarted with API_KEY set while the page was open
+    await user.click(screen.getByRole("button", { name: /^Projects/ }));
+    expect(await screen.findByText(/API key required/)).toBeTruthy();
+    expect(screen.queryByText(/Missing or invalid X-API-Key/)).toBeNull();
+    await user.type(screen.getByLabelText("API key"), "secret");
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("1/4 tasks done")).toBeTruthy();  // the page loads again, now with the key
+  });
+});

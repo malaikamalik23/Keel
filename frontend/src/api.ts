@@ -18,6 +18,9 @@ async function request<T>(method: string, path: string, body?: unknown, raw?: Bl
   if (!res.ok) {
     let detail = res.statusText;
     try { const j = await res.json(); detail = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail); } catch { /* not JSON */ }
+    // A missing or wrong key (Keel restarted with API_KEY set, or the app was reopened): ask for it instead of showing
+    // the raw error on whatever page made the request.
+    if (res.status === 401) window.dispatchEvent(new Event("keel:need-key"));
     throw new ApiError(res.status, detail);
   }
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);

@@ -57,6 +57,11 @@ export default function App() {
     catch (e) { if (e instanceof ApiError && e.status === 401) setNeedsKey(true); }
   }, []);
   useEffect(() => { void refreshPending(); }, [refreshPending]);
+  useEffect(() => {
+    const onNeedKey = () => setNeedsKey(true);
+    window.addEventListener("keel:need-key", onNeedKey);
+    return () => window.removeEventListener("keel:need-key", onNeedKey);
+  }, []);
   const changed = useCallback(() => { setVersion((v) => v + 1); void refreshPending(); }, [refreshPending]);
   const go = useCallback((page: string) => { if (page === "Profile") setProfileOpen(true); else if (PAGES.includes(page)) setTab(page as Tab); }, []);
   const ask = useCallback((text: string) => {
@@ -69,7 +74,7 @@ export default function App() {
       <main className="gate">
         <h1>API key required</h1>
         <p className="muted">This server has API_KEY set. Enter it to continue (kept for this browser tab only).</p>
-        <form onSubmit={(e) => { e.preventDefault(); setApiKey(keyInput); setNeedsKey(false); void refreshPending(); }}>
+        <form onSubmit={(e) => { e.preventDefault(); setApiKey(keyInput); setNeedsKey(false); setVersion((v) => v + 1); void refreshPending(); }}>
           <input type="password" name="api_key" autoComplete="off" value={keyInput} onChange={(e) => setKeyInput(e.target.value)} aria-label="API key" />
           <button type="submit">Continue</button>
         </form>

@@ -103,11 +103,12 @@ export default function App() {
       {/* Chat stays mounted (just hidden) so the conversation survives tab switches and data refreshes. */}
       <main hidden={tab !== "Chat"} className="chat-pane"><ErrorBoundary><Chat onChange={changed} /></ErrorBoundary></main>
       <main hidden={tab === "Chat"} key={`${tab}-${version}`}>
+        {tab !== "Today" && <div className="page-title"><h1><Icon name={PAGE_ICON[tab]} size={22} /> {tab}</h1></div>}
         <ErrorBoundary>
         {tab === "Today" && <Today go={go} ask={ask} />}
         {tab === "Inbox" && <Inbox onChange={changed} />}
         {tab === "Calendar" && <Calendar />}
-        {tab === "Goals" && <Goals />}
+        {tab === "Goals" && <Goals ask={ask} />}
         {tab === "Projects" && <Projects />}
         {tab === "Commitments" && <Commitments />}
         {tab === "Applications" && <Applications />}

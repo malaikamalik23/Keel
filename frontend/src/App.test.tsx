@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
@@ -238,6 +238,35 @@ describe("dashboard smoke tests", () => {
     expect(await screen.findAllByRole("gridcell")).toHaveLength(7);
     await user.click(screen.getByRole("gridcell", { name: /3 item\(s\)/ }));
     expect(await screen.findAllByText("Write chapter 2")).toHaveLength(2);  // the cell chip and the day opened below
+    expect(errors).toEqual([]);
+  });
+
+  it("Calendar moves a task to another day (Move button, as on a phone) and only tasks can be moved", async () => {
+    const calls = mockFetch({ "/api/tasks/1": { id: 1, title: "Write chapter 2", postponement_count: 1 } });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Calendar" }));
+    expect(await screen.findByRole("button", { name: "Move Write chapter 2" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Move Supervisor/ })).toBeNull();  // your own calendar events never move
+    await user.click(screen.getByRole("button", { name: "Move Write chapter 2" }));
+    fireEvent.change(screen.getByLabelText("New date for Write chapter 2"), { target: { value: "2026-11-27" } });
+    await waitFor(() => expect(calls).toContainEqual({ method: "PATCH", path: "/api/tasks/1" }));
+    expect(errors).toEqual([]);
+  });
+
+  it("Goals: tick a milestone done and mark a goal achieved; Commitments: tick a promise kept", async () => {
+    const calls = mockFetch();
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: /^Goals/ }));
+    expect(await screen.findByText(/1 of 2 milestones/)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Done: Auth" }));
+    await waitFor(() => expect(calls).toContainEqual({ method: "PATCH", path: "/api/milestones/2" }));
+    await user.click(screen.getByRole("button", { name: "Mark achieved" }));
+    await waitFor(() => expect(calls).toContainEqual({ method: "PATCH", path: "/api/goals/1" }));
+    await user.click(screen.getByRole("button", { name: /^Commitments/ }));
+    await user.click(await screen.findByRole("button", { name: "Kept: Finish the GRE set" }));
+    await waitFor(() => expect(calls).toContainEqual({ method: "PATCH", path: "/api/commitments/1" }));
     expect(errors).toEqual([]);
   });
 

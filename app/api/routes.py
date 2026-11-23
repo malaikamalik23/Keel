@@ -187,6 +187,38 @@ def goals(
     return db.scalars(stmt).all()
 
 
+@router.patch("/goals/{goal_id}", response_model=schemas.GoalOut)
+def edit_goal(goal_id: int, body: dict, db: Session = Depends(get_db), c: Container = Depends(get_container)):
+    """Mark a goal achieved, paused, dropped or active again from the dashboard (the update_goal tool, as the user)."""
+    if db.get(Goal, goal_id) is None:
+        raise NotFoundError(f"No goal with id {goal_id}.")
+    changes = {k: body[k] for k in ("status", "priority", "target_date", "title") if k in body}
+    if not changes:
+        raise HTTPException(422, "Nothing to change.")
+    _run_user_tool(c, db, "update_goal", {"goal_id": goal_id, **changes})
+    db.expire_all()
+    return db.get(Goal, goal_id)
+
+
+@router.patch("/milestones/{milestone_id}")
+def edit_milestone(milestone_id: int, body: dict, db: Session = Depends(get_db)):
+    """Tick a milestone done (or back to todo / in progress). Audited as the user."""
+    from app.db.models import Milestone
+    from app.security.audit import record_audit
+
+    m = db.get(Milestone, milestone_id)
+    if m is None:
+        raise NotFoundError(f"No milestone with id {milestone_id}.")
+    new = body.get("status")
+    if new not in ("todo", "in_progress", "done"):
+        raise HTTPException(422, "status must be todo, in_progress or done.")
+    old, m.status = m.status, new
+    record_audit(db, actor="user", tool_name="update_milestone", permission="write", params={"milestone_id": milestone_id, "status": new},
+                 status="ok", detail=f"{old} -> {new}")
+    db.commit()
+    return {"id": m.id, "goal_id": m.goal_id, "title": m.title, "status": m.status}
+
+
 @router.get("/projects", response_model=list[schemas.ProjectOut])
 def projects(
     status: Literal["active", "paused", "completed", "archived", "all"] = "active",

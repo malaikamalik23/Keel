@@ -226,3 +226,14 @@ details.more summary { cursor: pointer; color: var(--muted); font-size: 13px; li
 .cmd-list li span:first-of-type { flex: 1; } .cmd-list li.sel { background: var(--accent-soft); color: var(--accent); }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* Calendar: move tasks between days */
+.cal-item.movable { cursor: grab; } .cal-item.movable:active { cursor: grabbing; }
+.cal-move-btn { align-self: flex-start; margin-top: 4px; opacity: .75; } .cal-item:hover .cal-move-btn, .cal-move-btn:focus-visible { opacity: 1; }
+.cal-move { margin-top: 4px; font-size: 13px; padding: 2px 6px; }
+.drop-over { border-color: var(--accent) !important; box-shadow: 0 0 0 3px var(--accent-soft); background: var(--accent-soft); }
+.cal-day { transition: background .15s, box-shadow .15s, border-color .15s; }
+
+.page-title h1 { display: flex; align-items: center; gap: 10px; } .page-title h1 .icon { color: var(--accent); }
+.progress { height: 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); overflow: hidden; margin: 6px 0 4px; }
+.progress span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .4s ease; }

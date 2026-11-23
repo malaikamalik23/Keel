@@ -31,3 +31,24 @@ def test_bad_task_requests():
     tid = client.post("/api/tasks", json={"title": "A"}).json()["id"]
     assert client.patch(f"/api/tasks/{tid}", json={}).status_code == 422
     assert client.patch(f"/api/tasks/{tid}", json={"status": "exploded"}).status_code == 422
+
+
+def test_goal_status_and_milestone_ticks():
+    from app.db.models import Goal, Milestone
+
+    app = create_app(make_settings(), ScriptedLLM([]))
+    client = local_client(app)
+    with app.state.container.session_factory() as db:
+        g = Goal(title="Learn Rust")
+        db.add(g)
+        db.flush()
+        db.add_all([Milestone(goal_id=g.id, title="Ownership", position=0), Milestone(goal_id=g.id, title="Async", position=1)])
+        db.commit()
+    assert client.patch("/api/milestones/1", json={"status": "done"}).json()["status"] == "done"
+    assert client.patch("/api/milestones/1", json={"status": "finished"}).status_code == 422
+    assert client.patch("/api/milestones/99", json={"status": "done"}).status_code == 404
+    goal = client.patch("/api/goals/1", json={"status": "achieved"}).json()
+    assert goal["status"] == "achieved" and [m["status"] for m in goal["milestones"]] == ["done", "todo"]
+    assert client.patch("/api/goals/1", json={}).status_code == 422
+    with app.state.container.session_factory() as db:
+        assert {(a.tool_name, a.actor) for a in db.query(AuditLog)} >= {("update_milestone", "user"), ("update_goal", "user")}

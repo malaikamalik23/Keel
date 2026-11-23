@@ -240,7 +240,7 @@ use). Browsers only let you install a web app and receive notifications over **h
    ```
 
    It prints an address like `https://my-laptop.tail1234.ts.net`. Only devices signed in to your Tailscale can open it.
-5. On the phone, open that address and enter the API key once (it is kept for that tab only).
+5. On the phone, open that address and enter the API key. Tick **Remember on this device** (on by default in the installed app) so the app doesn't ask again; **Forget the key on this device** is on the Services page, and changing `API_KEY` signs out every device.
    - **Android (Chrome):** menu ⋮ → **Install app** (or **Add to Home screen**).
    - **iPhone (Safari, iOS 16.4 or newer):** Share → **Add to Home Screen**, then open Keel from the Home Screen.
 6. In the installed app: **Settings → Services → Notifications on your devices → Turn on notifications on this device**,
@@ -327,7 +327,7 @@ dashboard or local tools send. Open it by one of those two addresses. A custom h
 needs `API_KEY`. This check is what stops a website open in your browser from using your local Keel.
 
 **The dashboard asks for an API key.**
-`API_KEY` is set. Enter the same value; it is kept for that browser tab only.
+`API_KEY` is set. Enter the same value; it is kept for that tab only unless you tick **Remember on this device**.
 
 ### The model
 

@@ -1,8 +1,16 @@
 import type { ChatResponse } from "./types";
 
 const KEY_STORAGE = "agent_api_key";
-export const getApiKey = () => sessionStorage.getItem(KEY_STORAGE) ?? "";
-export const setApiKey = (k: string) => (k ? sessionStorage.setItem(KEY_STORAGE, k) : sessionStorage.removeItem(KEY_STORAGE));
+// The key lives for this tab only, unless you tick "Remember on this device" (then it is kept in this browser or
+// installed app until you choose "Forget the key" or change API_KEY). Storage can be blocked: then it's this page only.
+const read = (s: () => Storage) => { try { return s().getItem(KEY_STORAGE); } catch { return null; } };
+const write = (s: () => Storage, k: string | null) => { try { if (k) s().setItem(KEY_STORAGE, k); else s().removeItem(KEY_STORAGE); } catch { /* blocked */ } };
+export const getApiKey = () => read(() => sessionStorage) ?? read(() => localStorage) ?? "";
+export const isKeyRemembered = () => !!read(() => localStorage);
+export const setApiKey = (k: string, remember = false) => {
+  write(() => sessionStorage, k || null);
+  write(() => localStorage, remember && k ? k : null);
+};
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }

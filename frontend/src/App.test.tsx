@@ -494,7 +494,7 @@ describe("dashboard smoke tests", () => {
     await user.type(screen.getByLabelText("API key"), "secret");
     await user.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByText("Keel")).toBeTruthy();
-    expect(sessionStorage.getItem("agent_api_key")).toBe("secret");  // tab-scoped, never localStorage
+    expect(sessionStorage.getItem("agent_api_key")).toBe("secret");  // tab-scoped unless "Remember on this device"
     expect(localStorage.getItem("agent_api_key")).toBeNull();
   });
 
@@ -684,5 +684,38 @@ describe("API key", () => {
     await user.type(screen.getByLabelText("API key"), "secret");
     await user.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByText("1/4 tasks done")).toBeTruthy();  // the page loads again, now with the key
+  });
+});
+
+
+describe("remembering the API key", () => {
+  afterEach(() => { localStorage.clear(); });
+
+  it("keeps the key on the device only when asked, and Services can forget it", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string, init?: RequestInit) => {
+      const key = (init?.headers as Record<string, string> | undefined)?.["X-API-Key"];
+      if (key !== "secret") return new Response(JSON.stringify({ detail: "no" }), { status: 401 });
+      return new Response(JSON.stringify(FIXTURES[String(input).split("?")[0]] ?? {}), { status: 200 });
+    }));
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByText(/API key required/)).toBeTruthy();
+    expect((screen.getByLabelText("Remember on this device") as HTMLInputElement).checked).toBe(false);  // a browser tab: off by default
+    await user.click(screen.getByLabelText("Remember on this device"));
+    expect(screen.getByText(/Anyone who can unlock this device/)).toBeTruthy();
+    await user.type(screen.getByLabelText("API key"), "secret");
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("Keel")).toBeTruthy();
+    expect(localStorage.getItem("agent_api_key")).toBe("secret");
+    sessionStorage.clear();  // the app was closed and opened again
+    cleanup();
+    render(<App />);
+    expect(await screen.findByText(/Today's plan/)).toBeTruthy();  // no key screen
+    const reload = vi.fn();
+    vi.stubGlobal("location", { ...window.location, reload });
+    await user.click(screen.getByRole("button", { name: "Services" }));
+    await user.click(await screen.findByRole("button", { name: "Forget the key on this device" }));
+    expect(localStorage.getItem("agent_api_key")).toBeNull();
+    expect(sessionStorage.getItem("agent_api_key")).toBeNull();
   });
 });

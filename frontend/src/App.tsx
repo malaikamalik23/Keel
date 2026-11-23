@@ -45,6 +45,10 @@ export default function App() {
   const [pending, setPending] = useState(0);
   const [needsKey, setNeedsKey] = useState(false);
   const [keyInput, setKeyInput] = useState(getApiKey());
+  // In the installed app (home screen) the tab's storage is cleared whenever the app is closed: remember by default there.
+  const [rememberKey, setRememberKey] = useState(() => {
+    try { return window.matchMedia?.("(display-mode: standalone)").matches || (navigator as { standalone?: boolean }).standalone === true; } catch { return false; }
+  });
   const [version, setVersion] = useState(0); // bump to remount views after the agent changes data
   const [profileOpen, setProfileOpen] = useState(false);
 
@@ -73,9 +77,13 @@ export default function App() {
     return (
       <main className="gate">
         <h1>API key required</h1>
-        <p className="muted">This server has API_KEY set. Enter it to continue (kept for this browser tab only).</p>
-        <form onSubmit={(e) => { e.preventDefault(); setApiKey(keyInput); setNeedsKey(false); setVersion((v) => v + 1); void refreshPending(); }}>
+        <p className="muted">This server has API_KEY set. Enter it to continue.</p>
+        <form onSubmit={(e) => { e.preventDefault(); setApiKey(keyInput.trim(), rememberKey); setNeedsKey(false); setVersion((v) => v + 1); void refreshPending(); }}>
           <input type="password" name="api_key" autoComplete="off" value={keyInput} onChange={(e) => setKeyInput(e.target.value)} aria-label="API key" />
+          <label className="small"><input type="checkbox" checked={rememberKey} onChange={(e) => setRememberKey(e.target.checked)} /> Remember on this device</label>
+          <p className="small muted">{rememberKey
+            ? "Anyone who can unlock this device can then open Keel. Forget it on the Services page; changing API_KEY signs out every device."
+            : "Kept until you close this tab or the app."}</p>
           <button type="submit">Continue</button>
         </form>
       </main>

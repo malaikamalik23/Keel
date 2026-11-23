@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api } from "../api";
+import { api, isKeyRemembered, setApiKey } from "../api";
 import { useAction, useLoad } from "../hooks";
 import PushCard from "./PushCard";
 import type { ServiceCheck, ServiceRow } from "../types";
@@ -62,6 +62,12 @@ export default function Services() {
           );
         })}
       </div>
+      {isKeyRemembered() && (
+        <Card title="This device">
+          <p className="small muted">This device remembers Keel's API key, so it opens without asking. Forget it on a shared or lost device; to sign out every device, change API_KEY in .env.</p>
+          <button className="ghost danger" onClick={() => { setApiKey(""); window.location.reload(); }}>Forget the key on this device</button>
+        </Card>
+      )}
       <PushCard />
       <Retention />
     </div>
